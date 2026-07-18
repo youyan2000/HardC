@@ -1,6 +1,19 @@
 # STM32_OOP — 嵌入式 C 面向对象硬件驱动库
 
-本仓库用 ANSI C 实现面向对象模式的 STM32 硬件驱动框架。每个子项目是独立可复用的层级模块——复用方式只有两种：**直接拷贝整个子项目目录**，或**基于父类继承一个子类**。
+本仓库用 ANSI C 实现面向对象模式的 STM32 硬件驱动框架。每个子项目是独立可复用的层级模块。
+
+---
+
+## ⭐ 复用规则（最重要！必须先理解）
+
+> **复用方式有且仅有两种：**
+>
+> | 方式 | 操作 | 适用场景 |
+> |:---|:---|:---|
+> | **方式一：直接拷贝** | 复制整个子项目目录 → 改 `board_init.c` 的引脚/定时器/HAL 句柄 → 直接用 | 硬件变了但设备类型不变（如换个引脚、换个 MCU 系列） |
+> | **方式二：继承子类** | 写一个新 `.h/.c` → 父类结构体作为第一个成员 → 实现虚函数 → 绑定 ops → 注册到全局句柄 | 需要新类型的设备（如新增 I2C IO 扩展器、新拓扑的 PWM） |
+>
+> **任何其他"复用"方式都是错的。** 不要修改父类代码来适配子类。不要跨层调用。不要跳过 ops 表直接操作硬件。
 
 ---
 
@@ -23,6 +36,7 @@
 | `BSP/container_of.h` | Linux 内核经典向下转型宏 — 从基类指针恢复子类指针 |
 | `Components/comp_math.h/c` | 数学工具：限幅、绝对值、死区、线性映射、校验和、Quake III 平方根倒数等 |
 | `Components/comp_error.h` | 统一错误码 bitmask 系统 (ERROR_SET/CLEAR/IS_SET 宏) |
+| `Components/comp_filter.h` | 数字滤波器：一阶低通 (dt 缓存优化) + 二阶巴特沃斯低通 (biquad DFI) |
 | `cmake/` | ARM Clang + GCC 工具链文件 (starm-clang.cmake, gcc-arm-none-eabi.cmake) |
 | `YmaC/` | YAML → C designated initializer 配置注入工具 (Python GUI/CLI) |
 | `conf/` | YAML 配置变体 (default.yaml, aggressive.yaml 等) |
@@ -230,18 +244,20 @@ app.c             — #include "leds.h", 使用句柄
 | Include guard | 与文件名匹配 — `COMP_<NAME>_H` 或 `<NAME>_H` |
 | 文件组织 | 一个子类一个 `.c` 文件；父类 + ops typedef 在一个 `.h` |
 
-## 7. 复用方式
+## 7. 复用方式（详见顶部 ⭐复用规则）
 
-### 方式一：直接拷贝子项目
+### 方式一：直接拷贝子项目 — 硬件变了，设备类型不变
+
+改 `board_init.c` 即可，其他地方一行不动：
 
 1. 复制整个子项目目录到目标工程
 2. 确保 `BSP/container_of.h` 和 `Components/comp_math.h/c` 加入 include path
 3. 修改 `board_init.c`：改引脚、定时器、HAL 句柄以适配你的硬件
 4. 应用层通过全局句柄头文件（`gpos.h` / `pwms.h` / `comms.h` / `pids.h`）操作，不感知子类
 
-### 方式二：基于父类继承新子类
+### 方式二：基于父类继承新子类 — 需要新类型的设备
 
-以添加一个新的输出设备为例：
+**绝对不能改父类代码。** 只新增文件，三步走：
 
 1. **定义结构体**（`.h`）：
    - 父类结构体作为第一个成员
