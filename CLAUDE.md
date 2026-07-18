@@ -9,8 +9,15 @@
 **核心文档：**
 | 文档 | 内容 |
 |------|------|
-| [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式 |
+| [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、App 架构规则 |
 | [LESSONS.md](LESSONS.md) | 调参教训库 (16 条 + 经验模板), git 版本管理, 禁止回退 |
+
+**App 模板：**
+| 文件 | 用途 |
+|------|------|
+| [Templates/app_main.h.tmpl](Templates/app_main.h.tmpl) | App 层头文件模板 — 根结构体、配置 POD、ISR 钩子声明 |
+| [Templates/app_main.c.tmpl](Templates/app_main.c.tmpl) | App 层实现模板 — board_init、YmaC 注入点、ISR 实现、BackgroundTask |
+| [YmaC/README.md](YmaC/README.md) | YAML→C 配置注入工具使用说明 |
 
 **AI 技能文件：**
 | 技能 | 用途 |
@@ -108,6 +115,38 @@ git branch -d feature/my-new-device
 ### 子项目独立性的 Git 含义
 
 每个子项目（ADC-OOP, COM-OOP, GPO-OOP, PID-OOP, PWM-OOP）有自己的 `agent.md`。修改子项目内部文件时，确认该子项目的 `agent.md` 不需要同步更新。如果改了 API、增加了子类、或修改了 ops 虚表签名，**必须同步更新文档**。
+
+## App 层开发规则
+
+> **App 层只有一组文件。禁止自由发挥。** 所有项目必须基于 [Templates/app_main.c.tmpl](Templates/app_main.c.tmpl) 和 [Templates/app_main.h.tmpl](Templates/app_main.h.tmpl) 开始。
+> 参考: WEILAI_SuperCap `User/app/app_main.c` (263行) + LitteCar CMake `User/Application/app_main.c` (311行)。
+
+1. **根结构体 `ProjectRoot`** — 嵌入所有 Device + Module 实例（值包含，零 malloc）
+2. **配置 POD `ProjectConfig`** — 纯数据结构，YmaC 注入目标，与运行时 Instance 分离
+3. **`board_init()`** — 唯一创建和绑定实例的地方：Device init → Module init → 指针注入 → ISR 启动
+4. **`apply_config()`** — 配置 POD → 运行时 Instance 同步（启动时 + YAML 注入后 + 0xFB 调参后）
+5. **`App_OnControlTick()`** — ISR 调用，顺序: 传感器→HMI→控制算法→执行器。禁止 printf
+6. **`BackgroundTask()`** — 主循环，做所有耗时 I/O: printf、软件 I2C、OLED、串口应答
+7. **`extern ProjectRoot g_root`** — Module 可通过 extern 访问兄弟模块（参考 LitteCar `extern Car car`）
+
+## YmaC 配置注入
+
+```bash
+# GUI 模式
+cd <项目根目录>
+python YmaC/yaml_config_builder.py
+
+# CLI 模式
+python YmaC/yaml_config_builder.py --cli default
+```
+
+**工作流:**
+1. 在 `app_main.c` 的 `/* CONFIG BEGIN */` / `/* CONFIG END */` 之间手写默认值
+2. 创建 `conf/<variant>.yaml`（格式见 [YmaC/README.md](YmaC/README.md)）
+3. 运行 YmaC → 选择配置 → 自动注入 → 编译
+4. `apply_config()` 将注入的 POD 值同步到运行时 Instance
+
+**YAML→C 类型映射:** 全大写字符串→C标识符, float→`.10f`, dict→designated initializer, list→C数组。
 
 ## 构建
 

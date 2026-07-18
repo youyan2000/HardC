@@ -27,7 +27,28 @@
 | **Components** | `comp_*` / `Components/` | 通用组件层 — 不看寄存器，只看基础功能。PWM 生成、GPIO、通信、滤波、PID 算法等的父类。隔离芯片变化 | MCU 系列变化 |
 | **BSP** | `bsp_*` / `BSP/` | 板级支持包 — 适配底层硬件，对 HAL 函数/寄存器操作的轻量封装 | MCU 型号变化 |
 
-**关键规则**：`app.c` 不碰 `comp_*` 或 BSP；Devices 不直接操作寄存器（通过 BSP 或 HAL）。
+**关键规则**：`app_main.c` 是整个项目的唯一 App 入口；Devices 不直接操作寄存器（通过 BSP 或 HAL）。
+
+### 1.1 App 层架构规则 🔥
+
+> **整个项目只有一组 App（`Templates/app_main.c.tmpl` + `app_main.h.tmpl`）。其他都是 Module（`mod_*`）。**
+> 参考: WEILAI_SuperCap (`User/app/app_main.c`) + LitteCar CMake (`User/Application/app_main.c`)。
+
+| 规则 | 说明 |
+|:---|:---|
+| **根结构体值包含** | `ProjectRoot` 嵌入所有 Device + Module 实例，零 malloc |
+| **指针注入** | Module 之间通过 `Base*` 指针引用，`board_init()` 一次性解析，此后不变 |
+| **配置与运行时分离** | Config 是纯数据 POD（YAML 注入目标），Instance 持有运行时状态 + ops 虚表 |
+| **ISR 只做快操作** | 控制计算、状态机 tick、寄存器操作。禁止 printf、软件 I2C、OLED |
+| **BackgroundTask 做慢操作** | 串口应答、传感器打印、OLED 刷新、软件 I2C 读取 |
+| **ISR 调用顺序** | 传感器采样 → HMI/命令分发 → 控制算法 → 执行器输出（PWM 最后） |
+| **全局访问** | `extern ProjectRoot g_root` 让 Module 可直读兄弟模块状态 |
+
+**YmaC 配置注入流程：**
+```
+conf/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的 /* CONFIG BEGIN/END */ 之间
+```
+详见 [YmaC/README.md](YmaC/README.md)。
 
 ## 2. 公共文件
 
