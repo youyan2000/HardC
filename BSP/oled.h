@@ -8,7 +8,7 @@
 // 3 线 SPI: SCL=PC14, SDA=PC15, RES=PC13
 // 用法与 STM32 HAL 库一致, 无前缀
 
-#include "main.h"
+#include <stdint.h>
 
 #define OLED_CMD  0 // 写命令
 #define OLED_DATA 1 // 写数据

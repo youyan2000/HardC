@@ -1,8 +1,8 @@
 // MPU6050 硬件操作层 —— 软件 I2C bit-bang + 寄存器操作
 // SCL=PB14, SDA=PB15
 
-#include "main.h"
 #include "mpu6050.h"
+#include "bsp_delay.h"
 
 #define I2C_DELAY_US  2
 

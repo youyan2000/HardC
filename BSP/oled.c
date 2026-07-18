@@ -1,5 +1,5 @@
 #include "oled.h"
-#include "app_main.h"
+#include "bsp_delay.h"
 #include <string.h>
 
 // 显存 (全局, 类似 HAL 外设句柄的静态性)
