@@ -29,7 +29,7 @@ typedef struct {
 } LowPassFilter;
 
 // 初始化一阶低通滤波器
-static inline void __attribute__((always_inline))
+static inline void
 LowPassFilter_Init(LowPassFilter *me, float cut_freq) {
   me->cut_freq_    = cut_freq;
   me->last_out_    = 0.0f;
@@ -68,7 +68,7 @@ LowPassFilter_Update(LowPassFilter *me, float sample, float dt) {
 }
 
 // 重置滤波器状态 (跳变后重新收敛)
-static inline void __attribute__((always_inline))
+static inline void
 LowPassFilter_Reset(LowPassFilter *me, float sample) {
   me->last_out_ = sample;
 }
@@ -90,7 +90,7 @@ typedef struct {
 //
 // sample_freq: 采样频率 (Hz), cutoff_freq: -3dB 截止频率 (Hz)
 // cutoff_freq ≤ 0 → 直通模式 (b0=1, 其余系数为 0)
-static inline void __attribute__((always_inline))
+static inline void
 LowPassFilter2p_Init(LowPassFilter2p *me, float sample_freq, float cutoff_freq) {
   me->cutoff_freq_     = cutoff_freq;
   me->delay_element_1_ = 0.0f;
@@ -140,7 +140,7 @@ LowPassFilter2p_Update(LowPassFilter2p *me, float sample) {
 }
 
 // 重置滤波器 — 将稳态 DC 值注入延迟单元, 避免阶跃响应振铃
-static inline float __attribute__((always_inline))
+static inline float
 LowPassFilter2p_Reset(LowPassFilter2p *me, float sample) {
   float dval = sample / (me->b0_ + me->b1_ + me->b2_);
 
