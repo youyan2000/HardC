@@ -46,7 +46,7 @@
 | 路径 | 用途 |
 |------|------|
 | [agent.md](agent.md) | 本文件 — AI/人类共读的总纲，完整 OOP 方法论 |
-| [ANALYSIS.md](ANALYSIS.md) | 三项目对比分析 (STM32_OOP × LitteCar × RM) + 16条实战教训 |
+| [LESSONS.md](LESSONS.md) | 调参教训库 (16 条 + 经验模板), git 版本管理, 禁止回退 |
 
 ## 4. 子项目总览
 
@@ -55,7 +55,7 @@
 | [ADC-OOP](ADC-OOP/) | ADC 多通道采样 | AdcBase | 3: Follower / DC Sampler / AC Sampler |
 | [COM-OOP](COM-OOP/) | 通信外设 | CommBase | 8: UART / SPI / I2C / CAN / Key / MPU6050 / OLED / Ultrasonic |
 | [GPO-OOP](GPO-OOP/) | 通用输出 | GpoBase | 5: LED / Laser / Beep / Buzzer / Fan |
-| [PID-OOP](PID%20-OOP/) | PID 控制器 | PidBase | 4: Standard / P2PD / PR / QPR + Cascade |
+| [PID-OOP](PID-OOP/) | PID 控制器 | PidBase | 4: Standard / P2PD / PR / QPR + Cascade |
 | [PWM-OOP](PWM-OOP/) | 电力电子 PWM | PwmBase | 5: BuckBoost / HalfBridge / FullBridge / Interleaved / Resonant |
 
 ## 4. OOP 核心模式（C 语言实现）
@@ -241,8 +241,26 @@ app.c             — #include "leds.h", 使用句柄
 | 虚表命名 | `static const`，在 `.c` 中，名为 `<module>_ops` |
 | 全局句柄 | `g_<name>` 前缀（如 `g_led_error`, `g_buck`） |
 | 必须/可选 ops | 必须操作用 `assert`；可选操作用 `if (ops->xxx)` NULL 检查 |
-| Include guard | 与文件名匹配 — `COMP_<NAME>_H` 或 `<NAME>_H` |
+| Include guard | 按层统一格式，见下方 §6.1 |
 | 文件组织 | 一个子类一个 `.c` 文件；父类 + ops typedef 在一个 `.h` |
+
+### 6.1 Include Guard 命名规范
+
+按文件所在层统一格式，**禁止裸 `XXX_H`**：
+
+| 层 | 格式 | 示例 |
+|:---|:---|:---|
+| **Components** (`comp_*.h`) | `COMP_<NAME>_H` | `COMP_PID_H`, `COMP_MOTOR_H`, `COMP_PROTECTION_H` |
+| **Devices** (子项目 `*.h`) | `<SUB>_<NAME>_H` | `PWM_BUCKBOOST_H`, `ADC_FOLLOWER_H`, `COM_UART_H` |
+| **Module** (`mod_*.h`) | `MOD_<NAME>_H` | `MOD_POWERCTRL_H`, `MOD_CMD_DISPATCH_H` |
+| **BSP** (`bsp_*.h`) | `BSP_<NAME>_H` | `BSP_DELAY_H`, `BSP_MPU6050_H`, `BSP_PWM_H` |
+| **全局句柄** (`*s.h`) | `<NAME>S_H` | `PWMS_H`, `ADCS_H`, `PIDS_H`, `COMMS_H`, `GPOS_H` |
+| **其他** (根级) | `<NAME>_H` | `CONTAINER_OF_H`, `LESSONS_H` |
+
+**规则：**
+- `<NAME>` = 文件名（不含 `.h`），全部大写，用下划线分隔
+- 新增文件必须遵守；修改现有文件时顺手修正
+- 不要用裸 `XXX_H`（如 `ADCS_H` 应写全而不是简写）
 
 ## 7. 复用方式（详见顶部 ⭐复用规则）
 
@@ -287,5 +305,5 @@ app.c             — #include "leds.h", 使用句柄
 - [ADC-OOP/agent.md](ADC-OOP/agent.md) — ADC 多通道采样
 - [COM-OOP/agent.md](COM-OOP/agent.md) — 通信外设
 - [GPO-OOP/agent.md](GPO-OOP/agent.md) — 通用输出
-- [PID-OOP/agent.md](PID%20-OOP/agent.md) — PID 控制器
+- [PID-OOP/agent.md](PID-OOP/agent.md) — PID 控制器
 - [PWM-OOP/agent.md](PWM-OOP/agent.md) — 电力电子 PWM
