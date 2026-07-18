@@ -7,8 +7,11 @@
 纯 C 语言实现的面向对象 STM32 硬件驱动框架。5 层架构：BSP → Components → Devices → Module → App。每个子项目（ADC-OOP, COM-OOP, GPO-OOP, PID-OOP, PWM-OOP）是独立可复用的层级模块。
 
 **核心文档：**
-- [agent.md](agent.md) — OOP 方法论、分层架构、虚函数表、继承/多态模式
-- [ANALYSIS.md](ANALYSIS.md) — 三项目对比分析 (STM32_OOP × LitteCar × RM) + 16 条实战教训
+| 文档 | 内容 |
+|------|------|
+| [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式 |
+| [ANALYSIS.md](ANALYSIS.md) | 三项目对比分析 (STM32_OOP × LitteCar × RM) + 16 条实战教训 |
+| [LESSONS.md](LESSONS.md) | 调参教训库 (16 条 + 经验模板), git 版本管理, 禁止回退 |
 
 ## Git 管理约定
 
