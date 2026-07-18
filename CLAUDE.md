@@ -10,8 +10,15 @@
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式 |
-| [ANALYSIS.md](ANALYSIS.md) | 三项目对比分析 (STM32_OOP × LitteCar × RM) + 16 条实战教训 |
 | [LESSONS.md](LESSONS.md) | 调参教训库 (16 条 + 经验模板), git 版本管理, 禁止回退 |
+
+**AI 技能文件：**
+| 技能 | 用途 |
+|------|------|
+| [.claude/skills/embedded-oop-c](.claude/skills/embedded-oop-c/SKILL.md) | C 语言 OOP 完整方法论 |
+| [.claude/skills/eugene-code-style](.claude/skills/eugene-code-style/SKILL.md) | 代码风格：2空格缩进、K&R大括号、命名约定 |
+| [.claude/skills/stm32-hal](.claude/skills/stm32-hal/SKILL.md) | STM32 HAL/LL 专业知识 |
+| [.claude/skills/code-review-workflow](.claude/skills/code-review-workflow/SKILL.md) | **强制**写-审双Agent工作流 |
 
 ## Git 管理约定
 
@@ -72,6 +79,16 @@ conf: 新增 default.yaml 配置模板
    - IDE 个人配置（`.vscode/`, `.idea/`）
 5. **`git status` 先看一眼再动手。** 不确定该不该提交的文件，先问用户。
 6. **commit message 用上述格式。** 不确定影响范围时，先 `git diff --stat` 搞清楚改了哪些子项目。
+
+### AI 助手的代码生成规则
+
+> **强制规则：任何代码生成必须走写-审双 Agent 工作流。详见 [code-review-workflow](.claude/skills/code-review-workflow/SKILL.md)。**
+
+1. **Writer Agent** — 读取需求 → 读取现有代码 → 生成/修改文件
+2. **Reviewer Agent** — 独立检查 Writer 输出 → 对照检查清单 → 报告通过/不通过
+3. **绝不跳过 Reviewer。** 即使只改一行，也要有人复查。
+4. **Reviewer 必须检查：** 2空格缩进（禁止4空格）、K&R大括号、container_of 下溯、ops 绑定、include guard、行尾无空白、无 tab。
+5. **例外（可跳过 Reviewer）：** 纯 .md 文档修改、YAML 配置修改。commit message 中注明 `no-review: <原因>`。
 
 ### 人类协作者的 Git 工作流
 
