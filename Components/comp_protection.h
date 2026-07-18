@@ -1,0 +1,352 @@
+// 关键保护机制组件 — 从 WEILAI + LitteCar 学到的工业级保护模式
+//
+// 提供:
+//   1. 滞回比较器 (防模式抖动)
+//   2. 去抖动检测器 (防噪声误报)
+//   3. 硬限幅器 (PWM/电流输出安全钳)
+//   4. 模式切换同步器 (单周期平均过渡)
+//   5. ISR 安全标记 (延迟 printf/日志到主循环)
+//   6. 心跳看门狗 (ISR 死锁检测+自动复位)
+//   7. 软启动/斜坡限制器 (故障恢复逐步重启)
+//
+// 全部 static inline, 零调用开销, ISR 安全.
+//
+// 来源: RM WEILAI_SuperCap (模式切换保护+均流+去抖动)
+//       LitteCar_STM32 (PWM限幅+ISR安全)
+
+#ifndef COMP_PROTECTION_H
+#define COMP_PROTECTION_H
+
+#include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "comp_math.h"  // CLAMP, MAX, MIN, ABS, math_clamp_*
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ==================== 1. 滞回比较器 (Hysteresis Comparator) ====================
+ *
+ * 用途: 防止模式切换抖动 — 进入窗口窄, 退出窗口宽
+ *
+ * WEILAI Buck-Boost 实例:
+ *   进入窗口: 0.97 < ratio < 1.03  (窄, 不轻易进入)
+ *   退出窗口: ratio < 0.90 或 ratio > 1.10 (宽, 不轻易退出)
+ *
+ * 用法:
+ *   Hysteresis hys;
+ *   Hysteresis_Init(&hys, 0.97f, 1.03f, 0.90f, 1.10f);
+ *   bool in_boost = Hysteresis_Update(&hys, vb_to_va);
+ */
+
+typedef struct {
+    float enter_lo, enter_hi;   // 进入窗口 [enter_lo, enter_hi] — 窄
+    float exit_lo,  exit_hi;    // 退出窗口 [exit_lo,  exit_hi]  — 宽
+    bool  state;                // 当前状态 (true=在窗口内)
+} Hysteresis;
+
+static inline void Hysteresis_Init(Hysteresis *me,
+                                    float enter_lo, float enter_hi,
+                                    float exit_lo,  float exit_hi) {
+    me->enter_lo = enter_lo; me->enter_hi = enter_hi;
+    me->exit_lo  = exit_lo;  me->exit_hi  = exit_hi;
+    me->state    = false;
+}
+
+static inline bool Hysteresis_Update(Hysteresis *me, float value) {
+    if (me->state) {
+        // 当前在窗口内: 用宽窗口判断退出
+        if (value < me->exit_lo || value > me->exit_hi) {
+            me->state = false;  // 退出
+        }
+    } else {
+        // 当前在窗口外: 用窄窗口判断进入
+        if (value >= me->enter_lo && value <= me->enter_hi) {
+            me->state = true;   // 进入
+        }
+    }
+    return me->state;
+}
+
+
+/* ==================== 2. 去抖动检测器 (Debounce Detector) ====================
+ *
+ * 用途: 连续 N 次触发才确认, 防止噪声误报
+ *
+ * WEILAI 配置:
+ *   WARNING 级别: debounce 可配 (如 10次)
+ *   FAULT 级别:   固定 80 次 (~2.8ms @28kHz)
+ *
+ * 用法:
+ *   Debounce db;
+ *   Debounce_Init(&db, 80);
+ *   if (Debounce_Update(&db, is_over_current)) {
+ *       ERROR_SET(err, ERROR_OVER_CURRENT);
+ *   }
+ */
+
+typedef struct {
+    uint32_t threshold;     // 确认阈值 (连续触发次数)
+    uint32_t counter;       // 当前连续计数
+    bool     confirmed;     // 已确认状态
+} Debounce;
+
+static inline void Debounce_Init(Debounce *me, uint32_t threshold) {
+    me->threshold = threshold;
+    me->counter   = 0;
+    me->confirmed = false;
+}
+
+// 每采样周期调用一次. 返回 true = 故障已确认.
+static inline bool Debounce_Update(Debounce *me, bool triggered) {
+    if (triggered) {
+        if (me->counter < me->threshold) {
+            me->counter++;
+        }
+        if (me->counter >= me->threshold && !me->confirmed) {
+            me->confirmed = true;
+            return true;   // 首次确认
+        }
+    } else {
+        me->counter   = 0;
+        me->confirmed = false;
+    }
+    return false;
+}
+
+// 手动复位
+static inline void Debounce_Reset(Debounce *me) {
+    me->counter   = 0;
+    me->confirmed = false;
+}
+
+// 动态修改阈值 (如 WARNING 运行时调整)
+static inline void Debounce_SetThreshold(Debounce *me, uint32_t threshold) {
+    me->threshold = threshold;
+}
+
+
+/* ==================== 3. 硬限幅器 (Hard Clamp) ====================
+ *
+ * 用途: 在输出的最后一步强制限幅, 不依赖调用者
+ *
+ * LitteCar 教训 #7: PWM 输出必须限幅
+ *   "电机 PWM ±7200, 在 write_impl 中 hard clamp, 不可依赖调用者"
+ *
+ * 用法:
+ *   float safe_duty = HardClamp_f(duty, 0.0f, 1.0f);
+ */
+
+static inline float HardClamp_f(float value, float lo, float hi) {
+    if (value > hi) return hi;
+    if (value < lo) return lo;
+    return value;
+}
+
+static inline int32_t HardClamp_i32(int32_t value, int32_t lo, int32_t hi) {
+    if (value > hi) return hi;
+    if (value < lo) return lo;
+    return value;
+}
+
+static inline uint32_t HardClamp_u32(uint32_t value, uint32_t lo, uint32_t hi) {
+    if (value > hi) return hi;
+    if (value < lo) return lo;
+    return value;
+}
+
+
+/* ==================== 4. 模式切换单周期同步器 ====================
+ *
+ * 用途: 模式切换的第一周期, 所有通道统一用平均输出过渡
+ *       防止各通道因模式差异产生环流损坏驱动器
+ *
+ * WEILAI 实现:
+ *   if (cur_mode != last_mode) {
+ *       sync_cmd = (alpha_cmd + beta_cmd + gamma_cmd) / 3.0f;
+ *       统一用 sync_cmd 更新所有通道一个周期;
+ *       last_mode = cur_mode;
+ *   }
+ *
+ * 用法:
+ *   ModeSync sync;
+ *   ModeSync_Init(&sync, 3);  // 3相
+ *   float cmds[] = {1.0, 1.2, 0.8};
+ *   bool syncing = ModeSync_Update(&sync, cur_mode, cmds);
+ *   if (syncing) {
+ *       // 用 sync.avg_cmd 更新所有通道, 跳过正常更新
+ *       return;
+ *   }
+ */
+
+typedef struct {
+    uint8_t  num_channels;    // 通道数
+    uint8_t  last_mode;       // 上一周期模式
+    float    avg_cmd;         // 统一平均输出 (同步周期使用)
+    bool     sync_pending;    // 当前周期是否需要同步
+} ModeSync;
+
+static inline void ModeSync_Init(ModeSync *me, uint8_t num_channels) {
+    me->num_channels = num_channels;
+    me->last_mode    = 0xFF;  // 无效值, 首次触发同步
+    me->avg_cmd      = 0.0f;
+    me->sync_pending = false;
+}
+
+// 每控制周期调用. 返回 true = 当前周期需用 avg_cmd 统一输出.
+// cmds[] 长度为 num_channels
+static inline bool ModeSync_Update(ModeSync *me, uint8_t cur_mode, const float *cmds) {
+    if (cur_mode != me->last_mode) {
+        // 模式切换: 计算平均输出
+        float sum = 0.0f;
+        for (uint8_t i = 0; i < me->num_channels; i++) {
+            sum += cmds[i];
+        }
+        me->avg_cmd      = sum / (float)me->num_channels;
+        me->last_mode    = cur_mode;
+        me->sync_pending = true;
+        return true;
+    }
+    me->sync_pending = false;
+    return false;
+}
+
+
+/* ==================== 5. ISR 安全标记 (Deferred Action) ====================
+ *
+ * 用途: ISR 中只 set flag, 主循环中执行耗时操作 (printf/send/log)
+ *
+ * LitteCar 教训 #6: 不要在 ISR 中发串口
+ *   "所有 printf/comm_send 在主循环 BackgroundTask() 中完成"
+ *
+ * 用法:
+ *   // ISR 中:
+ *   DeferredAction_Set(&g_log_pending, LOG_MASK_OVERCURRENT);
+ *
+ *   // 主循环中:
+ *   uint32_t pending = DeferredAction_CheckAndClear(&g_log_pending, LOG_MASK_ALL);
+ *   if (pending & LOG_MASK_OVERCURRENT) {
+ *       printf("Overcurrent detected!\n");
+ *   }
+ */
+
+typedef struct {
+    volatile uint32_t flags;   // bitmask of pending actions
+} DeferredAction;
+
+static inline void DeferredAction_Init(DeferredAction *me) {
+    me->flags = 0;
+}
+
+// ISR 中调用: 设置标记位
+static inline void DeferredAction_Set(DeferredAction *me, uint32_t mask) {
+    me->flags |= mask;
+}
+
+// 主循环中调用: 检查+原子清零
+static inline uint32_t DeferredAction_CheckAndClear(DeferredAction *me, uint32_t mask) {
+    uint32_t pending = me->flags & mask;
+    me->flags &= ~mask;
+    return pending;
+}
+
+// 主循环中: 只检查不清除
+static inline bool DeferredAction_IsPending(const DeferredAction *me, uint32_t mask) {
+    return (me->flags & mask) != 0;
+}
+
+
+/* ==================== 6. 心跳看门狗 (Heartbeat Watchdog) ====================
+ *
+ * 用途: 检测 ISR 死锁
+ *   - 快通道 ISR 中 heartbeat_++
+ *   - 慢通道 ISR 中检查: 连续 N tick 心跳不变 → 停止喂狗 → IWDG 复位
+ *
+ * WEILAI: HRTIM ISR heartbeat++, TIM2 ISR 检查, 100 tick 不变 → 复位
+ *
+ * 用法:
+ *   // HRTIM ISR (~28kHz):
+ *   Heartbeat_Tick(&hw);
+ *
+ *   // TIM2 ISR (~1kHz):
+ *   if (Heartbeat_Check(&hw, 100)) {
+ *       // 停止喂 IWDG → 系统自动复位
+ *       while(1);
+ *   } else {
+ *       HAL_IWDG_Refresh(&hiwdg);
+ *   }
+ */
+
+typedef struct {
+    volatile uint32_t counter;        // 心跳计数 (ISR1 ++)
+    uint32_t          last_snapshot;  // 上次快照值 (ISR2 记录)
+    uint32_t          stale_ticks;    // 心跳不变的连续 tick 数
+} Heartbeat;
+
+static inline void Heartbeat_Init(Heartbeat *me) {
+    me->counter       = 0;
+    me->last_snapshot = 0;
+    me->stale_ticks   = 0;
+}
+
+// 快通道 ISR 中调用
+static inline void Heartbeat_Tick(Heartbeat *me) {
+    me->counter++;
+}
+
+// 慢通道 ISR 中调用. threshold = 允许的最大不变 tick 数
+// 返回 true = 心跳超时, 需复位
+static inline bool Heartbeat_Check(Heartbeat *me, uint32_t threshold) {
+    if (me->counter == me->last_snapshot) {
+        me->stale_ticks++;
+    } else {
+        me->stale_ticks   = 0;
+        me->last_snapshot = me->counter;
+    }
+    return (me->stale_ticks >= threshold);
+}
+
+
+/* ==================== 7. 软启动/斜坡限制器 (Rate Limiter) ====================
+ *
+ * 用途: 限制输出变化率, 防止阶跃冲击
+ *       (故障恢复时的"逐步重启"策略)
+ *
+ * 用法:
+ *   RateLimiter rl;
+ *   RateLimiter_Init(&rl, 0.01f);  // 每周期最多变化 1%
+ *   float safe = RateLimiter_Step(&rl, target, dt);
+ */
+
+typedef struct {
+    float max_rate;       // 最大变化率 (单位/秒)
+    float current;        // 当前输出值
+} RateLimiter;
+
+static inline void RateLimiter_Init(RateLimiter *me, float max_rate) {
+    me->max_rate = max_rate;
+    me->current  = 0.0f;
+}
+
+static inline float RateLimiter_Step(RateLimiter *me, float target, float dt) {
+    float max_step = me->max_rate * dt;
+    float diff     = target - me->current;
+
+    if (diff > max_step)       me->current += max_step;
+    else if (diff < -max_step) me->current -= max_step;
+    else                        me->current  = target;
+
+    return me->current;
+}
+
+// 强制复位当前值 (模式切换时用)
+static inline void RateLimiter_Reset(RateLimiter *me, float value) {
+    me->current = value;
+}
+
+
+#ifdef __cplusplus
+}
+#endif
+#endif  // COMP_PROTECTION_H
