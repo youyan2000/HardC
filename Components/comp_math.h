@@ -6,6 +6,7 @@
 #define COMP_MATH_H
 
 #include <stdint.h>
+#include "../BSP/bsp_dsp.h"    // 硬件加速 sqrt (CMSIS-DSP / C2000 TMU / 纯C回退)
 
 // 2π 常量 (其他模块也会定义, 用 #ifndef 防冲突)
 #ifndef M_2PI
@@ -117,8 +118,16 @@ static inline float math_map_f(float x, float in_min, float in_max,
   return (x - in_min) / (in_max - in_min) * (out_max - out_min) + out_min;
 }
 
-// 平方根倒数 (快速算法)
+// 平方根倒数 (快速算法, Legacy — 推荐用 math_sqrt_f32)
 float inv_sqrtf(float x);
+
+// 硬件加速平方根 (通过 BSP/bsp_dsp.h 分发)
+//   STM32: CMSIS-DSP arm_sqrt_f32 → FPU VSQRT 单周期
+//   C2000: TMU __sqrt (后续实现)
+//   回退:  牛顿迭代法
+static inline float math_sqrt_f32(float x) {
+  return bsp_sqrt_f32(x);
+}
 
 // 大小端转换 (原地修改)
 void math_endian_reverse_16(void *addr);

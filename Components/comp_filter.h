@@ -12,6 +12,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include "comp_math.h"
+#include "../BSP/bsp_dsp.h"    // 硬件加速 sqrt/biquad (CMSIS-DSP / C2000 / 纯C回退)
 
 // π 常量 (comp_math.h 已定义 M_2PI, 这里补 M_PI)
 #ifndef M_PI
