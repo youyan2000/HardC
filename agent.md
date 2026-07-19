@@ -1,6 +1,6 @@
-# STM32_OOP — 嵌入式 C 面向对象硬件驱动库
+# C-OOP — 嵌入式 C 面向对象硬件驱动库
 
-本仓库用 ANSI C 实现面向对象模式的 STM32 硬件驱动框架。每个子项目是独立可复用的层级模块。
+本仓库用 ANSI C 实现面向对象模式的嵌入式硬件驱动框架。每个子项目是独立可复用的层级模块。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
 
 ---
 
@@ -25,7 +25,7 @@
 | **Module** | `module_*` | 业务模块层 — 采样管理、功率控制、通信管理、错误检测，只通过句柄操作 | 业务逻辑变化 |
 | **Devices** | `device_*` / `Devices/` | 设备抽象层 — 子类实现 + 板级绑定，通过 Components 层提供的句柄接口分发。隔离主板变化和芯片引脚选择变化 | 主板布线或引脚分配变化 |
 | **Components** | `comp_*` / `Components/` | 通用组件层 — 不看寄存器，只看基础功能。PWM 生成、GPIO、通信、滤波、PID 算法等的父类。隔离芯片变化 | MCU 系列变化 |
-| **BSP** | `bsp_*` / `BSP/` | 板级支持包 — 适配底层硬件，对 HAL 函数/寄存器操作的轻量封装 | MCU 型号变化 |
+| **BSP** | `bsp_*` / `BSP/` | 板级支持包 — 硬件加速抽象 (DSP/PWM/ADC)。不透明句柄模式：上层只看到 `void*` 指针, 平台实现在 .c 文件中。隔离 MCU 厂商差异 | MCU 型号变化 |
 
 **关键规则**：`app_main.c` 是整个项目的唯一 App 入口；Devices 不直接操作寄存器（通过 BSP 或 HAL）。
 
@@ -55,9 +55,12 @@ conf/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的
 | 路径 | 用途 |
 |------|------|
 | `BSP/container_of.h` | Linux 内核经典向下转型宏 — 从基类指针恢复子类指针 |
-| `Components/comp_math.h/c` | 数学工具：限幅、绝对值、死区、线性映射、校验和、Quake III 平方根倒数等 |
+| `BSP/bsp_dsp.h` | **硬件加速抽象层** — sqrt/biquad, 平台检测 (CMSIS-DSP/C2000Ware/纯C回退) |
+| `BSP/bsp_pwm.h` | **PWM BSP 接口** — 不透明句柄 + 物理参数 API (duty/Hz/ns/deg) |
+| `BSP/bsp_adc.h` | **ADC BSP 接口** — 校准/启动抽象 (bsp_adc_calibrate / bsp_adc_start_dma) |
+| `Components/comp_math.h/c` | 数学工具：限幅、绝对值、死区、线性映射、校验和、硬件加速 sqrt (math_sqrt_f32) |
 | `Components/comp_error.h` | 统一错误码 bitmask 系统 (ERROR_SET/CLEAR/IS_SET 宏) |
-| `Components/comp_filter.h` | 数字滤波器：一阶低通 (dt 缓存优化) + 二阶巴特沃斯低通 (biquad DFI) |
+| `Components/comp_filter.h` | 数字滤波器：一阶低通 (dt 缓存优化) + 二阶巴特沃斯低通 (biquad DFI, 可选BSP加速) |
 | `cmake/` | ARM Clang + GCC 工具链文件 (starm-clang.cmake, gcc-arm-none-eabi.cmake) |
 | `YmaC/` | YAML → C designated initializer 配置注入工具 (Python GUI/CLI) |
 | `conf/` | YAML 配置变体 (default.yaml, aggressive.yaml 等) |
@@ -67,7 +70,44 @@ conf/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的
 | 路径 | 用途 |
 |------|------|
 | [agent.md](agent.md) | 本文件 — AI/人类共读的总纲，完整 OOP 方法论 |
-| [LESSONS.md](LESSONS.md) | 调参教训库 (16 条 + 经验模板), git 版本管理, 禁止回退 |
+| [LESSONS.md](LESSONS.md) | 调参教训库 (17 条 + 经验模板), git 版本管理, 禁止回退 |
+
+## 3.5 BSP 硬件加速抽象层 🔌
+
+> **Components 层禁止直接 include 平台加速库 (`arm_math.h`, `C2000Ware_dsp.h` 等)。所有硬件加速走 BSP 抽象。**
+
+| BSP 文件 | 抽象内容 | STM32 实现 | C2000 实现 | 回退 |
+|----------|---------|------------|-----------|------|
+| `BSP/bsp_dsp.h` | sqrt, biquad IIR | CMSIS-DSP (FPU SIMD) | C2000Ware (TMU/CLA) | 纯C牛顿迭代+DFI |
+| `BSP/bsp_pwm.h` | PWM 不透明句柄 + 物理参数API | bsp_hrtim.c (HRTIM) | bsp_c2000_epwm.c (ePWM) | — |
+| `BSP/bsp_adc.h` | ADC 校准 + DMA 启动 | bsp_adc_stm32.c | bsp_adc_c2000.c | — |
+
+**不透明句柄模式：**
+```c
+// BSP 头文件 — 平台无关
+typedef void BspPwmHandle;           // 上层只看到不透明指针
+
+// 物理参数 API (推荐): BSP 内部换算为寄存器值
+void bsp_pwm_set_duty_f(BspPwmHandle *h, BspPwmTimer t, float duty);    // [0.0, 1.0]
+void bsp_pwm_set_freq_hz(BspPwmHandle *h, BspPwmTimer t, uint32_t hz);
+void bsp_pwm_set_deadtime_ns(BspPwmHandle *h, BspPwmTimer t, uint32_t ns);
+
+// 寄存器级 API (保留): 供需要精细控制的拓扑使用
+void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp3);
+```
+
+**平台自动检测 (`BSP/bsp_dsp.h`)：**
+```c
+#if defined(__ARM_FEATURE_DSP)    // Cortex-M4/M7 → CMSIS-DSP
+  #define BSP_DSP_HW 1
+#elif defined(__TMS320C2000__)    // C2000 → TMU/CLA
+  #define BSP_DSP_HW 2
+#else                             // 其他 → 纯C回退
+  #define BSP_DSP_HW 0
+#endif
+```
+
+详见 [LESSONS.md](LESSONS.md) #17.
 
 ## 4. 子项目总览
 

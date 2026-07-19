@@ -1,16 +1,16 @@
-# CLAUDE.md — STM32_OOP 项目入口（AI + 人类共读）
+# CLAUDE.md — C-OOP 项目入口（AI + 人类共读）
 
 > 本文件是 AI 助手和人类协作者的共同入口。它记录项目级别的约定，不重复代码本身已有的信息。
 
 ## 项目概述
 
-纯 C 语言实现的面向对象 STM32 硬件驱动框架。5 层架构：BSP → Components → Devices → Module → App。每个子项目（ADC-OOP, COM-OOP, GPO-OOP, PID-OOP, PWM-OOP）是独立可复用的层级模块。
+纯 C 语言实现的面向对象嵌入式硬件驱动框架。5 层架构：BSP → Components → Devices → Module → App。每个子项目（ADC-OOP, COM-OOP, GPO-OOP, PID-OOP, PWM-OOP）是独立可复用的层级模块。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
 
 **核心文档：**
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、App 架构规则 |
-| [LESSONS.md](LESSONS.md) | 调参教训库 (16 条 + 经验模板), git 版本管理, 禁止回退 |
+| [LESSONS.md](LESSONS.md) | 调参教训库 (17 条 + 经验模板), git 版本管理, 禁止回退 |
 
 **App 模板：**
 | 文件 | 用途 |
@@ -157,6 +157,17 @@ cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/gcc-arm-none-eabi.cmake  # GCC
 make -j$(nproc)
 ```
 
+## BSP 硬件加速抽象层
+
+> **Components 层禁止直接 include 平台加速库。** 所有硬件加速 (DSP/PWM/ADC) 通过 `BSP/` 层的不透明句柄接口分发。
+> 详见 [LESSONS.md](LESSONS.md) #17 和 [agent.md](agent.md) §3.5.
+
+| 文件 | 内容 |
+|------|------|
+| [BSP/bsp_dsp.h](BSP/bsp_dsp.h) | 硬件加速抽象 — sqrt/biquad, 平台检测 (CMSIS-DSP/C2000Ware/纯C回退) |
+| [BSP/bsp_pwm.h](BSP/bsp_pwm.h) | PWM 不透明句柄 + 物理参数 API (duty/Hz/ns/deg) |
+| [BSP/bsp_adc.h](BSP/bsp_adc.h) | ADC 校准/启动抽象 |
+
 ## 复用方式
 
 1. **直接拷贝整个子项目目录** 到目标工程
@@ -164,4 +175,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-07-19 — Git 管理初始化
+> **最后更新：** 2026-07-19 — BSP 硬件加速抽象层重构 (新增 bsp_dsp.h/bsp_adc.h, bsp_pwm.h 修复命名泄漏+物理API, 全子项目 clk_hz 重命名), LESSONS.md #17
