@@ -24,7 +24,7 @@ C-OOP/
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
-| [LESSONS.md](LESSONS.md) | 调参教训库 (34 条 + 经验模板), git 版本管理, 禁止回退 |
+| [LESSONS.md](LESSONS.md) | 调参教训库 (44 条 + 经验模板), git 版本管理, 禁止回退 |
 | [ROADMAP.md](ROADMAP.md) | 多拓扑构建系统路线图 |
 
 **App 模板：**
