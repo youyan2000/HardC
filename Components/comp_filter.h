@@ -157,4 +157,107 @@ LowPassFilter2p_Reset(LowPassFilter2p *me, float sample) {
   return LowPassFilter2p_Update(me, sample);
 }
 
+/* ======================== 指数移动平均 EMA ======================== */
+
+// 来源: TI controlSUITE solar/v1.2/float (MATH_EMAVG_F)
+// Out = Out + Multiplier * (In - Out)  — 等价于 y[k] = α·x[k] + (1-α)·y[k-1]
+// Multiplier 常用范围: 0.001~0.1 (对应时间常数 τ = dt/α)
+typedef struct {
+  float in;               // 输入: 采样值
+  float out;              // 输出: 滤波值
+  float multiplier;       // 参数: 平滑系数 α = dt/τ
+} MathEmavg;
+
+#define MATH_EMAVG_DEFAULTS { 0.0f, 0.0f, 0.01f }
+
+static inline void math_emavg_init(MathEmavg *me, float alpha) {
+  me->in = 0.0f;
+  me->out = 0.0f;
+  me->multiplier = alpha;
+}
+
+static inline float math_emavg_run(MathEmavg *me, float sample) {
+  me->in = sample;
+  me->out = ((sample - me->out) * me->multiplier) + me->out;
+  return me->out;
+}
+
+// 强制设值 (跳过平滑, 跳变后立即收敛)
+static inline void math_emavg_force(MathEmavg *me, float value) {
+  me->out = value;
+}
+
+/* ======================== 陷波滤波器 Notch (DF1, 二阶 IIR) ======================= */
+
+// 来源: TI controlSUITE solar/v1.2/float (NOTCH_FLTR_F)
+// H(z) = (B0 + B1·z^-1 + B2·z^-2) / (1 - A1·z^-1 - A2·z^-2)
+// 典型用途: 滤除电网 PLL 中的 2 倍频纹波 (100/120Hz)
+// 系数计算: notch_coeff_update(delta_T, omega, c2_damp, c1_damp, &coeff)
+
+typedef struct {
+  float b2;               // 分子 B2 (Z^-2)
+  float b1;               // 分子 B1 (Z^-1)
+  float b0;               // 分子 B0 (Z^0)
+  float a2;               // 分母 A2 (Z^-2)
+  float a1;               // 分母 A1 (Z^-1)
+} NotchCoeff;
+
+typedef struct {
+  float out1;             // 输出延迟 u(k-1)
+  float out2;             // 输出延迟 u(k-2)
+  float in;               // 当前输入
+  float in1;              // 输入延迟 x(k-1)
+  float in2;              // 输入延迟 x(k-2)
+  float out;              // 输出
+} NotchVars;
+
+#define NOTCH_COEFF_DEFAULTS { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f }
+#define NOTCH_VARS_DEFAULTS  { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
+
+static inline void notch_vars_init(NotchVars *me) {
+  me->out1 = 0.0f; me->out2 = 0.0f;
+  me->in = 0.0f; me->in1 = 0.0f; me->in2 = 0.0f;
+  me->out = 0.0f;
+}
+
+// Direct Form 1: out = A1*out1 + A2*out2 + B0*in + B1*in1 + B2*in2
+static inline float notch_filter_run(NotchVars *me, const NotchCoeff *coeff,
+                                     float sample) {
+  me->in = sample;
+
+  me->out = coeff->a1 * me->out1 + coeff->a2 * me->out2
+          + coeff->b0 * me->in   + coeff->b1 * me->in1 + coeff->b2 * me->in2;
+
+  // 历史移位
+  me->out2 = me->out1;
+  me->out1 = me->out;
+  me->in2 = me->in1;
+  me->in1 = me->in;
+
+  return me->out;
+}
+
+// 预计算陷波滤波器系数
+//   dt:     采样周期 (s)
+//   omega:  陷波频率角速度 (rad/s), 如电网 PLL 用 2*2π*50 = 628 rad/s (100Hz)
+//   c2, c1: 阻尼系数 (c2 控制带宽, c1 控制深度, 典型值 c2=0.1, c1=0.01)
+static inline void notch_coeff_update(float dt, float omega,
+                                      float c2, float c1, NotchCoeff *coeff) {
+  // 连续: H(s) = (s² + ω²) / (s² + 2·c1·ω·s + ω²)
+  // 双线性离散化
+  float t = dt;
+  float w = omega;
+  float w2 = w * w;
+  float c = 2.0f / t;     // 双线性常数
+  float c2_val = c * c;
+
+  float den = c2_val + 2.0f * c1 * w * c + w2;
+
+  coeff->b0 = (c2_val + w2) / den;
+  coeff->b1 = (2.0f * w2 - 2.0f * c2_val) / den;
+  coeff->b2 = (c2_val + w2) / den;
+  coeff->a1 = (2.0f * c2_val - 2.0f * w2) / den;
+  coeff->a2 = (c2_val - 2.0f * c1 * w * c + w2) / den;
+}
+
 #endif  // COMP_FILTER_H

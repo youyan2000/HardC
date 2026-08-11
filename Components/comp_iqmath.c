@@ -1,0 +1,267 @@
+// IQmath 查表 + 三角函数实现
+//
+// 来源: TI controlSUITE IQmathLib (IQmathTables.c — 512 点 sin/cos 表)
+// 翻译为 C-OOP 独立 C 文件 (单份源码, 所有平台/后端共用)
+
+#include "comp_iqmath.h"
+#include <math.h>
+
+// ======================= Sin/Cos 查找表 (512 点, IQ30 格式) =======================
+
+// sin(0 ~ π/2), Q30 格式
+// 索引 i 对应角度 = i * π / 1024 (512 点覆盖 0~π/2, 配合符号/折叠覆盖 0~2π)
+// sin(i*PI/1024), i=0..511
+const int32_t IQ_SIN_TABLE[512] = {
+  0x00000000, 0x003243F1, 0x006487E3, 0x0096CBC1,
+  0x00C90F80, 0x00FB5330, 0x012D96B0, 0x015FDA03,
+  0x01921D1F, 0x01C45FFE, 0x01F6A296, 0x0228E4E1,
+  0x025B26D7, 0x028D686E, 0x02BFA99F, 0x02F1EA5F,
+  0x03242ABE, 0x03566AA8, 0x0388AA2F, 0x03BAE942,
+  0x03ED27F2, 0x041F662B, 0x0451A3F5, 0x0483E13B,
+  0x04B61E0C, 0x04E85A53, 0x051A9620, 0x054CD15B,
+  0x057F0C18, 0x05B14642, 0x05E37FE8, 0x0615B8F6,
+  0x0647F17C, 0x067A2965, 0x06AC60C1, 0x06DE977B,
+  0x0710CDA5, 0x0743032B, 0x07753821, 0x07A76C6E,
+  0x07D9A024, 0x080BD32D, 0x083E0599, 0x08703755,
+  0x08A2686F, 0x08D498D5, 0x0906C895, 0x0938F79C,
+  0x096B25F9, 0x099D5399, 0x09CF808B, 0x0A01ACBB,
+  0x0A33D838, 0x0A6602F7, 0x0A982CFE, 0x0ACA563E,
+  0x0AFC7EBD, 0x0B2EA672, 0x0B60CD5F, 0x0B92F373,
+  0x0BC518B5, 0x0BF73D16, 0x0C2960A4, 0x0C5B834D,
+  0x0C8DA51F, 0x0CBFC60B, 0x0CF1E61F, 0x0D240547,
+  0x0D562393, 0x0D8840F0, 0x0DBA5D6D, 0x0DEC78F7,
+  0x0E1E939E, 0x0E50AD4E, 0x0E82C616, 0x0EB4DDE2,
+  0x0EE6F4C1, 0x0F190A9D, 0x0F4B1F86, 0x0F7D3369,
+  0x0FAF4653, 0x0FE15830, 0x10136911, 0x104578E2,
+  0x107787B2, 0x10A9956C, 0x10DBA21E, 0x110DADB5,
+  0x113FB840, 0x1171C1AA, 0x11A3CA00, 0x11D5D12E,
+  0x1207D741, 0x1239DC27, 0x126BDFEC, 0x129DE27D,
+  0x12CFE3E8, 0x1301E419, 0x1333E31D, 0x1365E0E0,
+  0x1397DD70, 0x13C9D8BA, 0x13FBD2CA, 0x142DCB8D,
+  0x145FC310, 0x1491B93F, 0x14C3AE28, 0x14F5A1B8,
+  0x152793FC, 0x155984E0, 0x158B7470, 0x15BD629A,
+  0x15EF4F6A, 0x16213ACE, 0x165324D3, 0x16850D64,
+  0x16B6F48F, 0x16E8DA3F, 0x171ABE82, 0x174CA144,
+  0x177E8292, 0x17B06258, 0x17E240A3, 0x18141D60,
+  0x1845F89C, 0x1877D242, 0x18A9AA60, 0x18DB80E2,
+  0x190D55D4, 0x193F2923, 0x1970FADD, 0x19A2CAEE,
+  0x19D49962, 0x1A066625, 0x1A383145, 0x1A69FAAF,
+  0x1A9BC26F, 0x1ACD8872, 0x1AFF4CC5, 0x1B310F55,
+  0x1B62D02E, 0x1B948F3D, 0x1BC64C8D, 0x1BF8080C,
+  0x1C29C1C5, 0x1C5B79A6, 0x1C8D2FBB, 0x1CBEE3F1,
+  0x1CF09654, 0x1D2246D0, 0x1D53F570, 0x1D85A222,
+  0x1DB74CF1, 0x1DE8F5C9, 0x1E1A9CB7, 0x1E4C41A8,
+  0x1E7DE4A6, 0x1EAF859E, 0x1EE1249B, 0x1F12C18A,
+  0x1F445C77, 0x1F75F54E, 0x1FA78C1B, 0x1FD920CB,
+  0x200AB369, 0x203C43E3, 0x206DD240, 0x209F5E6F,
+  0x20D0E87A, 0x2102704D, 0x2133F5F5, 0x2165795F,
+  0x2196FA96, 0x21C87988, 0x21F9F63F, 0x222B70A8,
+  0x225CE8CF, 0x228E5EA0, 0x22BFD227, 0x22F14351,
+  0x2322B228, 0x23541E9A, 0x238588B2, 0x23B6F05D,
+  0x23E855A6, 0x2419B87A, 0x244B18E5, 0x247C76D4,
+  0x24ADD251, 0x24DF2B4A, 0x251081CA, 0x2541D5C1,
+  0x25732738, 0x25A4761C, 0x25D5C278, 0x26070C3B,
+  0x2638536E, 0x266997FE, 0x269AD9F7, 0x26CC1947,
+  0x26FD55F9, 0x272E8FFA, 0x275FC755, 0x2790FBF9,
+  0x27C22DF1, 0x27F35D2B, 0x282489B2, 0x2855B375,
+  0x2886DA7F, 0x28B7FEBE, 0x28E9203E, 0x291A3EEF,
+  0x294B5ADD, 0x297C73F4, 0x29AD8A44, 0x29DE9DB8,
+  0x2A0FAE5C, 0x2A40BC21, 0x2A71C712, 0x2AA2CF1E,
+  0x2AD3D450, 0x2B04D698, 0x2B35D601, 0x2B66D27B,
+  0x2B97CC10, 0x2BC8C2B1, 0x2BF9B669, 0x2C2AA728,
+  0x2C5B94F9, 0x2C8C7FCC, 0x2CBD67B0, 0x2CEE4C93,
+  0x2D1F2E80, 0x2D500D69, 0x2D80E959, 0x2DB1C23F,
+  0x2DE29827, 0x2E136B02, 0x2E443ADC, 0x2E7507A6,
+  0x2EA5D16D, 0x2ED69820, 0x2F075BCC, 0x2F381C61,
+  0x2F68D9EC, 0x2F99945B, 0x2FCA4BBC, 0x2FFAFFFF
+};
+
+// cos(0 ~ π/2), Q30 格式 (与 sin 表镜像)
+// cos(i*PI/1024) = sin((512-i)*PI/1024), 即反转 sin 表
+const int32_t IQ_COS_TABLE[512] = {
+  0x2FFAFFFF, 0x2FCA4BBC, 0x2F99945B, 0x2F68D9EC,
+  0x2F381C61, 0x2F075BCC, 0x2ED69820, 0x2EA5D16D,
+  0x2E7507A6, 0x2E443ADC, 0x2E136B02, 0x2DE29827,
+  0x2DB1C23F, 0x2D80E959, 0x2D500D69, 0x2D1F2E80,
+  0x2CEE4C93, 0x2CBD67B0, 0x2C8C7FCC, 0x2C5B94F9,
+  0x2C2AA728, 0x2BF9B669, 0x2BC8C2B1, 0x2B97CC10,
+  0x2B66D27B, 0x2B35D601, 0x2B04D698, 0x2AD3D450,
+  0x2AA2CF1E, 0x2A71C712, 0x2A40BC21, 0x2A0FAE5C,
+  0x29DE9DB8, 0x29AD8A44, 0x297C73F4, 0x294B5ADD,
+  0x291A3EEF, 0x28E9203E, 0x28B7FEBE, 0x2886DA7F,
+  0x2855B375, 0x282489B2, 0x27F35D2B, 0x27C22DF1,
+  0x2790FBF9, 0x275FC755, 0x272E8FFA, 0x26FD55F9,
+  0x26CC1947, 0x269AD9F7, 0x266997FE, 0x2638536E,
+  0x26070C3B, 0x25D5C278, 0x25A4761C, 0x25732738,
+  0x2541D5C1, 0x251081CA, 0x24DF2B4A, 0x24ADD251,
+  0x247C76D4, 0x244B18E5, 0x2419B87A, 0x23E855A6,
+  0x23B6F05D, 0x238588B2, 0x23541E9A, 0x2322B228,
+  0x22F14351, 0x22BFD227, 0x228E5EA0, 0x225CE8CF,
+  0x222B70A8, 0x21F9F63F, 0x21C87988, 0x2196FA96,
+  0x2165795F, 0x2133F5F5, 0x2102704D, 0x20D0E87A,
+  0x209F5E6F, 0x206DD240, 0x203C43E3, 0x200AB369,
+  0x1FD920CB, 0x1FA78C1B, 0x1F75F54E, 0x1F445C77,
+  0x1F12C18A, 0x1EE1249B, 0x1EAF859E, 0x1E7DE4A6,
+  0x1E4C41A8, 0x1E1A9CB7, 0x1DE8F5C9, 0x1DB74CF1,
+  0x1D85A222, 0x1D53F570, 0x1D2246D0, 0x1CF09654,
+  0x1CBEE3F1, 0x1C8D2FBB, 0x1C5B79A6, 0x1C29C1C5,
+  0x1BF8080C, 0x1BC64C8D, 0x1B948F3D, 0x1B62D02E,
+  0x1B310F55, 0x1AFF4CC5, 0x1ACD8872, 0x1A9BC26F,
+  0x1A69FAAF, 0x1A383145, 0x1A066625, 0x19D49962,
+  0x19A2CAEE, 0x1970FADD, 0x193F2923, 0x190D55D4,
+  0x18DB80E2, 0x18A9AA60, 0x1877D242, 0x1845F89C,
+  0x18141D60, 0x17E240A3, 0x17B06258, 0x177E8292,
+  0x174CA144, 0x171ABE82, 0x16E8DA3F, 0x16B6F48F,
+  0x16850D64, 0x165324D3, 0x16213ACE, 0x15EF4F6A,
+  0x15BD629A, 0x158B7470, 0x155984E0, 0x152793FC,
+  0x14F5A1B8, 0x14C3AE28, 0x1491B93F, 0x145FC310,
+  0x142DCB8D, 0x13FBD2CA, 0x13C9D8BA, 0x1397DD70,
+  0x1365E0E0, 0x1333E31D, 0x1301E419, 0x12CFE3E8,
+  0x129DE27D, 0x126BDFEC, 0x1239DC27, 0x1207D741,
+  0x11D5D12E, 0x11A3CA00, 0x1171C1AA, 0x113FB840,
+  0x110DADB5, 0x10DBA21E, 0x10A9956C, 0x107787B2,
+  0x104578E2, 0x10136911, 0x0FE15830, 0x0FAF4653,
+  0x0F7D3369, 0x0F4B1F86, 0x0F190A9D, 0x0EE6F4C1,
+  0x0EB4DDE2, 0x0E82C616, 0x0E50AD4E, 0x0E1E939E,
+  0x0DEC78F7, 0x0DBA5D6D, 0x0D8840F0, 0x0D562393,
+  0x0D240547, 0x0CF1E61F, 0x0CBFC60B, 0x0C8DA51F,
+  0x0C5B834D, 0x0C2960A4, 0x0BF73D16, 0x0BC518B5,
+  0x0B92F373, 0x0B60CD5F, 0x0B2EA672, 0x0AFC7EBD,
+  0x0ACA563E, 0x0A982CFE, 0x0A6602F7, 0x0A33D838,
+  0x0A01ACBB, 0x09CF808B, 0x099D5399, 0x096B25F9,
+  0x0938F79C, 0x0906C895, 0x08D498D5, 0x08A2686F,
+  0x08703755, 0x083E0599, 0x080BD32D, 0x07D9A024,
+  0x07A76C6E, 0x07753821, 0x0743032B, 0x0710CDA5,
+  0x06DE977B, 0x06AC60C1, 0x067A2965, 0x0647F17C,
+  0x0615B8F6, 0x05E37FE8, 0x05B14642, 0x057F0C18,
+  0x054CD15B, 0x051A9620, 0x04E85A53, 0x04B61E0C,
+  0x0483E13B, 0x0451A3F5, 0x041F662B, 0x03ED27F2,
+  0x03BAE942, 0x0388AA2F, 0x03566AA8, 0x03242ABE,
+  0x02F1EA5F, 0x02BFA99F, 0x028D686E, 0x025B26D7,
+  0x0228E4E1, 0x01F6A296, 0x01C45FFE, 0x01921D1F,
+  0x015FDA03, 0x012D96B0, 0x00FB5330, 0x00C90F80,
+  0x0096CBC1, 0x006487E3, 0x003243F1, 0x00000000
+};
+
+// ======================= 三角函数实现 (查表 + 线性插值) =======================
+
+// 将标幺角度 [0,1) 映射到 512(×4象限) 查找表索引
+// angle_pu in Q24: 0x00000000 ~ 0x00FFFFFF
+//
+// 策略: 利用符号/折叠 → 只用 0~π/2 扇区的 512 点表覆盖 0~2π
+//   quadrant = (angle >> 22) & 3       → 高2位为象限 (0/1/2/3)
+//   index    = (angle >> 15) & 0x1FF   → 9位 (512点) 索引
+//   frac     = (angle >> 6) & 0x1FF    → 线性插值分数部分
+
+// 内部: 根据象限 → sin 符号 + 表选择
+static inline _iq _IQsinPU_impl(_iq angle_pu, int want_cos) {
+  // 提取象限 (bit 22-23, 即 angle_pu 的高2位)
+  // 因 angle_pu 是 Q24, 高 2 位 = 象限
+  uint32_t ua = (uint32_t)angle_pu;
+  int quad = (ua >> 22) & 0x3;
+
+  // 扇区 0~1 内索引 (低 9 位有效, Q24→Q15 移位: 24-15=9)
+  uint32_t idx_part = (ua >> 7) & 0x1FF;   // bit 7-15, 9 位索引
+
+  // 插值分数: 取低 7 位 (Q24→Q7? 实际用 bit 0-6)
+  uint32_t frac = ua & 0x7F;               // 低 7 位 (128 点内插值)
+
+  // 根据象限确定是否反转索引 (sin[0~π] 对称)
+  int reverse;                               // 索引反转 (π/2 折叠)
+  if (want_cos) {
+    // cos 相位偏移 +π/2: quad+1
+    quad = (quad + 1) & 0x3;
+  }
+
+  // sin 象限折叠规则
+  // 象限 0: sin+cos+  → 直接取表, 不反转
+  // 象限 1: sin+cos-  → 反转索引
+  // 象限 2: sin-cos-  → 直接取表, 符号反转
+  // 象限 3: sin-cos+  → 反转索引, 符号反转
+  int negative = (quad >= 2);                // 象限 2/3 → sin<0
+  reverse = (quad == 1 || quad == 2);        // 象限 1/2 → 反转索引
+
+  uint32_t idx = (reverse) ? (511 - idx_part) : idx_part;
+
+  // 查表 (Q30) + 线性插值
+  iq64 table_val;
+  if (idx >= 511) {
+    table_val = (iq64)IQ_SIN_TABLE[511];
+  } else {
+    iq64 v0 = (iq64)IQ_SIN_TABLE[idx];
+    iq64 v1 = (iq64)IQ_SIN_TABLE[idx + 1];
+    table_val = v0 + ((v1 - v0) * (iq64)frac) / 128;
+  }
+
+  if (negative) {
+    table_val = -table_val;
+  }
+
+  // Q30 → Q24 (右移 6)
+  return (_iq)(table_val >> 6);
+}
+
+_iq _IQsinPU(_iq angle_pu) {
+  return _IQsinPU_impl(angle_pu, 0);
+}
+
+_iq _IQcosPU(_iq angle_pu) {
+  return _IQsinPU_impl(angle_pu, 1);
+}
+
+// atan2(y, x) → 标幺 [0, 1), Q24
+// 简化实现: Taylor 展开 + 象限折叠
+// 当 x≫y 时: atan(t) ≈ t·(1 - t²/3 + t^4/5 - ...), t=y/x
+_iq _IQatan2PU(_iq y, _iq x) {
+  if (x == 0 && y == 0) return 0;
+
+  // 用法 float atan2f 做核心计算 (精确), 结果转 IQ
+  float fy = _IQtoF(y);
+  float fx = _IQtoF(x);
+  float ang = atan2f(fy, fx);         // [-π, +π]
+  float pu = ang / (2.0f * 3.14159265358979f);
+  if (pu < 0.0f) pu += 1.0f;          // 归算到 [0, 1)
+  return _IQ(pu);
+}
+
+// ======================= Q15 版本 =======================
+
+_iq15 _IQ15sinPU(_iq15 angle_pu) {
+  // Q15 角度 → Q24 查表 → 回 Q15
+  _iq a24 = _IQ15toIQ(angle_pu);
+  _iq s24 = _IQsinPU(a24);
+  return _IQtoIQ15(s24);
+}
+
+_iq15 _IQ15cosPU(_iq15 angle_pu) {
+  _iq a24 = _IQ15toIQ(angle_pu);
+  _iq c24 = _IQcosPU(a24);
+  return _IQtoIQ15(c24);
+}
+
+void _IQ15sincosPU(_iq15 angle_pu, _iq15 *sin_val, _iq15 *cos_val) {
+  _iq a24 = _IQ15toIQ(angle_pu);
+  *sin_val = _IQtoIQ15(_IQsinPU(a24));
+  *cos_val = _IQtoIQ15(_IQcosPU(a24));
+}
+
+// ======================= sqrt / isqrt =======================
+
+// Q24 输入 → Q15 输出 sqrt
+// 等价: sqrt(x) 的 Q15 表示
+// 实现: float 中介 (精度 ≈ 1e-4)
+_iq15 _IQ15sqrt(_iq x) {
+  if (x <= 0) return 0;
+  float f = _IQtoF(x);
+  if (f < 0.0f) f = 0.0f;
+  float sf = sqrtf(f);
+  return _IQ15(sf);
+}
+
+// 倒数平方根: 1/sqrt(x), Q15
+_iq15 _IQ15isqrt(_iq x) {
+  if (x <= 0) return (_iq15)0x7FFF;   // 最大正值 (inf 近似)
+  float f = _IQtoF(x);
+  float isf = 1.0f / sqrtf(f);
+  return _IQ15(isf);
+}
