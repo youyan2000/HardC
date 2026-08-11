@@ -8,7 +8,7 @@
 #ifndef MOTOR_TIM_H
 #define MOTOR_TIM_H
 
-#include "../Components/comp_motor.h"
+#include "comp_motor.h"
 #include "stm32f1xx_hal.h"
 
 // 编码器 AB 相引脚配置

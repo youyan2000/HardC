@@ -1,0 +1,63 @@
+# 默认参数配置 — 参考硬件验证值
+config_id: default
+description: 平衡参数 — 速度/稳定性经过硬件验证
+
+config:
+  # --- 速度环 PID (PidStandard) ---
+  vel_a:
+    kp: 80.0
+    ki: 5.0
+    kd: 0.0
+    kf: 0.0
+    outmax: 7200.0
+    i_outmax: 200.0
+  vel_b:
+    kp: 80.0
+    ki: 5.0
+    kd: 0.0
+    kf: 0.0
+    outmax: 7200.0
+    i_outmax: 200.0
+
+  # --- 角度环 PID (PidStandard) ---
+  pos_a:
+    kp: 60.0
+    ki: 0.1
+    kd: 400.0
+    outmax: 4000.0
+  pos_b:
+    kp: 60.0
+    ki: 0.1
+    kd: 400.0
+    outmax: 4000.0
+
+  # --- 级联双环 PID 外环 (PidCascade) ---
+  csc_a:
+    kp: 15.0
+    ki: 0.05
+    kd: 0.0
+    vlimit: 20.0
+    scale: 1.0
+  csc_b:
+    kp: 15.0
+    ki: 0.05
+    kd: 0.0
+    vlimit: 20.0
+    scale: 1.0
+
+  # --- 循迹 P2PD 非线性 PID ---
+  p2pd:
+    kpp: 3.5
+    kp: 0.05
+    kd: 0.5
+
+  # --- ADC 8 路红外门限 ---
+  adc_thr:
+    - 1443
+    - 1916
+    - 1615
+    - 1628
+    - 2008
+    - 1757
+    - 1819
+    - 1718

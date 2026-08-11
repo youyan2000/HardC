@@ -1,0 +1,254 @@
+// App 层模板 — 实现文件 (app_main.c)
+// ============================================================
+// 来源: LitteCar CMake (User/Application/app_main.c, 311行)
+//       + WEILAI_SuperCap (User/app/app_main.c, 263行)
+//
+// 本文件是项目的唯一 App 入口。所有 Module 通过 ISR 钩子和 BackgroundTask 被驱动。
+//
+// 架构规则:
+//   1. board_init() 是唯一创建和绑定实例的地方
+//   2. ISR 只做: 控制计算、状态机推进、寄存器操作、标记 flag
+//   3. ISR 禁止: printf、软件I2C、OLED刷新、长时间循环
+//   4. BackgroundTask 完成所有耗时 I/O
+//   5. 配置与运行时分离: Config POD → apply_config() → 运行时 Instance
+//   6. 新增 Module 只需: (a) 嵌入 root (b) board_init 绑定 (c) ISR 中 tick
+
+#include "app_main.h"
+
+// ======== 全局实例 ========
+ProjectConfig g_cfg;
+ProjectRoot    g_root;
+
+// ======== 1. YAML 配置注入目标 ========
+// YmaC 工具扫描 conf/*.yaml → 渲染 C designated initializer → 注入到下方标记之间
+// 手写默认值, YmaC 覆盖。
+// 运行: cd <项目根> && python YmaC/yaml_config_builder.py
+ProjectConfig g_cfg = {
+                                                                /* CONFIG BEGIN */
+                                /* config: default */
+  .mot_a = {
+    .vel = { .kp = 80.0f, .ki = 5.0f, .kd = 0.0f, .kf = 0.0f,
+             .out_limit = 7200.0f, .d_on_measurement = true, .i_limit = 200.0f },
+    .pos = { .kp = 60.0f, .ki = 0.1f, .kd = 400.0f, .kf = 0.0f,
+             .out_limit = 4000.0f, .d_on_measurement = false, .i_limit = 0.0f },
+    .csc_vlimit = 20.0f,   // LESSONS.md #13: vlimit=20 刚好
+  },
+  .mot_b = {
+    .vel = { .kp = 80.0f, .ki = 5.0f, .kd = 0.0f, .kf = 0.0f,
+             .out_limit = 7200.0f, .d_on_measurement = true, .i_limit = 200.0f },
+    .pos = { .kp = 60.0f, .ki = 0.1f, .kd = 400.0f, .kf = 0.0f,
+             .out_limit = 4000.0f, .d_on_measurement = false, .i_limit = 0.0f },
+    .csc_vlimit = 20.0f,
+  },
+                                                                /* CONFIG END */
+};
+
+// ======== 2. 配置 → 运行时同步 ========
+// 将 g_cfg (POD) 的参数复制到 g_root 中各运行时实例
+// 调用时机: 启动 / YAML注入后 / 0xFB串口调参后
+
+void apply_config(void) {
+  // 示例: 电机A 速度环
+  // pid_std_set_kp(&g_root.drv_vel_a, g_cfg.mot_a.vel.kp);
+  // pid_std_set_ki(&g_root.drv_vel_a, g_cfg.mot_a.vel.ki);
+  // pid_std_set_kd(&g_root.drv_vel_a, g_cfg.mot_a.vel.kd);
+  // g_root.drv_vel_a.base.out_max =  g_cfg.mot_a.vel.out_limit;
+  // g_root.drv_vel_a.base.out_min = -g_cfg.mot_a.vel.out_limit;
+
+  // 示例: 循迹 P2PD
+  // pid_p2pd_set_kpp(&g_root.drv_fpid, g_cfg.follower.pid.kpp);
+  // pid_p2pd_set_kp (&g_root.drv_fpid, g_cfg.follower.pid.kp);
+  // pid_p2pd_set_kd (&g_root.drv_fpid, g_cfg.follower.pid.kd);
+
+  // 原则: 只拷参数, 不拷状态 (积分器/历史误差不清零)
+}
+
+// ======== 3. 板级初始化 ========
+// 在 CubeMX MX_*_Init() 之后, 主循环之前调用
+// 这是唯一创建和绑定实例的地方 — 所有指针在此解析, 此后不变
+
+void board_init(void) {
+  // --- 3a. Device 实例化 (每个子类调自己的 _init) ---
+
+  // 示例: UART 调试串口
+  // uart_init(&g_root.drv_uart, CommComputer, &huart1, &g_root.rx_buf);
+
+  // 示例: 电机驱动 (直接给 CCR 寄存器指针 + 编码器引脚)
+  // mt_init(&g_root.drv_mtr_a, MotA,
+  //         &(PwmCh){&TIM4->CCR1, &TIM4->CCR2},
+  //         &(AbEnc){Ex1_A_GPIO_Port, Ex1_A_Pin, Ex1_B_GPIO_Port, Ex1_B_Pin},
+  //         1);  // direction: 1=正向, -1=反向
+
+  // 示例: PID 控制器
+  // pid_std_init(&g_root.drv_vel_a, 0.01f,
+  //              -g_cfg.mot_a.vel.out_limit, g_cfg.mot_a.vel.out_limit,
+  //              &(PidStdConfig){.kp=g_cfg.mot_a.vel.kp, ...});
+
+  // 示例: 级联 PID — 内环指向速度环
+  // pid_cascade_init(&g_root.drv_csc_a, 0.01f,
+  //                  &g_root.drv_vel_a.base,   // 内环 = 速度环
+  //                  &(PidCascadeConfig){.vlimit=g_cfg.mot_a.csc_vlimit, ...});
+
+  // 示例: GPO LED (应用 LESSONS.md #7: 输出限幅)
+  // gpo_led_init_gpio(&g_root.drv_led, "status", LED_GPIO_Port, LED_Pin, LED_ACTIVE_HIGH);
+
+  // --- 3b. Module 实例化 (指针注入: 绑定 Devices 到 Modules) ---
+  // 每个 Module init 接收它需要的 Base* 指针, 存入 Module 内部
+
+  // 示例: 电机状态机 (持有 MotorBase* + 3个 PidBase*)
+  // mot_init(&g_root.mtr_a,
+  //          &g_root.drv_mtr_a.base,    // MotorBase*
+  //          &g_root.drv_vel_a.base,    // 速度环 PidBase*
+  //          &g_root.drv_pos_a.base,    // 位置环 PidBase*
+  //          &g_root.drv_csc_a.base,    // 级联 PidBase*
+  //          NULL);                      // 事件回调 (可选)
+
+  // 示例: 级联 post-bind — PID 需要读取电机当前速度
+  // pid_cascade_set_cv(&g_root.drv_csc_a, &g_root.mtr_a.cv);
+
+  // 示例: 循迹状态机 (持有 2个 MotApp* + PidBase* + TurnCtrl*)
+  // follower_init(&g_root.flw,
+  //               &g_root.mtr_a, &g_root.mtr_b,
+  //               &g_root.drv_fpid.base,
+  //               &g_root.turn);
+
+  // 示例: HMI 模块 (持有 按键指针数组)
+  // ComKey *keys[] = {&g_root.drv_key1, &g_root.drv_key2, &g_root.drv_key3, &g_root.drv_key4};
+  // hmi_init(&g_root.hmi, keys, 4);
+
+  // --- 3c. 通用 Module (每个项目都需要) ---
+
+  // 帧协议解析器
+  mod_comm_init(&g_root.mod_comm, &g_root.drv_uart.base);
+
+  // 命令分发器 (注册各子系统的命令处理函数)
+  cmd_dispatch_init(&g_root.cmd_dispatch);
+  // cmd_dispatch_register(&g_root.cmd_dispatch, CMD_SYS_START, sys_start_handler);
+  // cmd_dispatch_register(&g_root.cmd_dispatch, CMD_MOT_FORWARD, mot_forward_handler);
+
+  // 串口协议 (ISR 喂入 → 主循环处理)
+  serial_proto_init(&g_root.serial_proto);
+  // serial_proto.on_pid_tune = on_pid_tune_received;
+  // serial_proto.on_sensor_cmd = on_sensor_query;
+
+  // --- 3d. 启动硬件 ---
+
+  // 示例: 启动控制定时器 (TIM3, 10ms = 100Hz)
+  // HAL_TIM_Base_Start_IT(&htim3);
+
+  // 示例: 启动 PWM 输出
+  // HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+  // HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+
+  // 示例: 启动 UART 接收
+  // comm_bgn(&g_root.drv_uart.base);
+
+  // 示例: 启动 ADC DMA
+  // HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_SIZE);
+
+  // --- 3e. 初始配置加载 ---
+  apply_config();
+}
+
+// ======== 4. ISR 钩子 ========
+
+// 控制定时器 ISR — 所有控制算法和状态机的驱动源
+// 调用顺序很重要: 先传感器 → 再决策 → 最后执行器
+void App_OnControlTick(void) {
+  g_root.heartbeat++;   // ISR 心跳 (供 Heartbeat 看门狗检测死锁)
+
+  // === 第1层: 传感器采样 ===
+  // ADC 数据处理
+  // adc_process(&g_root.drv_follower.base);
+  // 陀螺仪角速度积分
+  // mpu6050_yaw_integrate(&g_root.drv_mpu);
+
+  // === 第2层: HMI + 命令分发 ===
+  // 按键扫描 + 按键→CarCmd→dispatch
+  // hmi_tick(&g_root.hmi);
+  // hmi_dispatch(&g_root.hmi, &g_root.mtr_a, &g_root.mtr_b, &g_root.flw, &g_root.turn);
+
+  // === 第3层: 控制算法 (状态机 tick) ===
+  // 循迹控制
+  // follower_tick(&g_root.flw);
+  // 转弯控制 (可能覆盖循迹的电机输出)
+  // turn_tick(&g_root.turn);
+  // 功率控制
+  // mod_pwr_tick(&g_root.powerctrl, 0.01f);
+
+  // === 第4层: 执行器输出 (最后, 确保 PWM 值已稳定) ===
+  // 电机控制: 读编码器 → PID计算 → PWM更新
+  // mot_tim(&g_root.mtr_a);
+  // mot_tim(&g_root.mtr_b);
+
+  // === 第5层: 延迟标记 (ISR 中不执行, 标记后由 BackgroundTask 处理) ===
+  // if (需要打印传感器数据)  DeferredAction_Set(&g_root.deferred, DEFER_LOG_SENSOR);
+  // if (需要发送串口应答)    DeferredAction_Set(&g_root.deferred, DEFER_SEND_UART);
+}
+
+// 串口接收 ISR — 逐字节喂入协议栈
+void App_OnUartRx(uint8_t byte) {
+  // 路由顺序: PID调参 → 控制命令 → 传感器查询 → 校准 → 直控 → 电机数据
+  // if (pid_tune_rx(byte))              return;  // 0xFB
+  // serial_proto_feed(&g_root.serial_proto, byte);  // 0xFA/0xFC/0xEE/0xEF 帧协议
+  // comm_bgn(&g_root.drv_uart.base);              // 重启接收
+}
+
+// GPIO 外部中断 ISR — 编码器脉冲 + MPU6050 INT + 按键
+void App_OnGpioExti(uint16_t pin) {
+  // LESSONS.md #11: EXTI 回调中必须判断来源
+  // if (pin == MPU6050_INT_Pin) {
+  //   mpu6050_drv_dmp_isr(&g_root.drv_mpu);
+  //   return;
+  // }
+  // mot_enc(&g_root.mtr_a, pin);
+  // mot_enc(&g_root.mtr_b, pin);
+}
+
+// ======== 5. 主循环后台任务 ========
+// LESSONS.md #6: 不要在 ISR 中发串口 — 所有 printf/软件I2C/OLED 在此完成
+
+void BackgroundTask(void) {
+  // --- 软件 I2C (阻塞操作, 不能放 ISR) ---
+  // mpu6050_drv_poll_gyro_z(&g_root.drv_mpu);
+
+  // --- 串口协议处理 (主循环) ---
+  // if (serial_proto_is_frame_ready(&g_root.serial_proto)) {
+  //   serial_proto_process(&g_root.serial_proto, &g_root.cmd_dispatch);
+  // }
+
+  // --- PID 调参应答 (printf, 不能放 ISR) ---
+  // pid_tune_respond();
+
+  // --- 传感器查询应答 ---
+  // sensor_query_send();
+
+  // --- OLED 刷新 (软件 SPI, 阻塞操作) ---
+  // oled_flush();
+
+  // --- 事件日志输出 ---
+  // DeferredAction_Poll(&g_root.deferred, DEFER_LOG_SENSOR) → printf
+  // DeferredAction_Poll(&g_root.deferred, DEFER_SEND_UART)  → uart_send
+
+  // --- 空闲计数 (负载率 = (1 - idle/总tick) × 100%) ---
+  g_root.idle_cnt++;
+}
+
+// ======== 6. 串口 0xFB PID 调参回调 (示例) ========
+//
+// 当串口收到合法的 PID 调参帧后, serial_proto 回调此函数.
+// 10 个系数槽位的映射由应用层定义.
+//
+// static void on_pid_tune_received(const float coef[10]) {
+//   // 槽位 0-2: 电机A 速度环 kp/ki/kd
+//   pid_std_set_kp(&g_root.drv_vel_a, coef[0]);
+//   pid_std_set_ki(&g_root.drv_vel_a, coef[1]);
+//   pid_std_set_kd(&g_root.drv_vel_a, coef[2]);
+//
+//   // 同步回 g_cfg (下次 YAML 注入保持一致)
+//   g_cfg.mot_a.vel.kp = coef[0];
+//   g_cfg.mot_a.vel.ki = coef[1];
+//   g_cfg.mot_a.vel.kd = coef[2];
+//
+//   // printf("CONFIG OK\r\n");  ← 在 BackgroundTask 中调用, 不在 ISR
+// }

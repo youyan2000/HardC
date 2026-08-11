@@ -6,7 +6,7 @@
 #define COMP_MATH_H
 
 #include <stdint.h>
-#include "../BSP/bsp_dsp.h"    // 硬件加速 sqrt (CMSIS-DSP / C2000 TMU / 纯C回退)
+#include "bsp_dsp.h"    // 硬件加速 sqrt (CMSIS-DSP / C2000 TMU / 纯C回退)
 
 // 2π 常量 (其他模块也会定义, 用 #ifndef 防冲突)
 #ifndef M_2PI
@@ -28,22 +28,13 @@
 
 #ifndef MAX
 // 返回两个值中的最大值
-#define MAX(a, b)               \
-  ({                            \
-    __typeof__(a) _a = (a);     \
-    __typeof__(b) _b = (b);     \
-    _a > _b ? _a : _b;          \
-  })
+// 注意: 参数有副作用时会被双次求值, 仅用于简单表达式
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
 #ifndef MIN
 // 返回两个值中的最小值
-#define MIN(a, b)               \
-  ({                            \
-    __typeof__(a) _a = (a);     \
-    __typeof__(b) _b = (b);     \
-    _a < _b ? _a : _b;          \
-  })
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
 #ifndef CLAMP

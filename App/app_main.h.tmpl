@@ -1,0 +1,169 @@
+// App 层模板 — 头文件 (app_main.h)
+// ============================================================
+// 来源: LitteCar CMake (User/Application/app_main.h) + WEILAI_SuperCap (User/app/app_main.h)
+//
+// 架构规则（不可违反）:
+//   1. 整个项目只有这一个 App 文件对。其他都是 Module (mod_*)。
+//   2. 根结构体嵌入所有 Device 和 Module 实例 (值包含, 无 malloc)。
+//   3. Module 之间通过指针引用 (指针注入), 由 board_init() 一次性绑定。
+//   4. 配置与运行时分离: Config (POD) 是 YAML 注入目标, Instance 持有运行时状态。
+//   5. ISR 只做控制计算和寄存器操作；printf/OLED/软件I2C 在主循环 BackgroundTask 中完成。
+//
+// 集成步骤:
+//   1. 复制所需子项目目录到工程
+//   2. 在 CubeMX 生成的 main.c 中 #include "app_main.h", 调用 board_init() + BackgroundTask()
+//   3. 在 stm32f1xx_it.c 的回调中调用本文件的 ISR 钩子
+//   4. 创建 conf/*.yaml, 运行 python YmaC/yaml_config_builder.py 注入配置
+//   5. 编译: cmake .. && make
+
+#ifndef APP_MAIN_H
+#define APP_MAIN_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+// ======== 1. 引入所有子项目 ========
+// 每个子项目按需引入: Components (父类) → Devices (子类) → Module (业务)
+
+// --- 公共基础设施 ---
+#include "container_of.h"
+#include "comp_math.h"
+#include "comp_error.h"
+#include "comp_filter.h"
+#include "comp_protection.h"
+
+// --- COM-OOP: 通信 ---
+#include "comp_communication.h"
+#include "com_uart.h"
+#include "com_key.h"
+// #include "com_oled.h"      // 按需取消注释
+// #include "com_mpu6050.h"
+// #include "com_ultrasonic.h"
+#include "mod_comm.h"           // 帧协议解析
+#include "mod_cmd_dispatch.h"   // 统一命令分发
+#include "mod_serial_proto.h"   // 调试串口协议
+
+// --- PID-OOP: 控制器 ---
+#include "comp_pid.h"
+#include "pid_standard.h"
+#include "pid_p2pd.h"
+#include "pid_cascade.h"
+#include "pid_parallel.h"       // 可选
+
+// --- PWM-OOP: 电力电子 ---
+// #include "comp_pwm.h"        // 按需取消注释
+// #include "pwm_buckboost.h"
+// #include "mod_powerctrl.h"
+
+// --- ADC-OOP: 采样 ---
+// #include "comp_adc.h"
+// #include "adc_follower.h"
+// #include "adc_dc_sampler.h"
+// #include "mod_sampler.h"
+
+// --- GPO-OOP: 通用输出 ---
+// #include "comp_gpo.h"
+// #include "gpo_led.h"
+// #include "gpo_buzzer.h"
+
+// --- Motor (根级 Components/Devices) ---
+// #include "comp_motor.h"
+// #include "motor_tim.h"
+
+// ======== 2. 项目配置结构体 (YAML 注入目标) ========
+// 这是 PURE DATA — 不包含运行时状态。YmaC 工具在 /* CONFIG BEGIN/END */ 之间注入。
+
+// 示例: PID 参数组
+typedef struct {
+  float kp, ki, kd, kf;
+  float out_limit;       // 输出限幅 (PWM 占空比最大值)
+  bool  d_on_measurement;
+  float i_limit;
+} PidCfg;
+
+// 示例: 电机参数组
+typedef struct {
+  PidCfg vel;            // 速度环
+  PidCfg pos;            // 位置环
+  float  csc_vlimit;     // 级联 PID 内环限幅 (vlimit=20 刚好, LESSONS.md #13)
+} MotorCfg;
+
+// 项目总配置 — 聚合所有子系统的可调参数
+typedef struct {
+  MotorCfg mot_a;
+  MotorCfg mot_b;
+  // FollowerCfg follower;    // 循迹参数 (按需)
+  // PowerCfg   power;         // 功率控制参数 (按需)
+  // AdcCfg     adc;           // ADC 采样参数 (按需)
+} ProjectConfig;
+
+// 全局配置实例 — YmaC 注入到此变量的 CONFIG BEGIN/END 之间
+extern ProjectConfig g_cfg;
+
+// ======== 3. 根结构体 (App 拥有所有实例) ========
+//
+// 设计原则 (来自 WEILAI + LitteCar):
+//   - 所有 Device 和 Module 实例嵌入此结构体 (值包含, 无 malloc)
+//   - Module 之间通过指针引用 (board_init 中一次性解析)
+//   - 指针图是封闭的: 所有指针指向此结构体内的其他成员
+//   - "extern ProjectRoot root" 让 Module 可直接访问兄弟模块
+
+typedef struct {
+  // --- Device 实例 (值包含) ---
+  // Uart       drv_uart;         // USART1 调试串口
+  // ComKey     drv_key1;         // 按键1
+  // PidStandard drv_vel_a;       // 电机A 速度环
+  // PidStandard drv_pos_a;       // 电机A 位置环
+  // PidCascade drv_csc_a;        // 电机A 级联
+  // PidP2PD   drv_fpid;          // 循迹 P2PD
+  // MotTim    drv_mtr_a;         // 电机A 驱动
+  // Mpu6050   drv_mpu;           // 陀螺仪
+  // AdcFollower drv_follower;    // 红外循迹
+
+  // --- Module 实例 (值包含) ---
+  // MotApp    mtr_a;             // 电机A 状态机 (持有 MotorBase* + PidBase*)
+  // Follower  flw;               // 循迹状态机 (持有 MotApp* + PidBase* + TurnCtrl*)
+  // TurnCtrl  turn;              // 转弯状态机 (持有 MotApp*)
+  // Hmi       hmi;               // 人机交互 (持有 ComKey*[] + 命令分发)
+
+  // --- Module 实例 (通用, 每个项目都需要) ---
+  ModComm          mod_comm;         // 帧协议解析
+  CmdDispatcher    cmd_dispatch;     // 命令分发器
+  SerialProto      serial_proto;     // 串口协议
+
+  // --- 诊断 ---
+  volatile uint32_t heartbeat;       // ISR 心跳计数 (快通道++)
+  uint32_t          idle_cnt;        // 主循环空闲计数 (负载率指标)
+
+} ProjectRoot;
+
+// 全局根实例 — Module 可通过 extern 访问
+extern ProjectRoot g_root;
+
+// ======== 4. API ========
+
+// 板级初始化 — 在 CubeMX MX_*_Init() 之后, while(1) 之前调用
+// 完成: Device 实例化 → Module 实例化 → 指针注入 → ISR 启动
+void board_init(void);
+
+// 配置同步 — 将 g_cfg 的参数复制到运行时实例
+// 调用时机: (1) 启动时 (2) YAML 重新注入后 (3) 串口 0xFB 调参后
+void apply_config(void);
+
+// 主循环后台任务 — 在 while(1) 中调用
+// 完成: 软件I2C、printf调试输出、OLED刷新、串口应答
+void BackgroundTask(void);
+
+// ======== 5. ISR 钩子 (在 stm32f1xx_it.c 的回调中调用) ========
+
+// HAL_TIM_PeriodElapsedCallback — 控制定时器 ISR (如 TIM3, 10ms/100Hz)
+// 调用顺序: ADC采样 → 传感器 → HMI/命令 → 控制算法 → 电机输出
+void App_OnControlTick(void);
+
+// HAL_UART_RxCpltCallback — 串口接收完成
+void App_OnUartRx(uint8_t byte);
+
+// HAL_GPIO_EXTI_Callback — GPIO 外部中断 (编码器/按键/MPU6050 INT)
+void App_OnGpioExti(uint16_t pin);
+
+#endif  // APP_MAIN_H

@@ -5,7 +5,7 @@
 // 按四层架构重构：平台适配宏 → 硬件层函数调用，去除 MSP430 残留
 
 #include "comp_mpu.h"
-#include "../BSP/mpu6050.h"
+#include "mpu6050.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>

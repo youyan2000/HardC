@@ -8,7 +8,7 @@
 
 #include "motor_tim.h"
 #include "../BSP/container_of.h"
-#include "../Components/comp_math.h"
+#include "comp_math.h"
 
 #define PWM_MAX 7200  // TIMx ARR=7199, >ARR 即 100% 占空比
 

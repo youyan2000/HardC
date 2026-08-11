@@ -12,7 +12,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include "comp_math.h"
-#include "../BSP/bsp_dsp.h"    // 硬件加速 sqrt/biquad (CMSIS-DSP / C2000 / 纯C回退)
+#include "bsp_dsp.h"    // 硬件加速 sqrt/biquad (CMSIS-DSP / C2000 / 纯C回退)
 
 // π 常量 (comp_math.h 已定义 M_2PI, 这里补 M_PI)
 #ifndef M_PI
@@ -125,7 +125,8 @@ LowPassFilter2p_Update(LowPassFilter2p *me, float sample) {
                    - me->delay_element_2_ * me->a2_;
 
   // 防 NaN/Inf 传播: 异常时退化为原值
-  if (isinf(w)) {
+  // isfinite 同时检测 Inf 和 NaN, 跨平台兼容性更好
+  if (!isfinite(w)) {
     w = sample;
   }
 
