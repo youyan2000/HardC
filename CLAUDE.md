@@ -4,19 +4,35 @@
 
 ## 项目概述
 
-纯 C 语言实现的面向对象嵌入式硬件驱动框架。5 层架构：BSP → Components → Devices → Module → App。每个子项目（ADC-OOP, COM-OOP, GPO-OOP, PID-OOP, PWM-OOP）是独立可复用的层级模块。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
+纯 C 语言实现的面向对象嵌入式硬件驱动框架。5 层扁平目录：BSP → Components → Devices → Module → App。文件前缀区分子系统域（ADC/COM/GPO/PID/PWM/Motor）。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
+
+**目录结构：**
+```
+C-OOP/
+├── BSP/           # L1: 不透明句柄 → 平台抽象
+├── Components/    # L2: comp_*.h/c → 父类 + ops 虚表（前缀=域）
+├── Devices/       # L3: <域>_<子类>.h/c → 具体硬件实现
+├── Module/        # L4: mod_*.h/c → 业务逻辑模块
+├── App/           # L5: 应用入口模板 + PID 调参协议
+├── Config/        # YAML 配置（拓扑 + 参数变体）
+├── YmaC/          # YAML→C 注入工具
+├── docs/          # 学习报告 & 架构文档
+└── cmake/         # 工具链文件
+```
 
 **核心文档：**
 | 文档 | 内容 |
 |------|------|
-| [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、App 架构规则 |
-| [LESSONS.md](LESSONS.md) | 调参教训库 (17 条 + 经验模板), git 版本管理, 禁止回退 |
+| [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
+| [LESSONS.md](LESSONS.md) | 调参教训库 (34 条 + 经验模板), git 版本管理, 禁止回退 |
+| [ROADMAP.md](ROADMAP.md) | 多拓扑构建系统路线图 |
 
 **App 模板：**
 | 文件 | 用途 |
 |------|------|
-| [Templates/app_main.h.tmpl](Templates/app_main.h.tmpl) | App 层头文件模板 — 根结构体、配置 POD、ISR 钩子声明 |
-| [Templates/app_main.c.tmpl](Templates/app_main.c.tmpl) | App 层实现模板 — board_init、YmaC 注入点、ISR 实现、BackgroundTask |
+| [App/app_main.h.tmpl](App/app_main.h.tmpl) | App 层头文件模板 — 根结构体、配置 POD、ISR 钩子声明 |
+| [App/app_main.c.tmpl](App/app_main.c.tmpl) | App 层实现模板 — board_init、YmaC 注入点、ISR 实现、BackgroundTask |
+| [App/pid_tune.h/c](App/pid_tune.h) | PID 串口调参协议 (0xFB 帧, 48 字节) |
 | [YmaC/README.md](YmaC/README.md) | YAML→C 配置注入工具使用说明 |
 
 **AI 技能文件：**
@@ -36,19 +52,19 @@
 
 ### 提交规范
 
-**提交粒度：每个子项目独立提交。** 修改 ADC-OOP 和 PWM-OOP 分开 commit，不要混在同一个提交里。提交信息格式：
+**提交粒度：每个子系统独立提交。** 修改 ADC 相关文件和 PWM 相关文件分开 commit，不要混在同一个提交里。提交信息格式：
 
 ```
-<子项目或子系统>: <动词短语>
+<子系统或文件>: <动词短语>
 
 # 示例：
-ADC-OOP: 添加 AC Sampler 子类
-PWM-OOP: 修复 Interleaved 相位计算溢出
+ADC: 添加 AC Sampler 子类
+PWM: 修复 Interleaved 相位计算溢出
 Components: 更新 comp_error.h bitmask 宏
 BSP: 添加 container_of.h
 docs: 更新 agent.md 多态分发示例
 cmake: 添加 gcc-arm-none-eabi 工具链文件
-conf: 新增 default.yaml 配置模板
+Config: 新增 default.yaml 配置模板
 ```
 
 **提交信息用英文或中文均可，但同一仓库保持一致。** 本仓库优先用英文（面向国际协作），必要时可用中文附注。
@@ -68,7 +84,7 @@ conf: 新增 default.yaml 配置模板
 | 不忽略 | 原因 |
 |--------|------|
 | `.claude/settings.json` | 项目级 AI 工具配置，团队共享 |
-| `*.yaml` (conf/) | 配置文件，是源码的一部分 |
+| `*.yaml` (Config/) | 配置文件，是源码的一部分 |
 
 ### AI 助手操作 Git 的规则
 
@@ -77,7 +93,7 @@ conf: 新增 default.yaml 配置模板
 1. **不要自动提交。** 除非用户明确要求提交，否则只做修改、不 commit。
 2. **不要 force push。** `--force` 到 `main` 永远禁止。force push 到功能分支需要用户明确确认。
 3. **提交前检查：**
-   - 修改是否跨子项目？→ 拆成多个提交，每个子项目一个
+   - 修改是否跨子系统？→ 拆成多个提交，每个子系统一个
    - 是否有未跟踪的构建产物？→ 先更新 `.gitignore`
    - 是否破坏了文档的一致性？→ agent.md 和代码同步更新
 4. **永远不要提交这些内容：**
@@ -85,7 +101,7 @@ conf: 新增 default.yaml 配置模板
    - 编译产物（`.o`, `.elf`, `.bin`）
    - IDE 个人配置（`.vscode/`, `.idea/`）
 5. **`git status` 先看一眼再动手。** 不确定该不该提交的文件，先问用户。
-6. **commit message 用上述格式。** 不确定影响范围时，先 `git diff --stat` 搞清楚改了哪些子项目。
+6. **commit message 用上述格式。** 不确定影响范围时，先 `git diff --stat` 搞清楚改了哪些子系统。
 
 ### AI 助手的代码生成规则
 
@@ -97,14 +113,26 @@ conf: 新增 default.yaml 配置模板
 4. **Reviewer 必须检查：** 2空格缩进（禁止4空格）、K&R大括号、container_of 下溯、ops 绑定、include guard、行尾无空白、无 tab。
 5. **例外（可跳过 Reviewer）：** 纯 .md 文档修改、YAML 配置修改。commit message 中注明 `no-review: <原因>`。
 
+### 代码风格自动化
+
+项目配置了 `.clang-format` (2空格 / K&R / 120列) 和 `.clang-tidy` (命名检查 + bug检查)。提交前运行：
+
+```bash
+# 格式化全部 .c/.h
+find . -name '*.h' -o -name '*.c' | xargs clang-format -i
+
+# 静态分析
+clang-tidy Components/comp_pid.h -- -I BSP -I Components -I Devices
+```
+
 ### 人类协作者的 Git 工作流
 
 ```bash
 # 开始新功能
 git checkout -b feature/my-new-device
 # ... 开发 ...
-git add <子项目目录>
-git commit -m "GPO-OOP: 添加 RGB LED 子类"
+git add <相关文件>
+git commit -m "PWM: 添加 SVPWM 六开关子类"
 
 # 完成后合并
 git checkout main
@@ -112,13 +140,13 @@ git merge feature/my-new-device
 git branch -d feature/my-new-device
 ```
 
-### 子项目独立性的 Git 含义
+### 子系统独立性
 
-每个子项目（ADC-OOP, COM-OOP, GPO-OOP, PID-OOP, PWM-OOP）有自己的 `agent.md`。修改子项目内部文件时，确认该子项目的 `agent.md` 不需要同步更新。如果改了 API、增加了子类、或修改了 ops 虚表签名，**必须同步更新文档**。
+所有子系统通过文件前缀区分（ADC/COM/GPO/PID/PWM/Motor），全部在 `Components/` + `Devices/` + `Module/` 扁平存放。修改子系统内部文件时，确认 [agent.md](agent.md) 中对应的 §8 子系统参考不需要同步更新。如果改了 API、增加了子类、或修改了 ops 虚表签名，**必须同步更新文档**。
 
 ## App 层开发规则
 
-> **App 层只有一组文件。禁止自由发挥。** 所有项目必须基于 [Templates/app_main.c.tmpl](Templates/app_main.c.tmpl) 和 [Templates/app_main.h.tmpl](Templates/app_main.h.tmpl) 开始。
+> **App 层只有一组文件。禁止自由发挥。** 所有项目必须基于 [App/app_main.c.tmpl](App/app_main.c.tmpl) 和 [App/app_main.h.tmpl](App/app_main.h.tmpl) 开始。
 > 参考: WEILAI_SuperCap `User/app/app_main.c` (263行) + LitteCar CMake `User/Application/app_main.c` (311行)。
 
 1. **根结构体 `ProjectRoot`** — 嵌入所有 Device + Module 实例（值包含，零 malloc）
@@ -142,7 +170,7 @@ python YmaC/yaml_config_builder.py --cli default
 
 **工作流:**
 1. 在 `app_main.c` 的 `/* CONFIG BEGIN */` / `/* CONFIG END */` 之间手写默认值
-2. 创建 `conf/<variant>.yaml`（格式见 [YmaC/README.md](YmaC/README.md)）
+2. 创建 `Config/params/<variant>.yaml`（格式见 [YmaC/README.md](YmaC/README.md)）
 3. 运行 YmaC → 选择配置 → 自动注入 → 编译
 4. `apply_config()` 将注入的 POD 值同步到运行时 Instance
 
@@ -170,9 +198,20 @@ make -j$(nproc)
 
 ## 复用方式
 
-1. **直接拷贝整个子项目目录** 到目标工程
+1. **直接拷贝需要的 Component + Device + Module 文件** 到目标工程
 2. **基于父类继承新子类** — 遵循 agent.md 中的黄金法则（父类为第一成员、container_of 下溯、构造器绑定 ops）
+
+## 子系统速查
+
+| 域 | Component | Devices 子类数 | 句柄头文件 |
+|----|-----------|--------------|-----------|
+| ADC | `comp_adc.h/c` | 3 (Follower/DC/AC Sampler) | `adcs.h` |
+| COM | `comp_comm.h/c` | 8 (UART/SPI/I2C/CAN/Key/MPU6050/OLED/Ultrasonic) | `comms.h` |
+| GPO | `comp_gpo.h/c` | 5 (LED/Laser/Beep/Buzzer/Fan) | `gpos.h` |
+| PID | `comp_pid.h/c` | 6 (Standard/Cascade/P2PD/Parallel/PR/QPR) | `pids.h` |
+| PWM | `comp_pwm.h/c` | 5 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant) | `pwms.h` |
+| Motor | `comp_motor.h/c` | 1 (TIM) | — |
 
 ---
 
-> **最后更新：** 2026-07-19 — BSP 硬件加速抽象层重构 (新增 bsp_dsp.h/bsp_adc.h, bsp_pwm.h 修复命名泄漏+物理API, 全子项目 clk_hz 重命名), LESSONS.md #17
+> **最后更新：** 2026-08-12 — 扁平化重构：子项目目录 → 文件前缀分层、Templates/→App/、conf/→Config/params/、comp_communication→comp_comm、com_iic→com_i2c、BSP 驱动→Devices

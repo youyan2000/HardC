@@ -1,6 +1,6 @@
 # C-OOP — 嵌入式 C 面向对象硬件驱动库
 
-本仓库用 ANSI C 实现面向对象模式的嵌入式硬件驱动框架。每个子项目是独立可复用的层级模块。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
+本仓库用 ANSI C 实现面向对象模式的嵌入式硬件驱动框架。按 bsp-dev-c 风格组织为五层扁平目录（BSP → Components → Devices → Module → App），文件前缀区分子系统域。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
 
 ---
 
@@ -10,7 +10,7 @@
 >
 > | 方式 | 操作 | 适用场景 |
 > |:---|:---|:---|
-> | **方式一：直接拷贝** | 复制整个子项目目录 → 改 `board_init.c` 的引脚/定时器/HAL 句柄 → 直接用 | 硬件变了但设备类型不变（如换个引脚、换个 MCU 系列） |
+> | **方式一：直接拷贝** | 复制需要的 Component + Device + Module 文件 → 改引脚/定时器/HAL 句柄 → 直接用 | 硬件变了但设备类型不变（如换个引脚、换个 MCU 系列） |
 > | **方式二：继承子类** | 写一个新 `.h/.c` → 父类结构体作为第一个成员 → 实现虚函数 → 绑定 ops → 注册到全局句柄 | 需要新类型的设备（如新增 I2C IO 扩展器、新拓扑的 PWM） |
 >
 > **任何其他"复用"方式都是错的。** 不要修改父类代码来适配子类。不要跨层调用。不要跳过 ops 表直接操作硬件。
@@ -19,19 +19,19 @@
 
 ## 1. 分层架构（最重要：每层只调直接下层，绝不跨层）
 
-| 层 | 目录/文件 | 角色 | 变化时影响 |
-|:---|:---|:---|:---|
-| **Application** | `app.c` | 应用层 — 启动函数及钩子函数，在初始化和中断中被调用 | 需求变化 |
-| **Module** | `module_*` | 业务模块层 — 采样管理、功率控制、通信管理、错误检测，只通过句柄操作 | 业务逻辑变化 |
-| **Devices** | `device_*` / `Devices/` | 设备抽象层 — 子类实现 + 板级绑定，通过 Components 层提供的句柄接口分发。隔离主板变化和芯片引脚选择变化 | 主板布线或引脚分配变化 |
-| **Components** | `comp_*` / `Components/` | 通用组件层 — 不看寄存器，只看基础功能。PWM 生成、GPIO、通信、滤波、PID 算法等的父类。隔离芯片变化 | MCU 系列变化 |
-| **BSP** | `bsp_*` / `BSP/` | 板级支持包 — 硬件加速抽象 (DSP/PWM/ADC)。不透明句柄模式：上层只看到 `void*` 指针, 平台实现在 .c 文件中。隔离 MCU 厂商差异 | MCU 型号变化 |
+| 层 | 目录 | 命名前缀 | 角色 | 变化时影响 |
+|:---|:---|:---|:---|:---|
+| **Application** | `App/` | `app_main.*` | 应用入口 — 根结构体、ISR 钩子、BackgroundTask、board_init | 需求变化 |
+| **Module** | `Module/` | `mod_*` | 业务模块 — 采样管理、功率控制、通信管理、错误检测，只通过 Base* 句柄操作 | 业务逻辑变化 |
+| **Devices** | `Devices/` | `<域>_<子类>` | 设备抽象 — 子类实现 + 板级绑定，通过 Components 层句柄分发 | 主板布线或引脚分配变化 |
+| **Components** | `Components/` | `comp_*` | 通用组件 — 不看寄存器，只看基础功能。PWM/PID/ADC/通信等父类 + ops 虚表 | MCU 系列变化 |
+| **BSP** | `BSP/` | `bsp_*` | 板级支持包 — 不透明句柄，隔离 MCU 厂商差异 (STM32 ↔ TI C2000) | MCU 型号变化 |
 
 **关键规则**：`app_main.c` 是整个项目的唯一 App 入口；Devices 不直接操作寄存器（通过 BSP 或 HAL）。
 
 ### 1.1 App 层架构规则 🔥
 
-> **整个项目只有一组 App（`Templates/app_main.c.tmpl` + `app_main.h.tmpl`）。其他都是 Module（`mod_*`）。**
+> **整个项目只有一组 App（`App/app_main.c.tmpl` + `App/app_main.h.tmpl`）。其他都是 Module（`mod_*`）。**
 > 参考: WEILAI_SuperCap (`User/app/app_main.c`) + LitteCar CMake (`User/Application/app_main.c`)。
 
 | 规则 | 说明 |
@@ -46,7 +46,7 @@
 
 **YmaC 配置注入流程：**
 ```
-conf/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的 /* CONFIG BEGIN/END */ 之间
+Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的 /* CONFIG BEGIN/END */ 之间
 ```
 详见 [YmaC/README.md](YmaC/README.md)。
 
@@ -54,16 +54,32 @@ conf/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的
 
 | 路径 | 用途 |
 |------|------|
+| **BSP** | |
 | `BSP/container_of.h` | Linux 内核经典向下转型宏 — 从基类指针恢复子类指针 |
 | `BSP/bsp_dsp.h` | **硬件加速抽象层** — sqrt/biquad, 平台检测 (CMSIS-DSP/C2000Ware/纯C回退) |
 | `BSP/bsp_pwm.h` | **PWM BSP 接口** — 不透明句柄 + 物理参数 API (duty/Hz/ns/deg) |
 | `BSP/bsp_adc.h` | **ADC BSP 接口** — 校准/启动抽象 (bsp_adc_calibrate / bsp_adc_start_dma) |
-| `Components/comp_math.h/c` | 数学工具：限幅、绝对值、死区、线性映射、校验和、硬件加速 sqrt (math_sqrt_f32) |
+| `BSP/bsp_delay.h/c` | 微秒延时抽象 |
+| **Components** | (前缀 = 父类域) |
+| `Components/comp_math.h/c` | 数学工具：限幅、绝对值、死区、线性映射、校验和、硬件加速 sqrt |
 | `Components/comp_error.h` | 统一错误码 bitmask 系统 (ERROR_SET/CLEAR/IS_SET 宏) |
-| `Components/comp_filter.h` | 数字滤波器：一阶低通 (dt 缓存优化) + 二阶巴特沃斯低通 (biquad DFI, 可选BSP加速) |
-| `cmake/` | ARM Clang + GCC 工具链文件 (starm-clang.cmake, gcc-arm-none-eabi.cmake) |
+| `Components/comp_filter.h` | 数字滤波器：一阶低通 + 二阶巴特沃斯低通 (biquad DFI) |
+| `Components/comp_protection.h` | 保护框架：阈值检测、去抖、分级响应 |
+| `Components/comp_adc.h/c` | ADC 父类：AdcBase + AdcOps 虚表 |
+| `Components/comp_pwm.h/c` | PWM 父类：PwmBase + PwmOps 虚表 |
+| `Components/comp_pid.h/c` | PID 父类：PidBase + PidOps 虚表 |
+| `Components/comp_gpo.h/c` | 通用输出父类：GpoBase + GpoOps 虚表 |
+| `Components/comp_comm.h/c` | 通信父类：CommBase + CommOps 虚表 |
+| `Components/comp_motor.h/c` | 电机父类：MotorBase + MotorOps 虚表 |
+| `Components/comp_mpu.h` / `comp_mpu_dmp.c` | MPU6050 DMP 算法层 |
+| **App** | |
+| `App/app_main.c.tmpl` | App 实现模板 — board_init、ISR、BackgroundTask |
+| `App/app_main.h.tmpl` | App 头模板 — 根结构体、配置 POD |
+| **工程** | |
+| `Config/params/` | YAML 配置变体 (default.yaml, aggressive.yaml 等) |
+| `Config/topologies/` | 拓扑级 YAML 配置 (将来: six_switch_acdc.yaml 等) |
 | `YmaC/` | YAML → C designated initializer 配置注入工具 (Python GUI/CLI) |
-| `conf/` | YAML 配置变体 (default.yaml, aggressive.yaml 等) |
+| `cmake/` | ARM Clang + GCC + C2000 工具链文件 |
 
 ## 3. 项目保障
 
@@ -76,11 +92,11 @@ conf/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的
 
 > **Components 层禁止直接 include 平台加速库 (`arm_math.h`, `C2000Ware_dsp.h` 等)。所有硬件加速走 BSP 抽象。**
 
-| BSP 文件 | 抽象内容 | STM32 实现 | C2000 实现 | 回退 |
-|----------|---------|------------|-----------|------|
-| `BSP/bsp_dsp.h` | sqrt, biquad IIR | CMSIS-DSP (FPU SIMD) | C2000Ware (TMU/CLA) | 纯C牛顿迭代+DFI |
-| `BSP/bsp_pwm.h` | PWM 不透明句柄 + 物理参数API | bsp_hrtim.c (HRTIM) | bsp_c2000_epwm.c (ePWM) | — |
-| `BSP/bsp_adc.h` | ADC 校准 + DMA 启动 | bsp_adc_stm32.c | bsp_adc_c2000.c | — |
+| BSP 文件 | 抽象内容 | M4F/M7 (HW) | M0+/M3 (SW) | C2000 | 纯C回退 |
+|----------|---------|-------------|-------------|-------|--------|
+| `BSP/bsp_dsp.h` | sqrt, biquad IIR | CMSIS-DSP FPU SIMD | CMSIS-DSP 软件库 | C2000Ware TMU/CLA | 牛顿迭代 + DFI |
+| `BSP/bsp_pwm.h` | PWM 不透明句柄 + 物理参数API | bsp_hrtim.c (HRTIM) | — | bsp_c2000_epwm.c (ePWM) | — |
+| `BSP/bsp_adc.h` | ADC 校准 + DMA 启动 | bsp_adc_stm32.c | — | bsp_adc_c2000.c | — |
 
 **不透明句柄模式：**
 ```c
@@ -96,28 +112,38 @@ void bsp_pwm_set_deadtime_ns(BspPwmHandle *h, BspPwmTimer t, uint32_t ns);
 void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp3);
 ```
 
-**平台自动检测 (`BSP/bsp_dsp.h`)：**
+**平台自动检测 (`BSP/bsp_dsp.h`) — 四级能力分级：**
 ```c
-#if defined(__ARM_FEATURE_DSP)    // Cortex-M4/M7 → CMSIS-DSP
-  #define BSP_DSP_HW 1
-#elif defined(__TMS320C2000__)    // C2000 → TMU/CLA
-  #define BSP_DSP_HW 2
-#else                             // 其他 → 纯C回退
-  #define BSP_DSP_HW 0
+// BSP_DSP_ARCH: 2=硬件加速 1=软件库 3=C2000Ware 0=纯C回退
+#if defined(__ARM_FEATURE_DSP) && __FPU_PRESENT  // M4F/M7 → CMSIS-DSP HW
+  #define BSP_DSP_ARCH 2
+#elif defined(__ARM_ARCH_6M__) || __ARM_ARCH_7M__ // M0/M0+/M3 → CMSIS-DSP SW
+  #if __has_include("arm_math.h")
+    #define BSP_DSP_ARCH 1
+  #else
+    #define BSP_DSP_ARCH 0
+  #endif
+#elif defined(__TMS320C2000__)                   // C2000 → TMU/CLA
+  #define BSP_DSP_ARCH 3
+#else
+  #define BSP_DSP_ARCH 0                          // 纯C回退
 #endif
 ```
 
-详见 [LESSONS.md](LESSONS.md) #17.
+**关键原则：** 每个 `#if` 分支的行为语义等价（滤波就是滤波，不是直通）。回退路径不是"后续实现"的占位符——它就在当前版本真实工作。见 [LESSONS.md](LESSONS.md) #34.
 
-## 4. 子项目总览
+## 4. 子系统总览（按文件前缀区分）
 
-| 目录 | 功能 | 基类 | 子类数 |
-|------|------|------|--------|
-| [ADC-OOP](ADC-OOP/) | ADC 多通道采样 | AdcBase | 3: Follower / DC Sampler / AC Sampler |
-| [COM-OOP](COM-OOP/) | 通信外设 | CommBase | 8: UART / SPI / I2C / CAN / Key / MPU6050 / OLED / Ultrasonic |
-| [GPO-OOP](GPO-OOP/) | 通用输出 | GpoBase | 5: LED / Laser / Beep / Buzzer / Fan |
-| [PID-OOP](PID-OOP/) | PID 控制器 | PidBase | 4: Standard / P2PD / PR / QPR + Cascade |
-| [PWM-OOP](PWM-OOP/) | 电力电子 PWM | PwmBase | 5: BuckBoost / HalfBridge / FullBridge / Interleaved / Resonant |
+| 域 | Component | Devices 子类 | Module | 句柄头文件 |
+|----|-----------|-------------|--------|-----------|
+| **ADC** | `comp_adc.h/c` | `adc_follower`, `adc_dc_sampler`, `adc_ac_sampler` | `mod_sampler` | `adcs.h` |
+| **COM** | `comp_comm.h/c` | `com_uart`, `com_spi`, `com_i2c`, `com_can`, `com_key`, `com_mpu6050`, `com_oled`, `com_ultrasonic` | `mod_comm`, `mod_cmd_dispatch`, `mod_serial_proto` | `comms.h` |
+| **GPO** | `comp_gpo.h/c` | `gpo_led`, `gpo_laser`, `gpo_beep`, `gpo_buzzer`, `gpo_fan` | — | `gpos.h` |
+| **PID** | `comp_pid.h/c` | `pid_standard`, `pid_cascade`, `pid_p2pd`, `pid_parallel`, `pid_pr`, `pid_qpr` | — | `pids.h` |
+| **PWM** | `comp_pwm.h/c` | `pwm_buckboost`, `pwm_half_bridge`, `pwm_full_bridge`, `pwm_interleaved`, `pwm_resonant` | `mod_powerctrl` | `pwms.h` |
+| **Motor** | `comp_motor.h/c` | `motor_tim` | — | — |
+
+> 所有文件扁平化存放在 `Components/`、`Devices/`、`Module/` 目录。文件前缀即为域标识，不需要子目录嵌套。
 
 ## 4. OOP 核心模式（C 语言实现）
 
@@ -280,14 +306,11 @@ __initcall(my_module_init);
 创建新的驱动族（如 LED、Motor、Sensor）时，按以下文件布局：
 
 ```
-led_base.h        — LedBase 结构体, LedOps typedef, 分发函数声明
-led_base.c        — 分发函数实现 (led_on, led_off 等)
-led_gpio.c        — LedGpio 结构体, gpio_ops, led_gpio_init
-led_pwm.c         — LedPwm 结构体, pwm_ops, led_pwm_init
-led_i2c.c         — LedI2c 结构体, i2c_ops, led_i2c_init
-leds.h            — extern 句柄声明 (g_led_error, g_led_status, ...)
-board_init.c      — 实例化对象, 绑定句柄
-app.c             — #include "leds.h", 使用句柄
+Components/comp_xxx.h/c  — XxxBase 结构体, XxxOps typedef, 分发函数
+Devices/xxx_variant.h/c   — 具体子类 × N (xxx_gpio, xxx_pwm, xxx_i2c...)
+Devices/xxxs.h            — extern 全局句柄声明
+Module/mod_xxx.h/c        — (可选) 业务模块，组合多个 Device
+App/app_main.c            — #include "xxxs.h", 使用句柄
 ```
 
 ## 6. 代码风格约定
@@ -325,13 +348,13 @@ app.c             — #include "leds.h", 使用句柄
 
 ## 7. 复用方式（详见顶部 ⭐复用规则）
 
-### 方式一：直接拷贝子项目 — 硬件变了，设备类型不变
+### 方式一：直接拷贝需要文件 — 硬件变了，设备类型不变
 
-改 `board_init.c` 即可，其他地方一行不动：
+改引脚/定时器/HAL 句柄即可，其他地方一行不动：
 
-1. 复制整个子项目目录到目标工程
+1. 复制需要的 `Component + Device + Module` 文件到目标工程
 2. 确保 `BSP/container_of.h` 和 `Components/comp_math.h/c` 加入 include path
-3. 修改 `board_init.c`：改引脚、定时器、HAL 句柄以适配你的硬件
+3. 修改 Device 文件中的硬件句柄以适配你的硬件
 4. 应用层通过全局句柄头文件（`gpos.h` / `pwms.h` / `comms.h` / `pids.h`）操作，不感知子类
 
 ### 方式二：基于父类继承新子类 — 需要新类型的设备
@@ -359,12 +382,102 @@ app.c             — #include "leds.h", 使用句柄
 - 所有硬件资源放子类，绝不污染父类
 - 虚表中"必须"操作用 assert，"可选"操作用 NULL + if 检查
 
-## 8. 各子项目详细文档
+## 8. 子系统参考文档
 
-每个子项目的 `agent.md` 包含该子项目的继承树、文件清单、依赖、和具体复用示例：
+各子系统的继承树、文件清单、依赖、和具体复用示例见下方。每个子系统对应一组文件前缀（全部在 `Components/` + `Devices/` + `Module/` 目录下）。
 
-- [ADC-OOP/agent.md](ADC-OOP/agent.md) — ADC 多通道采样
-- [COM-OOP/agent.md](COM-OOP/agent.md) — 通信外设
-- [GPO-OOP/agent.md](GPO-OOP/agent.md) — 通用输出
-- [PID-OOP/agent.md](PID-OOP/agent.md) — PID 控制器
-- [PWM-OOP/agent.md](PWM-OOP/agent.md) — 电力电子 PWM
+### 8.1 ADC 子系统 — 多通道采样
+
+**继承树：**
+```
+AdcBase (虚表 + 名称 + DMA 缓冲区指针 + 位置偏差)
+├── AdcFollower   — 8 路红外循迹传感器 (二值化 + 独热码 + 位置映射)
+├── AdcDcSampler  — 通用直流采样器 (N 通道 EMA 滤波 + k·raw+b 线性校准)
+└── AdcAcSampler  — 三相交流采样器 (差分采样 + 三相重构 + RMS + Vdc)
+```
+
+**AdcOps 虚表（3 必须 + 2 可选）：** start_dma(必须) / read_ch(必须) / process(必须) / get_sum2(可选) / get_ch_bin(可选)
+
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h/c`, STM32 HAL
+
+### 8.2 COM 子系统 — 通信外设
+
+**继承树：**
+```
+CommBase (虚表 + 名称 + 接收缓冲区 + 当前字节)
+├── ComUart      — USART 驱动 (阻塞 TX / 中断逐字节 RX)
+├── ComSpi       — SPI 主模式 + CS 引脚控制
+├── ComI2c       — I2C 主模式 + 设备地址
+├── ComCan       — CAN 消息帧收发 + 硬件过滤器
+├── ComKey       — 按键驱动 (GPIO 读取 + 双击/长按状态机)
+├── ComMpu6050   — MPU6050 六轴传感器 (DMP + 回退双模式)
+├── ComOled      — OLED SSD1306 薄包装
+└── ComUltrasonic — 超声波测距 (触发→接收→解码)
+```
+
+**CommOps 虚表（4 必须 + 2 可选）：** send(必须) / bgn(必须) / read(必须) / avail(必须) / is_ok(可选) / reset(可选)
+
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h/c`, `Components/comp_mpu.h`, STM32F1 HAL
+
+### 8.3 GPO 子系统 — 通用输出
+
+**继承树：**
+```
+GpoBase (虚表 + 名称)
+├── GpoLed    — LED (双模: GPIO 开关 / PWM 调光)
+├── GpoLaser  — 激光笔 (GPIO 开关, 安全优先: 默认关闭)
+├── GpoBeep   — 有源蜂鸣器 (GPIO 开关)
+├── GpoBuzzer — 无源蜂鸣器 (PWM 调音)
+└── GpoFan    — 风扇 (PWM 调速)
+```
+
+**GpoOps 虚表（2 必须 + 1 可选）：** on(必须) / off(必须) / set_brightness(可选)
+
+**关键教训：** 子类按设备类型分（LED/Laser/Buzzer），不按电气机制分（GPIO/PWM）。安全关键外设（激光）必须在 `_init()` 中显式写 OFF。见 LESSONS.md #28, #29。
+
+### 8.4 PID 子系统 — 控制器
+
+**继承树：**
+```
+PidBase (虚表 + dt + out_min/out_max + anti_windup)
+├── PidStandard  — 标准位置式 PID + 变速积分 + 微分先行 + 钳位抗饱和
+├── PidCascade   — 级联 PID (外环 + 内环, 组合模式非继承)
+├── PidP2PD      — 点到点微分 PID (循迹专用)
+├── PidParallel  — 并联 PID (独立 P/I/D 通道)
+├── PidPR        — 比例谐振 (PR) 控制器
+└── PidQPR       — 准比例谐振 (QPR) 控制器
+```
+
+**PidOps 虚表（2 必须 + 1 可选）：** compute(必须) / reset(必须) / on_saturation(可选)
+
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h/c`, `<math.h>`
+
+### 8.5 PWM 子系统 — 电力电子拓扑
+
+**继承树：**
+```
+PwmBase (虚表 + 模式 + 通道数 + 频率 + 占空比限幅 + 运行状态)
+├── PwmBuckBoost   — 单路 Buck/Boost (可选同步整流)
+├── PwmHalfBridge  — 半桥互补 PWM (中心对齐 + 死区)
+├── PwmFullBridge  — 全桥移相 PWM (A/B 两腿 + 移相角控制功率)
+├── PwmInterleaved — 多相交错并联 PWM (N 相均匀错相 360°/N)
+└── PwmResonant    — 谐振变频 PWM (50% 固定占空比 + 变频控制)
+```
+
+**PwmOps 虚表（4 必须 + 2 可选）：** start(必须) / stop(必须) / set_duty(必须) / set_freq(必须) / is_running(可选) / get_status(可选)
+
+**BSP 物理参数 API (推荐)：** `bsp_pwm_config_ch`, `bsp_pwm_set_duty_f`, `bsp_pwm_set_freq_hz`, `bsp_pwm_set_deadtime_ns`, `bsp_pwm_set_phase_deg`, `bsp_pwm_set_complementary`, `bsp_pwm_isr`
+
+**依赖：** `BSP/container_of.h`, `BSP/bsp_pwm.h`, `BSP/bsp_dsp.h`, `<math.h>`
+
+### 8.6 Motor 子系统 — 直流电机
+
+**继承树：**
+```
+MotorBase (虚表 + 编码器 + PID 句柄)
+└── MotorTim — TIM PWM + AB 相编码器
+```
+
+**MotorOps 虚表：** setspeed(必须) / readspeed(必须) / readposition(必须) / stop(必须)
+
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h`, STM32F1 HAL
