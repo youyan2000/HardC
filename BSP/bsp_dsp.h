@@ -181,4 +181,172 @@ static inline void bsp_biquad_apply(BspBiquadInst *me,
   #define BSP_DSP_CMSIS_AVAILABLE 0
 #endif
 
+// ======== CLA 数学加速调度 (C2000 CLA 协处理器) ========
+//
+// CLAmath 是 TI C2000 的 CLA (Control Law Accelerator) 协处理器数学库,
+// 提供硬件加速的 sin/cos/sqrt/atan/exp/ln 等超越函数.
+//
+// 用法: Components 层调用 bsp_sin_f32(x) / bsp_cos_f32(x) 等,
+//       BSP 层根据 BSP_DSP_ARCH 选择:
+//         ARCH=3 + CLAmath:  CLA 硬件加速 (CLAsin/CLAcos/...)
+//         ARCH=3 - CLAmath:  math.h sinf/cosf (FPU)
+//         ARCH=1/2:          math.h sinf/cosf (FPU)
+//         ARCH=0:            math.h sinf/cosf (纯C)
+//
+// 注: CLA 函数依赖 CLAmath.lib 链接, 且需要 CLA 初始化.
+//     默认使用标准 math.h; 用户工程若含 CLAmath.h 则自动切换.
+
+#if BSP_DSP_ARCH == 3 && defined(__has_include) && __has_include("CLAmath.h")
+  #define BSP_DSP_CLA_AVAILABLE 1
+  #include "CLAmath.h"
+#else
+  #define BSP_DSP_CLA_AVAILABLE 0
+#endif
+
+// sin(x) — x: rad
+static inline float bsp_sin_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAsin(x);
+#else
+  return sinf(x);
+#endif
+}
+
+// cos(x) — x: rad
+static inline float bsp_cos_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAcos(x);
+#else
+  return cosf(x);
+#endif
+}
+
+// sin(x) + cos(x) 同时计算 (CLA 硬件可以一次算两个, 节省周期)
+static inline void bsp_sincos_f32(float x, float *sin_out, float *cos_out) {
+#if BSP_DSP_CLA_AVAILABLE
+  CLAsincos(x, sin_out, cos_out);
+#else
+  *sin_out = sinf(x);
+  *cos_out = cosf(x);
+#endif
+}
+
+// atan(x)
+static inline float bsp_atan_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAatan(x);
+#else
+  return atanf(x);
+#endif
+}
+
+// atan2(y, x) — 全象限反正切
+static inline float bsp_atan2_f32(float y, float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAatan2(y, x);
+#else
+  return atan2f(y, x);
+#endif
+}
+
+// asin(x)
+static inline float bsp_asin_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAasin(x);
+#else
+  return asinf(x);
+#endif
+}
+
+// acos(x)
+static inline float bsp_acos_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAacos(x);
+#else
+  return acosf(x);
+#endif
+}
+
+// e^x
+static inline float bsp_exp_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAexp(x);
+#else
+  return expf(x);
+#endif
+}
+
+// 10^x
+static inline float bsp_exp10_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAexp10(x);
+#else
+  return powf(10.0f, x);
+#endif
+}
+
+// ln(x) — 自然对数
+static inline float bsp_ln_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAln(x);
+#else
+  return logf(x);
+#endif
+}
+
+// log10(x)
+static inline float bsp_log10_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAlog10(x);
+#else
+  return log10f(x);
+#endif
+}
+
+// 1/sqrt(x) — 快速倒数平方根 (Newton-Raphson)
+static inline float bsp_isqrt_f32(float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAisqrt(x);
+#else
+  if (x <= 0.0f) return 0.0f;
+  return 1.0f / sqrtf(x);
+#endif
+}
+
+// 2^(num/den) — 分数指数
+static inline float bsp_exp2_f32(float num, float den) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAexp2(num, den);
+#else
+  return powf(2.0f, num / den);
+#endif
+}
+
+// N^x — 任意底数指数
+static inline float bsp_expn_f32(float n, float x) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAexpN(n, x);
+#else
+  return powf(n, x);
+#endif
+}
+
+// log_N(x) — 任意底数对数
+static inline float bsp_logn_f32(float x, float n) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAlogN(x, n);
+#else
+  return logf(x) / logf(n);
+#endif
+}
+
+// CLAdiv — 快速 Newton-Raphson 除法 (CLA 硬件 12 周期)
+static inline float bsp_fast_div_f32(float num, float den) {
+#if BSP_DSP_CLA_AVAILABLE
+  return CLAdiv(num, den);
+#else
+  return num / den;
+#endif
+}
+
 #endif  // BSP_DSP_H
