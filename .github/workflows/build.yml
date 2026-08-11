@@ -1,0 +1,55 @@
+name: Build All Topologies
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format check
+        run: |
+          find . -name '*.h' -o -name '*.c' | grep -v '.git' | xargs clang-format --dry-run --Werror
+
+  build:
+    needs: format-check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [stm32g4, c2000_f28004x]
+        topology: [six_switch_acdc, six_switch_dcac, sepic, supercap_3ph]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM GCC
+        if: matrix.platform == 'stm32g4'
+        run: sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Configure CMake (STM32)
+        if: matrix.platform == 'stm32g4'
+        run: |
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=../cmake/gcc-arm-none-eabi.cmake \
+            -DTOPOLOGY=${{ matrix.topology }}
+
+      - name: Configure CMake (C2000)
+        if: matrix.platform == 'c2000_f28004x'
+        run: |
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=../cmake/c2000-clang.cmake \
+            -DTOPOLOGY=${{ matrix.topology }}
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}_${{ matrix.topology }}
+          path: build/*.elf
