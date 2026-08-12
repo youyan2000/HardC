@@ -1,0 +1,28 @@
+id: devices/comm
+layer: Devices
+description: 通信设备实现 — UART/SPI/I2C/CAN/按键/MPU6050/OLED/超声波/编码器
+files:
+  - com_can.h
+  - com_can.c
+  - com_encoder.h
+  - com_encoder.c
+  - com_i2c.h
+  - com_i2c.c
+  - com_key.h
+  - com_key.c
+  - com_mpu6050.h
+  - com_mpu6050.c
+  - com_oled.h
+  - com_oled.c
+  - com_spi.h
+  - com_spi.c
+  - com_uart.h
+  - com_uart.c
+  - com_ultrasonic.h
+  - com_ultrasonic.c
+  - comms.h
+depends:
+  - components/comm
+  - components/sensor
+  - BSP/container_of.h
+  - devices/sensor/oled.h

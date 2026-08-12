@@ -1,0 +1,13 @@
+id: devices/motor
+layer: Devices
+description: 电机设备实现 — 步进电机 + 定时器 PWM 电机
+files:
+  - motor_step.h
+  - motor_step.c
+  - motor_tim.h
+  - motor_tim.c
+depends:
+  - components/motor
+  - components/math
+  - BSP/bsp_step_motor.h
+  - BSP/container_of.h

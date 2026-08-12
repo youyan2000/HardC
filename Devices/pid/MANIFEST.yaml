@@ -1,0 +1,27 @@
+id: devices/pid
+layer: Devices
+description: PID 设备实现 — 9 种子类 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar)
+files:
+  - pid_cascade.h
+  - pid_cascade.c
+  - pid_dcl.h
+  - pid_dcl.c
+  - pid_grando.h
+  - pid_grando.c
+  - pid_p2pd.h
+  - pid_p2pd.c
+  - pid_parallel.h
+  - pid_parallel.c
+  - pid_pr.h
+  - pid_pr.c
+  - pid_qpr.h
+  - pid_qpr.c
+  - pid_solar.h
+  - pid_solar.c
+  - pid_standard.h
+  - pid_standard.c
+  - pids.h
+depends:
+  - components/pid
+  - components/math
+  - BSP/container_of.h

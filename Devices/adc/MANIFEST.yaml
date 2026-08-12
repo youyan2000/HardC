@@ -1,0 +1,14 @@
+id: devices/adc
+layer: Devices
+description: ADC 设备实现 — AC Sampler / DC Sampler / Follower
+files:
+  - adc_ac_sampler.h
+  - adc_ac_sampler.c
+  - adc_dc_sampler.h
+  - adc_dc_sampler.c
+  - adc_follower.h
+  - adc_follower.c
+  - adcs.h
+depends:
+  - components/adc
+  - BSP/container_of.h
