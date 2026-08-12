@@ -1,0 +1,14 @@
+id: bsp
+layer: BSP
+description: 硬件加速抽象层 — 不透明句柄 + 平台检测 (CMSIS-DSP/C2000Ware/纯C回退)
+files:
+  - bsp_adc.h
+  - bsp_delay.c
+  - bsp_delay.h
+  - bsp_dsp.h
+  - bsp_dsp_fft.h
+  - bsp_dsp_fir.h
+  - bsp_pwm.h
+  - bsp_step_motor.h
+  - container_of.h
+depends: []

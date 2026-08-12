@@ -1,10 +1,11 @@
 id: components/motor
 layer: Components
-description: 电机父类 — FOC 电机抽象 + BLDC InstaSPIN + 步进电机
+description: 电机父类 — FOC 电机抽象 + BLDC InstaSPIN + 步进电机 + 模6换相
 files:
   - comp_motor.h
   - comp_motor.c
   - comp_bldc_instaspin.h
+  - comp_mod6.h
   - comp_step_motor.h
   - comp_step_motor.c
 depends: []

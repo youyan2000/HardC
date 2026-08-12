@@ -1,0 +1,9 @@
+id: app
+layer: App
+description: 应用层模板 — 根结构体 + 配置 POD + YmaC 注入点 + PID 串口调参协议
+files:
+  - app_main.c.tmpl
+  - app_main.h.tmpl
+  - pid_tune.c
+  - pid_tune.h
+depends: []
