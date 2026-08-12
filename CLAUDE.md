@@ -231,6 +231,10 @@ make -j$(nproc)
 | `comp_rs.h` | RS 编解码 — Reed-Solomon 纠错码, Berlekamp-Massey + Forney 算法 |
 | `comp_pi_reg4.h` | 四态 PI 调节器 — 带抗饱和的 PI 控制 (正常/上限/下限/跟踪) |
 | `comp_bldc_instaspin.h` | BLDC InstaSPIN — 无传感器 FOC, FAST 观测器 + 磁链/转矩估计 |
+| `comp_aci_se.h` | ACI 转差法转速估计器 — 磁链角微分 + 转差计算 (与 comp_aci_fe 配对) |
+| `comp_pid_reg3.h` | 三态 PID 调节器 — 反计算抗饱和 + 位置回绕变体 (微分作用在比例输出) |
+| `comp_impulse.h` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
+| `comp_mod6.h` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
 
 **Module 层 (L4) — 业务逻辑:**
 | 模块 | 文件 | 用途 |
@@ -249,4 +253,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-12 — 多 Agent 并行移植 controlSUITE 6 算法 (eSMO/DLOG/Vector/PFC/SVPWM-DPWM/SFRA) + 文档同步更新
+> **最后更新：** 2026-08-12 — 补齐 math_blocks v4.3 剩余 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器) + Components/Devices/Module 按域分子目录

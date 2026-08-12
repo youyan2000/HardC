@@ -175,6 +175,7 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_sgen.h` | `SgenFixed`, `SgenSweep`, `SgenHp1`, `SgenHp2`, `SgenT3D`, `SgenProfile`, `SgenDeadzone` | 7 种信号发生器 — DDS/扫频/探测/Profile/死区测试 |
 | `comp_fft_window.h` | (FftWinType 枚举) | 18 种 FFT 窗函数 float + Q31 (fill_q31/apply_q31), 相干增益/ENBW |
 | `comp_pi_reg4.h` | `PiReg4Cfg`, `PiReg4State` | 4 状态 PI 调节器 — 设定值滤波 + P + I + 前馈, 双抗积分饱和 |
+| `comp_pid_reg3.h` | `PidReg3Cfg`, `PidReg3State` | 3 状态 PID — 反计算抗饱和 + 位置回绕变体, 微分作用在比例输出 |
 | `comp_protection.h` | — | 保护框架 — 阈值检测、去抖、分级响应 |
 | `comp_pfc.h` | `PfcICmd`, `PfcBLICmd`, `PfcBlIcmd`, `PfcInvRmsSqr`, `PfcInvSqr` | PFC 电流指令, 含无桥桥臂选择 |
 | `comp_esmo.h` | `EsmoCfg`, `EsmoState` | eSMO 滑模观测器 — PLL 角度/速度跟踪 |
@@ -186,11 +187,15 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_rs.h` | `RsCfg`, `RsState` | Reed-Solomon RS(255,239) — GF(256) BM+Chien+Forney 译码 |
 | `comp_interleaver.h` | `InterleaverCfg`, `Interleaver` | 卷积交织器 — Forney 型 B分支×D延迟, 配合 RS 纠错 |
 | `comp_bldc_instaspin.h` | `BldcInstaSpinCfg`, `BldcInstaSpinState` | InstaSPIN-BLDC — 3阶段启动 + BEMF ZC + 速度 PI |
+| `comp_aci_se.h` | `AciSeConst`, `AciSe` | ACI 转差法转速估计 — 磁链角微分 + 转差计算 (与 comp_aci_fe 配对) |
+| `comp_mod6.h` | `Mod6Cnt` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
+| `comp_impulse.h` | `Impulse` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
 | `comp_math.h/c` | — | 数学工具 — 限幅/绝对值/死区/线性映射/校验和/hw sqrt |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
 
-> 所有文件扁平化存放在 `Components/`、`Devices/`、`Module/` 目录。文件前缀即为域标识，不需要子目录嵌套。
+> 文件按子系统归入子目录：`Components/<域>/`、`Devices/<域>/`、`Module/<域>/`。文件前缀仍是域标识，子目录与之一致（如 `Components/pid/comp_pid.h`、`Devices/pwm/pwm_svpwm.h`、`Module/motor/mod_motor.h`）。
+> 每个子目录含 `MANIFEST.yaml` 自描述（id/files/depends），供 `YmaC/scaffold.py` 做依赖解析和项目骨架生成。完整文件→目录映射见 [docs/build-toolchain-design.md](docs/build-toolchain-design.md) 第一节。
 
 ## 4. OOP 核心模式（C 语言实现）
 
@@ -350,15 +355,18 @@ __initcall(my_module_init);
 
 ## 5. 完整框架模板
 
-创建新的驱动族（如 LED、Motor、Sensor）时，按以下文件布局：
+创建新的驱动族（如 LED、Motor、Sensor）时，按以下文件布局（子系统子目录）：
 
 ```
-Components/comp_xxx.h/c  — XxxBase 结构体, XxxOps typedef, 分发函数
-Devices/xxx_variant.h/c   — 具体子类 × N (xxx_gpio, xxx_pwm, xxx_i2c...)
-Devices/xxxs.h            — extern 全局句柄声明
-Module/mod_xxx.h/c        — (可选) 业务模块，组合多个 Device
-App/app_main.c            — #include "xxxs.h", 使用句柄
+Components/<域>/comp_xxx.h/c  — XxxBase 结构体, XxxOps typedef, 分发函数
+Components/<域>/MANIFEST.yaml — 子系统自描述 (id/files/depends)
+Devices/<域>/xxx_variant.h/c  — 具体子类 × N (xxx_gpio, xxx_pwm, xxx_i2c...)
+Devices/<域>/xxxs.h           — extern 全局句柄声明
+Module/<域>/mod_xxx.h/c       — (可选) 业务模块，组合多个 Device
+App/app_main.c                — #include "xxxs.h", 使用句柄
 ```
+
+> `<域>` 与文件前缀一致：adc / comm / gpo / pid / pwm / motor / dsp / power / math / codec / sensor。
 
 ## 6. 代码风格约定
 
@@ -431,7 +439,7 @@ App/app_main.c            — #include "xxxs.h", 使用句柄
 
 ## 8. 子系统参考文档
 
-各子系统的继承树、文件清单、依赖、和具体复用示例见下方。每个子系统对应一组文件前缀（全部在 `Components/` + `Devices/` + `Module/` 目录下）。
+各子系统的继承树、文件清单、依赖、和具体复用示例见下方。每个子系统对应一组文件前缀，文件按子系统归入 `Components/<域>/`、`Devices/<域>/`、`Module/<域>/` 子目录。文件→目录映射见 [docs/build-toolchain-design.md](docs/build-toolchain-design.md) 第一节。
 
 ### 8.1 ADC 子系统 — 多通道采样
 
@@ -758,6 +766,77 @@ int n = viterbi_traceback(&vt, decoded, sizeof(decoded));
 - `pi_reg4_run(me, cfg, setpoint, feedback)` — ISR 热路径, 返回限幅后输出
 
 **依赖:** `<stdbool.h>`
+
+#### comp_pid_reg3.h — 3 状态 PID 调节器 (反计算抗饱和)
+
+> **来源:** TI controlSUITE motor_control/math_blocks/v4.3/pid_reg3.h
+> **新增日期:** 2026-08-12
+
+**与 comp_pi_reg4 的区别:** reg3 用反计算 (back-calculation) 抗饱和 — 输出被限幅时把饱和差 `SatErr = Out - OutPreSat` 反馈回积分器, 从根上抑制 windup (pi_reg4 用冻结 + clamping)
+
+**两种变体:**
+1. **标准** `pid_reg3_run` (对应 TI `PID_REG3_MACRO`) — `Err = Ref-Fdb`; `Up = Kp×Err`; `Ui += Ki×Up + Kc×SatErr`; `Out = sat(Up+Ui)`; `SatErr = Out-OutPreSat`. 注意积分作用在**比例输出**而非误差
+2. **位置** `pid_reg3_run_pos` (对应 TI `PID_REG3_POS_MACRO`) — 误差在 ±0.5 处回绕 (角度归一化 [0,1] 跨越边界时取短路径), 增加微分 `Ud = Kd×(Up-Up1)`
+
+**核心结构体:** `PidReg3Cfg` (kp/ki/kc/kd/out_max/out_min) + `PidReg3State` (ref/fdb/err/up/ui/ud/up1/out_pre_sat/out/sat_err)
+
+**关键 API (全部 static inline):**
+- `pid_reg3_cfg_default()` — TI 默认值 Kp=1.3 / Ki=0.02 / Kc=0.5 / Kd=1.05 / ±1.0
+- `pid_reg3_init/reset(me)` — 初始化/重置积分器 (保留比例/微分状态)
+- `pid_reg3_run(me, cfg, ref, fdb)` — 标准变体
+- `pid_reg3_run_pos(me, cfg, ref, fdb)` — 位置变体
+
+**依赖:** 无 (纯 float)
+
+#### comp_aci_se.h — 异步电机转差法转速估计器
+
+> **来源:** TI controlSUITE motor_control/math_blocks/v4.3 (aci_se.h, aci_se_const.h)
+> **新增日期:** 2026-08-12
+
+**与 comp_aci_fe 配对:** aci_fe 估计转子磁链 → aci_se 从磁链 + 电流估计转速 (转差法, 感应电机无传感器转速估计)
+
+**算法 (全标幺 pu):**
+1. **转差速度** `WSlip = K1×(PsiDr×IQs − PsiQr×IDs)/|Psi|²` (低磁链保护, 防除零)
+2. **同步转速** `WSyn = K2×ΔThetaFlux` — 磁链角差分, 仅在角度 0.20~0.80 线性区有效 (0/1 边界回绕差分会跳变 → 保持上一拍)
+3. **低通滤波** `WPsi = K3×WPsi + K4×WSyn` (抑制微分噪声)
+4. **转子转速** `WrHat = WPsi − WSlip`, 饱和 [-1,1] pu
+5. **转速输出** `WrHatRpm = BaseRpm × WrHat`
+
+**系数计算 aci_se_const_calc:** Tr=Lr/Rr; Tc=1/(2π·fc); Wb=2π·fb; K1=1/(Wb·Tr); K2=1/(fb·Ts); K3=Tc/(Tc+Ts); K4=Ts/(Tc+Ts)
+
+**关键 API (全部 static inline):**
+- `aci_se_const_calc(&cfg)` — 物理参数 → 系数
+- `aci_se_init(me, &cfg, base_rpm)` — 初始化
+- `aci_se_run(me, i_qs_s, i_ds_s, psi_dr_s, psi_qr_s, theta_flux)` — ISR 热路径, 返回估计转速 (rpm)
+- `aci_se_reset(me)` — 重置
+
+**依赖:** 无 (纯 float)
+
+#### comp_impulse.h — 脉冲发生器
+
+> **来源:** TI controlSUITE motor_control/math_blocks/v4.3/impulse.h
+> **新增日期:** 2026-08-12
+
+每 Period 个采样周期输出一个满幅脉冲 (0x7FFF), 其余输出 0. 用于注入阶跃/冲激测试信号, 配合频响分析 (SFRA) 观测系统动态响应. 输出数值与 comp_dlog 满刻度约定一致.
+
+**关键 API (static inline):**
+- `impulse_init(me, period)` — period 为脉冲间隔采样数
+- `impulse_tick(me)` — 每采样周期调用, 返回 0 或 0x7FFF
+
+**依赖:** `<stdint.h>`
+
+#### comp_mod6.h — 模 6 换相计数器
+
+> **来源:** TI controlSUITE motor_control/math_blocks/v4.3/mod6_cnt.h
+> **新增日期:** 2026-08-12
+
+BLDC 六步换相: 触发有效时换相步 0→1→...→5→0 循环 (电角度每 60° 换相一次). 触发输入 Q0 >0 有效.
+
+**关键 API (static inline):**
+- `mod6_init(me)` — 清零
+- `mod6_tick(me, trig)` — 触发沿调用, 返回当前换相步 0~5 (可索引六步换相电压矢量表)
+
+**依赖:** `<stdint.h>`
 
 #### comp_sgen.h — 信号发生器库 (7 种发生器)
 
