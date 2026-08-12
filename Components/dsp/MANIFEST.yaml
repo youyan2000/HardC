@@ -1,6 +1,6 @@
 id: components/dsp
 layer: Components
-description: DSP 算法库 — 滤波器/锁相环/坐标变换/观测器/斜坡与正弦生成
+description: DSP 算法库 — 滤波器/锁相环/坐标变换/观测器/斜坡与正弦生成/电弧检测
 files:
   - comp_esmo.h
   - comp_hfi.h
@@ -13,6 +13,7 @@ files:
   - comp_pll.h
   - comp_pll.c
   - comp_sogi_fll.h
+  - comp_arc_detect.h
   - comp_transform.h
   - comp_transform_abc_dq0.h
   - comp_sine_analyzer.h
