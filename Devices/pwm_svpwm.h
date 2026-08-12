@@ -30,6 +30,16 @@ typedef enum {
   SvpwmMode_5Seg,       // 5 段式不连续调制 (降开关损耗, 效率优先)
 } SvpwmMode;
 
+// DPWM 不连续调制子模式 (仅 SvpwmMode_5Seg 时生效)
+// 来源: TI controlSUITE svgen_dpwm.h
+typedef enum {
+  SvpwmDpwm_MIN,   // DPWMMIN: 最低相钳位到 0, 仅用零矢量 V0
+  SvpwmDpwm_MAX,   // DPWMMAX: 最高相钳位到 1, 仅用零矢量 V7
+  SvpwmDpwm_0,     // DPWM0: 60°交替, 奇扇区→MIN(0), 偶扇区→MAX(1)
+  SvpwmDpwm_1,     // DPWM1: 60°交替(反向), 奇扇区→MAX(1), 偶扇区→MIN(0)
+  SvpwmDpwm_2,     // DPWM2: 30°钳位, 中间相<0.5→MIN, >0.5→MAX
+} SvpwmDpwmMode;
+
 // 六开关 SVPWM 子类
 typedef struct {
   PwmBase base;                       // 基类 (必须为第一个成员)
@@ -62,6 +72,7 @@ typedef struct {
   // 配置
   float    overmod_limit;             // 过调制阈值 (默认 1.0, >1 进入过调制)
   bool     overmod_enable;            // 是否允许过调制 (默认关闭, 输出纯正弦)
+  SvpwmDpwmMode dpwm_mode;        // DPWM 子模式选择 (默认 DPWMMIN)
 } PwmSvpwm;
 
 // 构造 — 绑定 3 路半桥定时器
@@ -84,6 +95,9 @@ void svpwm_set_vector(PwmSvpwm *me, float v_alpha, float v_beta, float v_dc_bus)
 
 // 设置调制模式
 void svpwm_set_mode(PwmSvpwm *me, SvpwmMode mode);
+
+// 设置 DPWM 子模式 (仅 5Seg 模式下生效)
+void svpwm_set_dpwm_mode(PwmSvpwm *me, SvpwmDpwmMode dpwm_mode);
 
 // 计算当前调制比 (0~1, 1=线性调制边界, >1=过调制)
 float svpwm_get_modulation_index(const PwmSvpwm *me);

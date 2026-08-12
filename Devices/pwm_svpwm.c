@@ -34,6 +34,69 @@ static void update_one_leg(BspPwmConfig *bsp, BspPwmTimer timer,
   bsp_update_duty(bsp->handle, timer, cmp1, cmp3);
 }
 
+// ======== DPWM 不连续调制 ========
+
+// 计算 DPWM 零序偏移量 — 根据 dpwm_mode 和当前扇区
+//
+// sector 值 = bitmask (1~6), 与 canonical sector 编号一一对应
+//   sector=3→扇区1, sector=1→扇区2, sector=5→扇区3, sector=4→扇区4, sector=6→扇区5, sector=2→扇区6
+//
+// 来源: TI controlSUITE svgen_dpwm.h
+static float svpwm_calc_dpwm_offset(const PwmSvpwm *me, float da, float db, float dc) {
+  float dmin = da;
+  if (db < dmin) dmin = db;
+  if (dc < dmin) dmin = dc;
+
+  float dmax = da;
+  if (db > dmax) dmax = db;
+  if (dc > dmax) dmax = dc;
+
+  // 找中间值
+  float dmid;
+  if ((da >= db && da <= dc) || (da >= dc && da <= db))
+    dmid = da;
+  else if ((db >= da && db <= dc) || (db >= dc && db <= da))
+    dmid = db;
+  else
+    dmid = dc;
+
+  int sec = me->sector;  // bitmask 值 1~6
+
+  switch (me->dpwm_mode) {
+    case SvpwmDpwm_MIN:
+      return -dmin;
+
+    case SvpwmDpwm_MAX:
+      return 1.0f - dmax;
+
+    case SvpwmDpwm_0:
+      // 奇扇区(bitmask 3,5,6)→MIN, 偶扇区(bitmask 1,4,2)→MAX
+      // bitmask 3=sector1(奇), 1=sector2(偶), 5=sector3(奇),
+      //         4=sector4(偶), 6=sector5(奇), 2=sector6(偶)
+      if (sec == 3 || sec == 5 || sec == 6)
+        return -dmin;
+      else
+        return 1.0f - dmax;
+
+    case SvpwmDpwm_1:
+      // 奇扇区→MAX, 偶扇区→MIN (与 DPWM0 相反)
+      if (sec == 3 || sec == 5 || sec == 6)
+        return 1.0f - dmax;
+      else
+        return -dmin;
+
+    case SvpwmDpwm_2:
+      // 30° 钳位: 中间相 < 0.5 → 钳到 0, 否则钳到 1
+      if (dmid < 0.5f)
+        return -dmin;
+      else
+        return 1.0f - dmax;
+
+    default:
+      return -dmin;
+  }
+}
+
 // ======== ops 实现 ========
 
 static void svpwm_start(PwmBase *base) {
@@ -222,6 +285,15 @@ void svpwm_set_vector(PwmSvpwm *me, float v_alpha, float v_beta, float v_dc_bus)
       break;
   }
 
+  // ---- 阶段 6: DPWM 5 段式钳位 (不连续调制) ----
+  // 注入零序偏移量, 使最低相恒为 0 — 每 60° 一相不切换, 减少 1/3 开关损耗
+  if (me->mode == SvpwmMode_5Seg) {
+    float offset = svpwm_calc_dpwm_offset(me, ta_on, tb_on, tc_on);
+    ta_on += offset;
+    tb_on += offset;
+    tc_on += offset;
+  }
+
   me->duty_a = clampf(ta_on, 0.0f, 1.0f);
   me->duty_b = clampf(tb_on, 0.0f, 1.0f);
   me->duty_c = clampf(tc_on, 0.0f, 1.0f);
@@ -236,9 +308,19 @@ float svpwm_get_modulation_index(const PwmSvpwm *me) {
 
 void svpwm_set_mode(PwmSvpwm *me, SvpwmMode mode) {
   me->mode = mode;
-  // 5 段式: 每 60° 不切换一相, 减少 1/3 开关损耗
-  // 实现: 调整零矢量分配, 将一个 t0_half 置 0 (V0-only 或 V7-only)
-  // 具体实现留给硬件性能优化阶段
+  // SvpwmMode_7Seg: 7 段对称调制, 零矢量 V0+V7 均分, THD 最优
+  // SvpwmMode_5Seg: 5 段不连续调制, 由 dpwm_mode 选择钳位策略
+  //   dpwm_mode 子模式:
+  //     MIN — 最低相钳位到 0 (仅用 V0)
+  //     MAX — 最高相钳位到 1 (仅用 V7)
+  //     0   — 60°交替 (奇扇区→MIN, 偶扇区→MAX)
+  //     1   — 60°交替反向 (奇扇区→MAX, 偶扇区→MIN)
+  //     2   — 30°钳位 (中间相<0.5→MIN, >0.5→MAX)
+  //   实际钳位计算在 svpwm_set_vector() 阶段 6 中执行
+}
+
+void svpwm_set_dpwm_mode(PwmSvpwm *me, SvpwmDpwmMode dpwm_mode) {
+  me->dpwm_mode = dpwm_mode;
 }
 
 // ======== 构造 ========
@@ -267,6 +349,7 @@ void svpwm_init(PwmSvpwm *me, uint32_t freq_hz, uint32_t deadtime_ns,
   me->sector = 0;
 
   me->mode = SvpwmMode_7Seg;
+  me->dpwm_mode = SvpwmDpwm_MIN;
   me->overmod_limit = 1.0f;
   me->overmod_enable = false;
 

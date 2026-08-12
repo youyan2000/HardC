@@ -24,4 +24,13 @@ extern struct PidCascade *g_cascade;
 extern PidBase *g_pid_user0;
 extern PidBase *g_pid_user1;
 
+// Module 层全局句柄 (由 board_init 绑定到 g_root 中的实例)
+// 遵循 LESSONS #40: Module 不直接持有硬件指针, 通过 extern ProjectRoot 间接访问
+// 以下句柄为便捷访问, 可替代直接写 g_root.mtr_a 等
+extern struct MotApp    *g_motapp_a;     // 电机A 状态机
+extern struct MotApp    *g_motapp_b;     // 电机B 状态机
+extern struct Follower  *g_follower;      // 循迹状态机
+extern struct TurnCtrl  *g_turnctrl;      // 转弯控制器
+extern struct Hmi       *g_hmi;           // 人机交互
+
 #endif
