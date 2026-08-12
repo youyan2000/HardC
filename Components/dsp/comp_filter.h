@@ -1,10 +1,20 @@
-// 数字滤波器库
+// 数字滤波器库 — 一阶/二阶 IIR 家族 (低通/高通/带通/带阻/陷波)
 //
-// 提供一阶低通滤波器和二阶巴特沃斯低通滤波器。
+// 分两类 API:
+//   1. 便捷运行时滤波器 (PascalCase 旧 API, 参数即时计算):
+//      一阶低通 LowPassFilter (dt 制, 内置 dt 缓存优化)
+//      二阶巴特沃斯低通 LowPassFilter2p
+//      指数移动平均 MathEmavg
+//      陷波 Notch (阻尼参数 c2/c1 设计)
+//   2. 频率指标 → 系数 设计套件 (snake_case 新 API):
+//      iir_filter_design 统一设计器 + 便捷包装 — 巴特沃斯 (通带最大平坦) /
+//      切比雪夫 I 型 (通带等纹波, 滚降更陡), 覆盖 LPF/HPF/BPF/BSF/Notch,
+//      系数与 comp_iir.h DF22 布局兼容, 可导出到 bsp_dsp.h biquad 硬件加速。
+//
 // static inline 函数适合 ISR 热路径, 零调用开销。
-// 一阶滤波器内置 dt 缓存优化 — dt 恒定时避免重复浮点除法。
 //
-// 来源: RM WEILAI_SuperCap
+// 来源: RM WEILAI_SuperCap (既有滤波器) + 经典模拟原型 (Butterworth/Chebyshev)
+//       与 RBJ Audio EQ Cookbook (BPF/BSF/Notch)
 
 #ifndef COMP_FILTER_H
 #define COMP_FILTER_H
@@ -13,6 +23,7 @@
 #include <stdbool.h>
 #include "comp_math.h"
 #include "bsp_dsp.h"    // 硬件加速 sqrt/biquad (CMSIS-DSP / C2000 / 纯C回退)
+#include "comp_iir.h"   // DF22 布局 — 设计套件系数可直接喂 iir_df22_run
 
 // π 常量 (comp_math.h 已定义 M_2PI, 这里补 M_PI)
 #ifndef M_PI
@@ -258,6 +269,278 @@ static inline void notch_coeff_update(float dt, float omega,
   coeff->b2 = (c2_val + w2) / den;
   coeff->a1 = (2.0f * c2_val - 2.0f * w2) / den;
   coeff->a2 = (c2_val - 2.0f * c1 * w * c + w2) / den;
+}
+
+/* ============ IIR biquad 设计套件 — 频率指标 → 系数 (Butterworth/Chebyshev) ============ */
+
+// 设计方法:
+//   巴特沃斯 (Butterworth)  — 通带最大平坦, fc = -3dB 点
+//   切比雪夫 I 型 (Chebyshev) — 通带等纹波 (ripple_db), 滚降更陡; fc = 通带边缘 (纹波上限, 非 -3dB)
+// 两者 fc 含义不同, 使用前请确认。
+//
+// 带通/带阻/陷波恒用 Q 谐振器 (RBJ Audio EQ Cookbook), fc=中心频率, bw=-3dB 带宽 (Q=fc/bw),
+// approx 参数对其无效。单 biquad 无法实现切比雪夫带通 (级联留作后续)。
+//
+// 系数约定与 comp_iir.h IirDf22 完全一致:
+//   H(z) = (b0 + b1·z^-1 + b2·z^-2) / (1 + a1·z^-1 + a2·z^-2), a1/a2 直接加
+//   DF2 递归: v = in - a1·x1 - a2·x2;  out = b0·v + b1·x1 + b2·x2
+// 可直接喂 iir_df22_run, 或经 iir_biquad_to_bsp_biquad 导出到 bsp_dsp.h 硬件加速。
+//
+// 来源: 经典模拟原型 (Butterworth / Chebyshev I 型) + 双线性变换; RBJ Audio EQ Cookbook (BPF/BSF/Notch)
+
+typedef enum {
+  IIR_FILTER_LPF,    // 低通 — fc = 截止频率
+  IIR_FILTER_HPF,    // 高通 — fc = 截止频率
+  IIR_FILTER_BPF,    // 带通 — fc = 中心频率, bw = 带宽
+  IIR_FILTER_BSF,    // 带阻 — fc = 中心频率, bw = 带宽
+  IIR_FILTER_NOTCH,  // 陷波 — fc = 陷波中心, bw = 带宽 (窄带带阻, 高 Q)
+} IirFilterKind;
+
+typedef enum {
+  IIR_APPROX_BUTTERWORTH,  // 通带最大平坦, fc = -3dB 点
+  IIR_APPROX_CHEBYSHEV,    // 通带等纹波, 滚降更陡; fc = 通带边缘
+} IirApprox;
+
+typedef struct {
+  float b0;       // 分子系数 B0
+  float b1;       // 分子系数 B1
+  float b2;       // 分子系数 B2
+  float a1;       // 分母系数 A1 (直接加)
+  float a2;       // 分母系数 A2 (直接加)
+  float x1;       // DF2 内部状态延迟 1
+  float x2;       // DF2 内部状态延迟 2
+} IirBiquad;
+
+typedef struct {
+  float b0;       // 分子系数 B0
+  float b1;       // 分子系数 B1
+  float a1;       // 分母系数 A1 (直接加)
+  float x1;       // DF2 内部状态延迟
+} IirFirst;
+
+#define IIR_BIQUAD_DEFAULTS { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
+
+// asinh 可移植实现 — C2000 工具链可能缺 asinhf
+static inline float iir_asinh(float x) {
+  return logf(x + sqrtf(x * x + 1.0f));
+}
+
+// 统一设计器 — 从频率指标计算二阶 biquad 系数
+//
+//   me:        输出 biquad (系数写入, 状态清零)
+//   kind:      IIR_FILTER_LPF/HPF/BPF/BSF/NOTCH
+//   approx:    IIR_APPROX_BUTTERWORTH/CHEBYSHEV (BPF/BSF/NOTCH 忽略, 恒用 Q 谐振器)
+//   fs:        采样率 (Hz)
+//   fc:        截止频率 (LPF/HPF) 或 中心频率 (BPF/BSF/NOTCH)
+//   bw:        -3dB 带宽 (Hz), 仅 BPF/BSF/NOTCH 使用 (Q = fc/bw)
+//   ripple_db: 切比雪夫通带纹波 (dB), 仅 CHEBYSHEV 使用; ≤0 时默认 0.5dB
+//
+// 非法参数 → 直通 (b0=1 其余 0): fs≤0 / fc≤0 / fc≥fs/2 / BPF/BSF/NOTCH 且 bw≤0
+static inline void iir_filter_design(IirBiquad *me, IirFilterKind kind,
+                                     IirApprox approx, float fs, float fc,
+                                     float bw, float ripple_db) {
+  me->x1 = 0.0f;
+  me->x2 = 0.0f;
+  me->b0 = 1.0f;  me->b1 = 0.0f;  me->b2 = 0.0f;
+  me->a1 = 0.0f;  me->a2 = 0.0f;
+
+  bool is_band = (kind == IIR_FILTER_BPF || kind == IIR_FILTER_BSF ||
+                  kind == IIR_FILTER_NOTCH);
+  if (fs <= 0.0f || fc <= 0.0f || fc >= 0.5f * fs) return;
+  if (is_band && bw <= 0.0f) return;
+
+  if (is_band) {
+    // RBJ 带通/带阻/陷波 — 带通中心增益 0dB, 带阻/陷波中心深陷
+    const float w0    = M_2PI * fc / fs;
+    const float alpha = sinf(w0) / (2.0f * fc / bw);   // α = sin(ω0)/(2Q), Q = fc/bw
+    const float inv   = 1.0f / (1.0f + alpha);
+    const float cosw  = cosf(w0);
+    if (kind == IIR_FILTER_BPF) {
+      me->b0 =  alpha * inv;
+      me->b1 =  0.0f;
+      me->b2 = -alpha * inv;
+    } else {
+      me->b0 = inv;
+      me->b1 = -2.0f * cosw * inv;
+      me->b2 = inv;
+    }
+    me->a1 = -2.0f * cosw * inv;
+    me->a2 = (1.0f - alpha) * inv;
+    return;
+  }
+
+  // LPF/HPF — 巴特沃斯或切比雪夫 I 型, 双线性变换 (频率预畸变 Ω = tan(π·fc/fs))
+  const float om = tanf(M_PI * fc / fs);
+
+  if (approx == IIR_APPROX_BUTTERWORTH) {
+    // 2 阶巴特沃斯: 极点 |s| = Ω, 角度 ±π/4 (与既有 LowPassFilter2p_Init 系数等价)
+    const float sq2 = 2.0f * cosf(M_PI / 4.0f);   // √2
+    const float c   = 1.0f + sq2 * om + om * om;
+    if (kind == IIR_FILTER_LPF) {
+      const float b0 = om * om / c;
+      me->b0 = b0;
+      me->b1 = 2.0f * b0;
+      me->b2 = b0;
+    } else {
+      const float b0 = 1.0f / c;
+      me->b0 = b0;
+      me->b1 = -2.0f * b0;
+      me->b2 = b0;
+    }
+    me->a1 = 2.0f * (om * om - 1.0f) / c;
+    me->a2 = (1.0f - sq2 * om + om * om) / c;
+    return;
+  }
+
+  // 切比雪夫 I 型 — 2 阶极点置于椭圆: s = -a ± jb, P = a² + b²
+  if (ripple_db <= 0.0f) ripple_db = 0.5f;
+  const float eps     = sqrtf(powf(10.0f, ripple_db / 10.0f) - 1.0f);  // 纹波因子
+  const float v       = 0.5f * iir_asinh(1.0f / eps);
+  const float ev      = expf(v);           // sinh/cosh 用 expf, 可移植
+  const float sinh_v  = 0.5f * (ev - 1.0f / ev);
+  const float cosh_v  = 0.5f * (ev + 1.0f / ev);
+  const float a       = sinh_v * sinf(M_PI / 4.0f);
+  const float b       = cosh_v * cosf(M_PI / 4.0f);
+  const float p       = a * a + b * b;
+
+  if (kind == IIR_FILTER_LPF) {
+    // 偶数阶 DC 增益 = 通带纹波下限 → 归一 K = P/√(1+ε²) (K=P 会在中频鼓包)
+    const float k     = p / sqrtf(1.0f + eps * eps);
+    const float c     = 1.0f + 2.0f * a * om + p * om * om;
+    const float b0    = k * om * om / c;
+    me->b0 = b0;
+    me->b1 = 2.0f * b0;
+    me->b2 = b0;
+    me->a1 = 2.0f * (p * om * om - 1.0f) / c;
+    me->a2 = (1.0f - 2.0f * a * om + p * om * om) / c;
+  } else {
+    // 高通必须从模拟原型推导 (z→-z 变换会把截止翻到 fs/2-fc, 不可用):
+    // 原型 H(s) = K'·s²/(s² + 2a'·s + P'),  a' = a/P, P' = 1/P, K' = 1/√(1+ε²)
+    const float ap     = a / p;
+    const float pp     = 1.0f / p;
+    const float kp     = 1.0f / sqrtf(1.0f + eps * eps);
+    const float ch     = 1.0f + 2.0f * ap * om + pp * om * om;
+    const float b0     = kp / ch;
+    me->b0 = b0;
+    me->b1 = -2.0f * b0;
+    me->b2 = b0;
+    me->a1 = 2.0f * (pp * om * om - 1.0f) / ch;
+    me->a2 = (1.0f - 2.0f * ap * om + pp * om * om) / ch;
+  }
+}
+
+// 便捷包装 — 低通
+static inline void iir_lpf_design(IirBiquad *me, IirApprox approx, float fs,
+                                  float fc, float ripple_db) {
+  iir_filter_design(me, IIR_FILTER_LPF, approx, fs, fc, 0.0f, ripple_db);
+}
+
+// 便捷包装 — 高通
+static inline void iir_hpf_design(IirBiquad *me, IirApprox approx, float fs,
+                                  float fc, float ripple_db) {
+  iir_filter_design(me, IIR_FILTER_HPF, approx, fs, fc, 0.0f, ripple_db);
+}
+
+// 便捷包装 — 切比雪夫专用 (LPF/HPF; 其余 kind 退化为 Q 谐振器)
+static inline void iir_cheby_design(IirBiquad *me, IirFilterKind kind,
+                                    float fs, float fc, float ripple_db) {
+  iir_filter_design(me, kind, IIR_APPROX_CHEBYSHEV, fs, fc, 0.0f, ripple_db);
+}
+
+// 便捷包装 — 带通 (恒 Q 谐振器, 中心增益 0dB)
+static inline void iir_bpf_design(IirBiquad *me, float fs, float fc, float bw) {
+  iir_filter_design(me, IIR_FILTER_BPF, IIR_APPROX_BUTTERWORTH, fs, fc, bw, 0.0f);
+}
+
+// 便捷包装 — 带阻 (恒 Q 谐振器)
+static inline void iir_bsf_design(IirBiquad *me, float fs, float fc, float bw) {
+  iir_filter_design(me, IIR_FILTER_BSF, IIR_APPROX_BUTTERWORTH, fs, fc, bw, 0.0f);
+}
+
+// 便捷包装 — 陷波 (窄带带阻, 高 Q)
+static inline void iir_notch_design(IirBiquad *me, float fs, float fc, float bw) {
+  iir_filter_design(me, IIR_FILTER_NOTCH, IIR_APPROX_BUTTERWORTH, fs, fc, bw, 0.0f);
+}
+
+// biquad 单步运行 — Direct Form 2 (与 iir_df22_run 同结构)
+static inline float iir_biquad_run(IirBiquad *me, float in) {
+  float v = in - me->a1 * me->x1 - me->a2 * me->x2;
+  float out = me->b0 * v + me->b1 * me->x1 + me->b2 * me->x2;
+  me->x2 = me->x1;
+  me->x1 = v;
+  return out;
+}
+
+// 重置状态 (不改变系数)
+static inline void iir_biquad_reset(IirBiquad *me) {
+  me->x1 = 0.0f;
+  me->x2 = 0.0f;
+}
+
+/* ======================== 一阶 IIR (fs 制) — 低通/高通 ======================== */
+
+// 与既有 dt 制 LowPassFilter 等价 (fs = 1/dt), 区别: 直接用采样率初始化, 无需每次传 dt。
+// 双线性变换 (Ω' = tan(π·fc/fs)):
+//   低通: b0 = b1 = Ω'/(1+Ω'),  a1 = (Ω'-1)/(1+Ω')
+//   高通: b0 = 1/(1+Ω'), b1 = -b0,  a1 = (Ω'-1)/(1+Ω')
+
+// 初始化一阶低通 — fc: -3dB 截止频率
+static inline void iir_first_lpf_init(IirFirst *me, float fs, float fc) {
+  me->x1 = 0.0f;
+  if (fs <= 0.0f || fc <= 0.0f || fc >= 0.5f * fs) {
+    me->b0 = 1.0f;  me->b1 = 0.0f;  me->a1 = 0.0f;
+    return;
+  }
+  const float om = tanf(M_PI * fc / fs);
+  me->b0 = om / (1.0f + om);
+  me->b1 = me->b0;
+  me->a1 = (om - 1.0f) / (1.0f + om);
+}
+
+// 初始化一阶高通 — fc: -3dB 截止频率
+static inline void iir_first_hpf_init(IirFirst *me, float fs, float fc) {
+  me->x1 = 0.0f;
+  if (fs <= 0.0f || fc <= 0.0f || fc >= 0.5f * fs) {
+    me->b0 = 1.0f;  me->b1 = 0.0f;  me->a1 = 0.0f;
+    return;
+  }
+  const float om = tanf(M_PI * fc / fs);
+  me->b0 = 1.0f / (1.0f + om);
+  me->b1 = -me->b0;
+  me->a1 = (om - 1.0f) / (1.0f + om);
+}
+
+// 一阶单步运行 — Direct Form 2: v = in - a1·x1;  out = b0·v + b1·x1
+static inline float iir_first_run(IirFirst *me, float in) {
+  float v = in - me->a1 * me->x1;
+  float out = me->b0 * v + me->b1 * me->x1;
+  me->x1 = v;
+  return out;
+}
+
+/* ======================== 导出到既有执行器 ======================== */
+
+// 拷贝到 comp_iir.h IirDf22 (布局与成员名相同, 可直接喂 iir_df22_run)
+static inline void iir_biquad_to_df22(const IirBiquad *me, IirDf22 *df22) {
+  df22->b0 = me->b0;  df22->b1 = me->b1;  df22->b2 = me->b2;
+  df22->a1 = me->a1;  df22->a2 = me->a2;
+  df22->x1 = me->x1;  df22->x2 = me->x2;
+}
+
+// 导出到 bsp_dsp.h BspBiquadInst — 系数存 {b0, b1, b2, -a1, -a2}
+// (bsp_dsp.h 文档约定, 与 CMSIS-DSP arm_biquad_casd_df1_inst_f32 一致)
+static inline void iir_biquad_to_bsp_biquad(const IirBiquad *me,
+                                            BspBiquadInst *bsp) {
+  bsp->coeffs[0] =  me->b0;
+  bsp->coeffs[1] =  me->b1;
+  bsp->coeffs[2] =  me->b2;
+  bsp->coeffs[3] = -me->a1;
+  bsp->coeffs[4] = -me->a2;
+  bsp->state[0] = me->x1;
+  bsp->state[1] = me->x2;
+  bsp->state[2] = 0.0f;
+  bsp->state[3] = 0.0f;
+  bsp_biquad_init(bsp, bsp->coeffs, bsp->state, 1);
 }
 
 #endif  // COMP_FILTER_H
