@@ -17,8 +17,8 @@ typedef void BspAdcHandle;
 
 // ======== ADC 校准模式 ========
 typedef enum {
-  BSP_ADC_SINGLE_ENDED,         // 单端模式 (最常用)
-  BSP_ADC_DIFFERENTIAL,         // 差分模式
+  BSP_ADC_SINGLE_ENDED,  // 单端模式 (最常用)
+  BSP_ADC_DIFFERENTIAL,  // 差分模式
 } BspAdcMode;
 
 // ======== BSP 接口 ========
@@ -33,5 +33,8 @@ void bsp_adc_calibrate(void *hadc, BspAdcMode mode);
 // buf:     DMA 循环缓冲区的首地址
 // num_ch:  扫描通道数
 void bsp_adc_start_dma(void *hadc, void *hdma, uint16_t *buf, int num_ch);
+
+// 停止 DMA + ADC 转换 (反初始化)
+void bsp_adc_stop_dma(void *hadc, void *hdma);
 
 #endif  // BSP_ADC_H
