@@ -1,0 +1,48 @@
+# Config/topologies/vsi_3ph.yaml — 拓扑目录：三相六开关无源逆变器
+# 占位条目：仅目录收录，控制模块待实现（控制模块库暂缓，见计划）
+# 无源逆变器 = DC 母线 → 三相 AC 输出, 六开关桥臂, SVPWM 调制 + dq 电流环
+
+name: vsi_3ph
+display: 三相六开关逆变器
+category: dc-ac
+description: 三相电压源逆变器 — Clarke/Park 坐标变换 + dq 电流环 + SVPWM 七段/五段调制, 母线电压环可选, 复用 pwm_svpwm/adc_ac_sampler/comp_pll
+status: planned
+modules:
+  - components/pwm
+  - components/adc
+  - components/pid
+  - components/power
+  - components/math
+  - components/dsp
+  - devices/pwm
+  - devices/adc
+  - module/power
+control_module: module/power/mod_vsi   # 待实现：三相 VSI 控制模块
+pwm:
+  device: pwm_svpwm
+  freq_hz: 20000
+  deadtime_ns: 500
+  dpwm_mode: 7Seg
+  v_dc_bus: 48.0
+adc:
+  device: adc_ac_sampler
+  roles:
+    i_a: { ch: 0, gain: 0.05 }
+    i_b: { ch: 1, gain: 0.05 }
+    v_dc: { ch: 2, gain: 0.0072 }
+    v_ab: { ch: 3, gain: 0.0072 }
+params:
+  - { key: vdc_ref,  type: float, default: 48.0, min: 0, max: 400, unit: V, slot: 0, label: 母线电压参考 }
+  - { key: id_ref,   type: float, default: 0.0,  min: -50, max: 50, unit: A, slot: 1, label: d轴电流参考 }
+  - { key: iq_ref,   type: float, default: 0.0,  min: -50, max: 50, unit: A, slot: 2, label: q轴电流参考 }
+  - { key: pid_id.kp, type: float, default: 0.5, min: 0, max: 20, slot: 3, label: d轴电流环Kp }
+  - { key: pid_id.ki, type: float, default: 20.0, min: 0, max: 500, slot: 4, label: d轴电流环Ki }
+  - { key: pid_iq.kp, type: float, default: 0.5, min: 0, max: 20, slot: 5, label: q轴电流环Kp }
+  - { key: pid_iq.ki, type: float, default: 20.0, min: 0, max: 500, slot: 6, label: q轴电流环Ki }
+  - { key: pll_bw,  type: float, default: 50.0, min: 1, max: 500, unit: Hz, slot: 7, label: PLL带宽 }
+  - { key: ovp,    type: float, default: 60.0, min: 0, max: 500, unit: V, slot: 8, label: 母线过压阈值 }
+  - { key: ocp,    type: float, default: 30.0, min: 0, max: 100, unit: A, slot: 9, label: 过流阈值 }
+tune:
+  frame_len: 48
+  check_code: 3.1415927
+  slots: 10

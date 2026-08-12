@@ -1,0 +1,47 @@
+# Config/topologies/buck2.yaml — 拓扑目录：Buck2（同步/双向 Buck）
+# 占位条目：仅目录收录，控制模块待实现（控制模块库暂缓，见计划）
+
+name: buck2
+display: Buck2 双向降压
+category: dc-dc
+description: 同步整流双向 Buck — 电流双向流动(充电/放电), 电压环+双向电流环, 前馈 D=Vout/Vin, 适合电池充放电
+status: planned
+modules:
+  - components/pwm
+  - components/adc
+  - components/pid
+  - components/power
+  - components/math
+  - components/dsp
+  - devices/pwm
+  - devices/adc
+  - module/power
+control_module: module/power/mod_dcdc   # 待实现：以 topo=Buck2 参数化, 电流双向
+pwm:
+  device: pwm_buckboost
+  mode: Buck
+  ch_drive: 0
+  sync_rect: true
+  freq_hz: 100000
+  deadtime_ns: 200
+  duty_min: 0.0
+  duty_max: 1.0
+adc:
+  device: adc_dc_sampler
+  roles:
+    vout: { ch: 0, gain: 0.0072 }
+    iout: { ch: 1, gain: 0.05 }
+    vin:  { ch: 2, gain: 0.0072 }
+params:
+  - { key: vref,   type: float, default: 12.0, min: 0, max: 60, unit: V, slot: 0, label: 输出电压参考 }
+  - { key: iref,   type: float, default: 0.0,  min: -20, max: 20, unit: A, slot: 1, label: 电流参考(可双向) }
+  - { key: pid_v.kp, type: float, default: 1.0, min: 0, max: 100, slot: 2, label: 电压环Kp }
+  - { key: pid_v.ki, type: float, default: 10.0, min: 0, max: 100, slot: 3, label: 电压环Ki }
+  - { key: pid_i.kp, type: float, default: 0.2, min: 0, max: 10,  slot: 4, label: 电流环Kp }
+  - { key: pid_i.ki, type: float, default: 5.0,  min: 0, max: 100, slot: 5, label: 电流环Ki }
+  - { key: ovp,   type: float, default: 15.0, min: 0, max: 80,  unit: V, slot: 7, label: 过压阈值 }
+  - { key: ocp,   type: float, default: 10.0, min: 0, max: 30,  unit: A, slot: 8, label: 过流阈值 }
+tune:
+  frame_len: 48
+  check_code: 3.1415927
+  slots: 10

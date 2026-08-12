@@ -1,0 +1,11 @@
+project: acdc_sixswitch
+mcu: STM32F334R8
+description: 六开关三相 AC/DC 整流器 — SVPWM + SRF-PLL + dq 电流环 + SFRA 频响分析
+modules:
+  - components/pwm
+  - components/dsp
+  - components/power
+  - components/math
+  - devices/pwm
+  - devices/adc
+  - module/power
