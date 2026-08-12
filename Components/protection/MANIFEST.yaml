@@ -1,0 +1,8 @@
+id: components/protection
+layer: Components
+description: 保护组件 — 阈值检测/去抖/分级响应 + 延迟关断保护 (故障消隐)
+files:
+  - comp_protection.h
+  - comp_protection_3lvl.h
+depends:
+  - components/math
