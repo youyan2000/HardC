@@ -45,7 +45,7 @@ typedef struct {
   float active_offset;    // 宽频有功偏置 (死区)
   float reactive_offset;  // 宽频无功偏置 (死区)
   float f_active_offset;  // 基波有功偏置 (死区)
-  float f_reactive_offset;// 基波无功偏置 (死区)
+  float f_reactive_offset;  // 基波无功偏置 (死区)
 
   // DC 滤波器种子
   float v_dc_init;        // 电压 DC 滤波器初始估计 (启动时喂给测量层)
