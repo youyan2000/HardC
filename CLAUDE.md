@@ -270,7 +270,10 @@ make -j$(nproc)
 | `comp_impulse.h` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_mod6.h` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
 | `comp_sogi_fll.h` | 单相锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移跟踪 |
-| `comp_power_meas.h` | 电力测量 — 真有效值/有功/无功/视在功率/功率因数/相位角 + 能量脉冲积分 (残余结转) |
+| `comp_power_meas.h` | 电力测量 — 真有效值/有功/无功/视在功率/功率因数/相位角 + 能量脉冲积分 (残余结转) + 三相聚合 (总功率/线电压/电流矢量和) |
+| `comp_power_goertzel.h` | Goertzel 逐谐波频谱 (H1..H50) + THD — 整数周期窗口谐振器, 无需窗函数 |
+| `comp_power_calib.h` | 结果级校准 POD — 死区减法 (保符号对称死区), 即 TI NV 持久化结构体 |
+| `comp_power_event.h` | 电压事件检测 — 暂降/暂升/中断状态机 + 事件计数/时长 (滞回 + 交叉检测) |
 | `comp_power_fund.h` | 基波电力分析 — 同步正交相关解调 (IEC 62053), 基波有效值/有功/无功 + THD, 对谐波污染免疫 |
 
 **Module 层 (L4) — 业务逻辑（位于 `Module/motor/`、`power/`、`comm/`、`hmi/`）：**

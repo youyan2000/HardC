@@ -205,8 +205,11 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_mod6.h` | `Mod6Cnt` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
 | `comp_impulse.h` | `Impulse` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_sogi_fll.h` | `SogiFll`, `SogiFllOsgCoeff`, `SogiFllLpfCoeff` | SOGI 锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移 |
-| `comp_power_meas.h` | `PowerMeas`, `EnergyAccu` | 电力测量 — Vrms/Irms/P/Q/S/PF/相位角 + 能量脉冲积分 (残余结转) |
+| `comp_power_meas.h` | `PowerMeas`, `EnergyAccu`, `PowerMeas3Ph` | 电力测量 — Vrms/Irms/P/Q/S/PF/相位角 + 能量脉冲积分 (残余结转) + 三相聚合 (总功率/线电压/电流矢量和) |
 | `comp_power_fund.h` | `PowerFund` | 基波电力分析 — 同步正交相关解调, 基波 Vrms/Irms/P/Q/THD (IEC 62053) |
+| `comp_power_goertzel.h` | `PowerGoertzel` | Goertzel 逐谐波频谱 (H1..H50) + THD — 整数周期窗口谐振器, 无需窗函数 |
+| `comp_power_calib.h` | `PowerCalibPhase` | 结果级校准 POD — 死区减法 (保符号对称死区), 即 TI NV 持久化结构体 |
+| `comp_power_event.h` | `PowerEvent` | 电压事件检测 — 暂降/暂升/中断状态机 + 事件计数/时长 (滞回 + 交叉检测) |
 | `comp_arc_detect.h` | `ArcDetect` | 光伏电弧检测 — FFT 频带能量 2 子带加权 + 单频干扰滤除 + dB 阈值判定 |
 | `comp_pid_nl.h` | `NlPidCfg`, `NlPidState` | 非线性 PID — P/I/D 各通路独立幂律整形 (α/δ/γ), 强鲁棒控制 |
 | `comp_tcm.h` | `TcmCapture` | 自动调参 TCM — 触发式阶跃响应捕获 (预触发环) + IAE/ISE/ITAE 准则 |
@@ -910,6 +913,62 @@ BLDC 六步换相: 触发有效时换相步 0→1→...→5→0 循环 (电角�
 - `power_fund_update(me, rms_v, rms_i)` — 窗口满结算, 返回 1=有新结果; 清累加器但相位参考保持连续
 - `power_fund_set_freq(me, f_hz)` — 由电网频率估计 (过零/锁相环) 每窗更新, 抑制窗泄漏
 - `power_fund_reset(me)` — 清零累加器与相位参考
+
+**依赖:** `<math.h>`, `<stdint.h>`
+
+#### comp_power_goertzel.h — Goertzel 逐谐波频谱 (H1..H50 + THD)
+
+> **来源:** TI C2000Ware Digital Power SDK
+>   libraries/energy-metrology_library/energy_metrology_f28p55
+>   (metrology_calculations.c goertzelMagnitude + USE_GOERTZEL_THD 分支)
+> **新增日期:** 2026-08-12
+
+对第 h 次谐波跑 2 阶 Goertzel 谐振器, 逐次输出幅值谱 H1..H50: `ω_h = 2π·h·grid_freq/sample_rate`, `coeff = 2·cos(ω_h)`, `q0 = coeff·q1 − q2 + x[k]` (窗口 N 点按时间序); DFT bin `re = q1 − q2·cos(ω_h)`, `im = q2·sin(ω_h)`, 峰值幅值 `A_h = 2·sqrt(re²+im²)/N`. 窗口 = 整数个电网周期 (bin 精确落点) → 无需窗函数; THD = `sqrt(Σ_{h=2..50} A_h²)/A_1 × 100`. TI 的 2048 点 FFT 分支 (fpu_rfft) 为 C2000 硬件绑定, 不移植 — Goertzel 在任意平台等效. 与 comp_power_fund.h (基波相关解调) 互补: 本组件给逐次谐波频谱, fund 给基波功率.
+
+**关键 API (static inline):**
+- `power_goertzel_window_n(cycles, sample_rate, grid_freq)` — 整数周期窗口样本数 N (如 4·2000/50 = 160)
+- `power_goertzel_init(me, buffer, sample_rate, grid_freq, window_n)` — 缓冲由调用者提供 (零 malloc), 长度 ≥ N
+- `power_goertzel_sample(me, x)` — ISR 逐采样写环形缓冲
+- `power_goertzel_analyze(me, mag[], max_h)` — 逐谐波谐振, 返回 1=缓冲满且已计算; mag[0]=0, mag[h]=第 h 次峰值幅值
+
+**依赖:** `<math.h>`, `<stdint.h>`
+
+#### comp_power_calib.h — 结果级校准 POD (PowerCalib + 死区减法)
+
+> **来源:** TI C2000Ware Digital Power SDK
+>   libraries/energy-metrology_library/energy_metrology_f28p55
+>   (metrology_nv_structs.h calibrationData + metrology_calibration.h
+>    applyCalibrationPhase: deadband = mean·scale, <offset → 0, 否则 −offset)
+> **新增日期:** 2026-08-12
+
+校准在"结果"上做死区减法, 不是逐采样: `result = mean·scale`; `|result| < offset → 0`; 否则朝零方向减 offset. 死区消除小信号偏置 (噪声/串扰残余), 保证空载读数归零. **死区保符号**: 有功/无功/基波功率是有符号量 (馈出/容性为负), TI 的字面死区 (`r < offset → 0`) 会把负读数误归零, 本组件改为对称死区 `|r| < offset → 0`, 真实负值按原符号直通 — 有意偏离 TI, 头注释已记录.
+
+**NV 持久化:** 本 POD 即 TI 的可持久化结构体 — TI 只持久化校准数据 (结构体魔数 0x59 + 校准初始化标志 0xABCD, 无 CRC), **能量计数是 RAM-only 不掉电保持**. flash 读写 + 完整性校验 (可选复用 comp_crc.h) 是应用层职责. 相位偏移 (TI 用 256 项 FIR 系数表, 采样率绑定) 不做 — 相位由测量层 PowerMeas 的 quad_delay 折算.
+
+**关键 API (static inline):**
+- `power_calib_init(me)` — 恒等默认 (scale=1, offsets=0), 未校准时原值直通
+- `power_calib_deadband(raw, scale, offset)` — 对称死区共用助手 (保符号)
+- `power_calib_apply_vrms/irms/frms_v/frms_i/p/q/fp/fq(me, raw)` — 8 个结果校准: Vrms/宽频电流/基波电压/基波电流/宽频有功/宽频无功/基波有功/基波无功
+
+**依赖:** `<math.h>`
+
+#### comp_power_event.h — 电压事件检测 (暂降/暂升/中断状态机)
+
+> **来源:** TI C2000Ware Digital Power SDK
+>   libraries/energy-metrology_library/energy_metrology_f28p55
+>   (metrology_calculations.c checkSagSwellEvents + cyclePhaseDP 逐周期 RMS)
+> **新增日期:** 2026-08-12
+
+逐周期 RMS 判据: `sag_start = Vnom·sag_pct` (默认 0.80), `sag_stop = sag_start + hysteresis`; `swell_start = Vnom·swell_pct` (默认 1.20), `swell_stop = swell_start − hysteresis`; `min_sag_v` (默认 100V, 须 < sag_start) → 中断. 滞回防止阈值边界抖振.
+
+状态机每带一个 tick 助手 (ONSET/CONTINUING 共用): NORMAL 检测到越限即入对应 ONSET 并计入首周期 (active_duration=1); 每带推进顺序 = **深化 → 交叉 → 滞回恢复 → 保持** (交叉检测先于滞回恢复, 捕捉跃入对侧带的单周期尖峰). 计数语义: 恢复/交叉的边界周期不计入时长但计入极值; 深化为中断时过渡周期计入中断时长 (成为中断首周期), 暂降时长定格于深化前. 每个事件完成时 latch `sag_duration/swell_duration/int_duration` + `event_min_v/event_max_v`, 直到下一次事件覆盖.
+
+**关键 API (static inline):**
+- `power_event_init(me, v_nominal, sag_pct, swell_pct, hysteresis_v, min_sag_v)` — 计算 start/stop 阈值
+- `power_event_sample(me, v)` — ISR 逐采样: 累加 v² + 正向过零结算本周期 RMS + 状态机推进 (含 slew 毛刺过滤 + 短周期丢弃)
+- `power_event_step(me, cycle_rms)` — 应用自行结算周期 RMS 后直接推进
+- `power_event_active(me)` — 1=有事件进行中
+- `power_event_reset(me)` — 重置状态与计数 (保留参数)
 
 **依赖:** `<math.h>`, `<stdint.h>`
 
