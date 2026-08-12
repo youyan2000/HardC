@@ -13,6 +13,8 @@
 #ifndef COMP_PFC_H
 #define COMP_PFC_H
 
+#include <math.h>
+
 // ======================= PfcICmd (电流指令) =======================
 
 // 标准 PFC 电流参考计算:
@@ -145,6 +147,61 @@ static inline float pfc_inv_sqr_run(PfcInvSqr *me, float vrms) {
   if (me->out > 1.0f) me->out = 1.0f;
 
   return me->out;
+}
+
+// ======================= PfcBlIcmd (无桥 PFC 电流指令) =======================
+
+// 无桥 PFC 电流指令 (Bridgeless)
+//
+// 来源: TI controlSUITE digital_power PFC_BL_ICMD (汇编→C翻译)
+//
+// 无桥 PFC 无整流桥, 两开关分别处理正/负半周:
+//   正半周 (Vin>0): 开关 A 工作, icmd = Vloop × Vin / Vrms²
+//   负半周 (Vin<0): 开关 B 工作, icmd = |Vloop × Vin / Vrms²|
+//   两路电流指令互斥, 每半周只有一个开关有电流
+//
+// 注意: 此 Component 只计算电流指令, 不直接控制 PWM 占空比
+//   PWM 占空比由外部电流闭环 PID 计算
+
+typedef struct {
+  float icmd_pos;         // 正半周电流指令 (A), 负半周时为 0
+  float icmd_neg;         // 负半周电流指令 (A), 正半周时为 0
+  bool  pos_active;       // 当前正半周激活 (Vin > 0)
+} PfcBlIcmd;
+
+#define PFC_BL_ICMD_BRIDGELESS_DEFAULTS { 0, 0, false }
+
+// 计算无桥 PFC 两路电流指令
+//   me:       状态指针
+//   vin:      交流输入电压瞬时值 (V)
+//   vin_rms:  输入电压有效值 (V)
+//   vloop:    电压环输出 (标幺 0~1, 或实际电流幅值指令)
+//
+// 内部自动计算 1/Vrms² 前馈 (需要 vin_rms > 0.1V 防止除零)
+static inline void pfc_bl_icmd_bridgeless_run(PfcBlIcmd *me, float vin,
+                                               float vin_rms, float vloop) {
+  // 半周判断
+  me->pos_active = (vin >= 0.0f);
+
+  // 1/Vrms² 前馈 (防除零)
+  float inv_vrms_sq;
+  if (vin_rms > 0.1f) {
+    inv_vrms_sq = 1.0f / (vin_rms * vin_rms);
+  } else {
+    inv_vrms_sq = 1.0f;   // 启动/低压时不做前馈
+  }
+
+  // 电流指令 = Vloop × |Vin| / Vrms²
+  float icmd = vloop * fabsf(vin) * inv_vrms_sq;
+
+  // 分配至正/负半周
+  if (me->pos_active) {
+    me->icmd_pos = icmd;
+    me->icmd_neg = 0.0f;
+  } else {
+    me->icmd_pos = 0.0f;
+    me->icmd_neg = icmd;
+  }
 }
 
 #endif  // COMP_PFC_H

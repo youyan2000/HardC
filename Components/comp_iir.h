@@ -15,6 +15,8 @@
 #ifndef COMP_IIR_H
 #define COMP_IIR_H
 
+#include <stdint.h>
+
 // ======================= DF22 — Direct Form 2, 二阶 IIR =======================
 
 // H(z) = (b0 + b1*z^-1 + b2*z^-2) / (1 + a1*z^-1 + a2*z^-2)
@@ -181,6 +183,159 @@ static inline float iir_2p2z_run(Iir2p2z *me, float error) {
 static inline void iir_2p2z_reset(Iir2p2z *me) {
   me->out1 = 0.0f; me->out2 = 0.0f;
   me->err1 = 0.0f; me->err2 = 0.0f;
+}
+
+// ======== Q15 定点 IIR (v1.2 扩展 — FixedPointLib) ========
+
+// 来源: TI controlSUITE FixedPointLib/v1_20/iir.h
+//
+// Direct Form 1, Q15 定点实现
+// 适用于无 FPU 平台或 Q15 优先的高速场景
+// 系数缩放: 1.0 = 0x7FFF (32767)
+// 差分方程:
+//   y[n] = (b0*x[n] + b1*x[n-1] + ... + bN*x[n-N]
+//           - a1*y[n-1] - a2*y[n-2] - ... - aN*y[n-N]) >> shift
+// 乘法累加后右移归一化, 输出饱和到 [-32768, 32767]
+//
+// 调用方式 (ISR 中每控制周期调用):
+//   Iir16Cfg cfg = { .b_coeffs = { ... }, .a_coeffs = { ... }, .order = 2, .shift = 15 };
+//   Iir16State st;
+//   iir16_init(&st);
+//   int16_t y = iir16_run(&st, &cfg, x);
+
+#define IIR16_MAX_ORDER  8   // Q15 最大阶数 (delay line 大小)
+
+// Q15 滤波器配置 (可共享, 只读)
+typedef struct {
+  int16_t b_coeffs[IIR16_MAX_ORDER + 1];  // 分子系数 Q15 (b0..bN), N ≤ IIR16_MAX_ORDER
+  int16_t a_coeffs[IIR16_MAX_ORDER + 1];  // 分母系数 Q15 (a1..aN), a[0]=1.0 已归一化, 占位不用
+  uint8_t order;                           // 滤波器阶数 N (1-8)
+  uint8_t shift;                           // 后缩放右移位数 (0-15)
+} Iir16Cfg;
+
+// Q15 滤波器运行状态 (每实例独立)
+typedef struct {
+  int16_t x_hist[IIR16_MAX_ORDER + 1];  // 输入延迟线: x_hist[0]=x[n], x_hist[i]=x[n-i]
+  int16_t y_hist[IIR16_MAX_ORDER + 1];  // 输出历史: y_hist[0]=y[n-1], y_hist[1]=y[n-2], ...
+} Iir16State;
+
+// Q15 默认配置 (全通, 零状态)
+#define IIR16_CFG_DEFAULTS { {32767,0,0,0,0,0,0,0,0}, {0,0,0,0,0,0,0,0,0}, 0, 0 }
+
+// 初始化 Q15 延迟线 — 全部清零
+static inline void iir16_init(Iir16State *me) {
+  for (int i = 0; i <= IIR16_MAX_ORDER; i++) {
+    me->x_hist[i] = 0;
+    me->y_hist[i] = 0;
+  }
+}
+
+// Q15 IIR 单步运行 — Direct Form 1 + 输出饱和
+//   cfg:   滤波器配置 (系数 + 阶数 + 移位数)
+//   input: 当前输入 Q15
+//   返回:  滤波输出 Q15, 饱和在 [-32768, 32767]
+//   int64 累加器保证 17 项乘积累加不溢出 (阶数 ≤8 时最坏情况)
+static inline int16_t iir16_run(Iir16State *me, const Iir16Cfg *cfg, int16_t input) {
+  // 移位输入历史: x_hist[i] ← x_hist[i-1], 新值进 x_hist[0]
+  for (int i = cfg->order; i > 0; i--) {
+    me->x_hist[i] = me->x_hist[i - 1];
+  }
+  me->x_hist[0] = input;
+
+  // Direct Form 1 累加: y = SUM(b_i * x[n-i]) - SUM(a_j * y[n-j])
+  // 注: a[0]=1 已归一化, y_hist[j-1] 对 j=1 取 y[n-1], j=2 取 y[n-2], ...
+  int64_t acc = 0;
+  for (int i = 0; i <= cfg->order; i++) {
+    acc += (int64_t)cfg->b_coeffs[i] * (int64_t)me->x_hist[i];
+  }
+  for (int j = 1; j <= cfg->order; j++) {
+    acc -= (int64_t)cfg->a_coeffs[j] * (int64_t)me->y_hist[j - 1];
+  }
+
+  // 后缩放: 右移归一化回 Q15
+  int64_t y = acc >> cfg->shift;
+
+  // 饱和到 int16_t 范围
+  if (y > 32767)  { y = 32767; }
+  if (y < -32768) { y = -32768; }
+
+  // 移位输出历史: y_hist[i] ← y_hist[i-1], 新值进 y_hist[0]
+  for (int i = cfg->order; i > 0; i--) {
+    me->y_hist[i] = me->y_hist[i - 1];
+  }
+  me->y_hist[0] = (int16_t)y;
+
+  return (int16_t)y;
+}
+
+// ======== Q31 定点 IIR (v1.2 扩展 — FixedPointLib) ========
+
+// 来源: TI controlSUITE FixedPointLib/v1_20/iir.h
+//
+// Direct Form 1, Q31 定点实现 (高精度变体)
+// 系数缩放: 1.0 = 0x7FFFFFFF (2147483647)
+// 乘法累加后右移归一化, 输出饱和到 [-2^31, 2^31-1]
+
+#define IIR32_MAX_ORDER  8   // Q31 最大阶数
+
+// Q31 滤波器配置 (可共享, 只读)
+typedef struct {
+  int32_t b_coeffs[IIR32_MAX_ORDER + 1];  // 分子系数 Q31
+  int32_t a_coeffs[IIR32_MAX_ORDER + 1];  // 分母系数 Q31 (a[0]=1.0 已归一化, 占位不用)
+  uint8_t order;                           // 滤波器阶数 N (1-8)
+  uint8_t shift;                           // 后缩放右移位数 (0-31)
+} Iir32Cfg;
+
+// Q31 滤波器运行状态 (每实例独立)
+typedef struct {
+  int32_t x_hist[IIR32_MAX_ORDER + 1];  // 输入延迟线
+  int32_t y_hist[IIR32_MAX_ORDER + 1];  // 输出历史
+} Iir32State;
+
+#define IIR32_CFG_DEFAULTS { {2147483647,0,0,0,0,0,0,0,0}, {0,0,0,0,0,0,0,0,0}, 0, 0 }
+
+// 初始化 Q31 延迟线 — 全部清零
+static inline void iir32_init(Iir32State *me) {
+  for (int i = 0; i <= IIR32_MAX_ORDER; i++) {
+    me->x_hist[i] = 0;
+    me->y_hist[i] = 0;
+  }
+}
+
+// Q31 IIR 单步运行 — Direct Form 1 + 输出饱和
+//   cfg:   滤波器配置
+//   input: 当前输入 Q31
+//   返回:  滤波输出 Q31, 饱和在 [-2^31, 2^31-1]
+static inline int32_t iir32_run(Iir32State *me, const Iir32Cfg *cfg, int32_t input) {
+  // 移位输入历史
+  for (int i = cfg->order; i > 0; i--) {
+    me->x_hist[i] = me->x_hist[i - 1];
+  }
+  me->x_hist[0] = input;
+
+  // Direct Form 1 累加 (int64 防止溢出; Q31*Q31 → Q62, 17 项安全)
+  int64_t acc = 0;
+  for (int i = 0; i <= cfg->order; i++) {
+    acc += (int64_t)cfg->b_coeffs[i] * (int64_t)me->x_hist[i];
+  }
+  for (int j = 1; j <= cfg->order; j++) {
+    acc -= (int64_t)cfg->a_coeffs[j] * (int64_t)me->y_hist[j - 1];
+  }
+
+  // 后缩放: 右移归一化回 Q31
+  int64_t y = acc >> cfg->shift;
+
+  // 饱和到 int32_t 范围
+  if (y > 2147483647)  { y = 2147483647; }
+  if (y < -2147483648LL) { y = -2147483648LL; }
+
+  // 移位输出历史
+  for (int i = cfg->order; i > 0; i--) {
+    me->y_hist[i] = me->y_hist[i - 1];
+  }
+  me->y_hist[0] = (int32_t)y;
+
+  return (int32_t)y;
 }
 
 #endif  // COMP_IIR_H

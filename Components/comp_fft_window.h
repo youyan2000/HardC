@@ -18,6 +18,7 @@
 #define COMP_FFT_WINDOW_H
 
 #include <math.h>
+#include <stdint.h>
 
 // 用独立的 float 常量避免 double→float 隐式缩窄转换
 #define FFT_PI  3.1415927f
@@ -367,6 +368,79 @@ static inline float fft_win_enbw(const float *win, int size) {
   }
   if (sum_w == 0.0f) return 1.0f;
   return (float)size * sum_w2 / (sum_w * sum_w);
+}
+
+// ======== Q31 定点窗系数生成 (v1.2 扩展 — FixedPointLib) ========
+//
+// 来源: TI controlSUITE FixedPointLib/v1_20/fft_*_Q31.h (float→Q31 转换)
+//   18 窗口类型统一通过现有 float 公式 → Q31 定点转换, 无需存储大型系数表
+//
+// Q31 格式说明:
+//   - 值域: [0x80000000, 0x7FFFFFFF] 对应 [-1.0, +0.9999999995343387]
+//   - 窗系数全为正且 ≤1.0, 故 Q31 值均在 [0, 0x7FFFFFFF] 范围
+//   - 转换公式: Q31 = round(win_float * (2^31 - 1)), 钳位到 int32_t 范围
+//
+// 使用方式:
+//   int32_t win_q31[256];
+//   fft_win_fill_q31(FFT_WIN_HANN, win_q31, 256);  // 生成 256 点 Hann 窗 (Q31)
+//   // 然后传给 DSP 加速 FFT (bsp_dsp_fft.h 或 CMSIS-DSP RFFT)
+
+// 将浮点窗系数转换为 Q31 定点格式
+//   type: 窗类型 (复用 FftWinType 枚举)
+//   buf:  输出 Q31 系数数组 (调用者分配, 长度 n)
+//   n:    窗长度 (≥2, 栈上临时分配 float[n], 嵌入式典型 N≤4096)
+//
+// 原理: 调用 fft_win_generate() 生成 float 系数, 然后逐点乘以 2^31-1 转为 Q31
+// 优势: 无需为 18 种窗 × 多种尺寸 存储巨型系数表, 空间换时间 (嵌入式可接受)
+static inline void fft_win_fill_q31(FftWinType type, int32_t *buf, int n) {
+  // 栈上生成 float 窗系数 (嵌入式典型 N ≤ 4096, 安全)
+  float tmp[n];
+  fft_win_generate(type, tmp, n);
+
+  for (int i = 0; i < n; i++) {
+    // float → Q31: 乘以 2^31-1, 钳位到 int32_t 范围
+    // 使用 double 中间精度避免 float→int 截断误差
+    double val = (double)tmp[i] * 2147483647.0;  // 2^31 - 1
+    if (val > 2147483647.0)  val = 2147483647.0;
+    if (val < -2147483648.0) val = -2147483648.0;
+    buf[i] = (int32_t)val;
+  }
+}
+
+// Q31 窗系数就地加窗 (逐点乘并右移 31 位归一化)
+//   win:  Q31 窗系数数组 (长度 n)
+//   data: Q31 信号数据 (长度 n), 就地修改
+//   n:    数据长度
+//
+// 运算: data[i] = (data[i] * win[i]) >> 31
+// 注意: 乘法结果用 int64_t 中间存储防止溢出
+static inline void fft_win_apply_q31(const int32_t *win, int32_t *data, int n) {
+  for (int i = 0; i < n; i++) {
+    data[i] = (int32_t)(((int64_t)data[i] * (int64_t)win[i]) >> 31);
+  }
+}
+
+// Q31 窗系数非就地加窗 (逐点乘并右移 31 位, 结果写入 dst)
+//   win:  Q31 窗系数数组 (长度 n)
+//   data: Q31 信号数据 (长度 n), 只读
+//   dst:  输出 Q31 数据 (长度 n), 可与 data 相同
+//   n:    数据长度
+static inline void fft_win_apply_q31_dst(const int32_t *win, const int32_t *data,
+                                          int32_t *dst, int n) {
+  for (int i = 0; i < n; i++) {
+    dst[i] = (int32_t)(((int64_t)data[i] * (int64_t)win[i]) >> 31);
+  }
+}
+
+// Q31 窗系数相干增益 (定点点积 → float 归一化)
+//   CG = (1/N) × Σ win[i] / 2^31
+// 用于 Q31 FFT 幅值校正: 实际幅值 = FFT 幅值 / CG
+static inline float fft_win_coherent_gain_q31(const int32_t *win, int n) {
+  int64_t sum = 0;
+  for (int i = 0; i < n; i++) {
+    sum += win[i];
+  }
+  return (float)((double)sum / (double)n / 2147483648.0);  // ÷2^31
 }
 
 #ifdef __cplusplus
