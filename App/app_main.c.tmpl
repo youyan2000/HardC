@@ -95,26 +95,53 @@ void board_init(void) {
   // --- 3b. Module 实例化 (指针注入: 绑定 Devices 到 Modules) ---
   // 每个 Module init 接收它需要的 Base* 指针, 存入 Module 内部
 
-  // 示例: 电机状态机 (持有 MotorBase* + 3个 PidBase*)
-  // mot_init(&g_root.mtr_a,
-  //          &g_root.drv_mtr_a.base,    // MotorBase*
-  //          &g_root.drv_vel_a.base,    // 速度环 PidBase*
-  //          &g_root.drv_pos_a.base,    // 位置环 PidBase*
-  //          &g_root.drv_csc_a.base,    // 级联 PidBase*
-  //          NULL);                      // 事件回调 (可选)
+  // 示例: 电机状态机 (持有 MotorBase* + PidBase* — mod_motor.h)
+  // motapp_init(&g_root.mtr_a,
+  //             &g_root.drv_mtr_a.base,    // MotorBase*
+  //             &g_root.drv_vel_a.base,    // 速度环 PidBase*
+  //             &g_root.drv_pos_a.base,    // 位置环 PidBase* (可选)
+  //             &g_root.drv_csc_a);         // 级联 PidCascade* (可选)
+  // motapp_init(&g_root.mtr_b, &g_root.drv_mtr_b.base,
+  //             &g_root.drv_vel_b.base, &g_root.drv_pos_b.base,
+  //             &g_root.drv_csc_b);
 
-  // 示例: 级联 post-bind — PID 需要读取电机当前速度
-  // pid_cascade_set_cv(&g_root.drv_csc_a, &g_root.mtr_a.cv);
+  // 示例: 转弯控制器 (持有 2个 MotApp* — mod_turn.h)
+  // turnctrl_init(&g_root.turn, &g_root.mtr_a, &g_root.mtr_b);
 
-  // 示例: 循迹状态机 (持有 2个 MotApp* + PidBase* + TurnCtrl*)
+  // 示例: 循迹状态机 (持有 MotApp*+ADC*+P2PD*+TurnCtrl* — mod_follower.h)
   // follower_init(&g_root.flw,
   //               &g_root.mtr_a, &g_root.mtr_b,
-  //               &g_root.drv_fpid.base,
-  //               &g_root.turn);
+  //               &g_root.drv_follower.base,   // AdcBase* (红外传感器)
+  //               &g_root.drv_fpid.base,        // PidBase* (P2PD)
+  //               &g_root.turn);                // TurnCtrl*
 
-  // 示例: HMI 模块 (持有 按键指针数组)
-  // ComKey *keys[] = {&g_root.drv_key1, &g_root.drv_key2, &g_root.drv_key3, &g_root.drv_key4};
-  // hmi_init(&g_root.hmi, keys, 4);
+  // 示例: HMI 模块 (持有 CmdDispatcher* — mod_hmi.h)
+  // hmi_init(&g_root.hmi, &g_root.cmd_dispatch);
+  // hmi_add_key(&g_root.hmi, 0, 1);  // KEY1, 初始释放
+  // hmi_add_key(&g_root.hmi, 1, 1);  // KEY2
+  // hmi_add_key(&g_root.hmi, 2, 1);  // KEY3
+  // hmi_add_key(&g_root.hmi, 3, 1);  // KEY4
+
+  // 示例: 步进电机 (BSP 注入 — motor_step.h)
+  // static BspStepDir step_pins_x[4] = {
+  //   {Step_MA_PORT, Step_MA_PIN}, {Step_MB_PORT, Step_MB_PIN},
+  //   {Step_MC_PORT, Step_MC_PIN}, {Step_MD_PORT, Step_MD_PIN}};
+  // static BspStepDir  step_dir_x = {Step_DIR_PORT, Step_DIR_PIN};
+  // static BspStepPul  step_pul_x = {TIMER_STEP_INST, 0};
+  // StepMotorCfg sm_cfg_x = {
+  //   .name = StepMotX, .phase_pins = step_pins_x,
+  //   .set_dir = bsp_step_dir_set, .dir_ctx = &step_dir_x,
+  //   .set_period = bsp_step_pul_set_period, .pul_ctx = &step_pul_x,
+  //   .set_enable = bsp_step_pul_enable,
+  //   .phase_tbl = &(StepPhaseTable)STEP_PHASE_TABLE_FULL_4,
+  //   .limit_lo = -6000, .limit_hi = 6000,
+  // };
+  // stepmotor_init(&g_root.step_x, &sm_cfg_x);
+
+  // 示例: 球板平衡 (步进电机+PID — mod_balance.h)
+  // bal_init(&g_root.bal, &g_root.step_x.base, &g_root.step_y.base,
+  //          &g_root.drv_bal_pid_x.base, &g_root.drv_bal_pid_y.base,
+  //          -6000, 6000, -200, 200);
 
   // --- 3c. 通用 Module (每个项目都需要) ---
 
@@ -158,28 +185,28 @@ void App_OnControlTick(void) {
   g_root.heartbeat++;   // ISR 心跳 (供 Heartbeat 看门狗检测死锁)
 
   // === 第1层: 传感器采样 ===
-  // ADC 数据处理
+  // ADC 数据处理 (红外循迹 + 电压/电流)
   // adc_process(&g_root.drv_follower.base);
-  // 陀螺仪角速度积分
+  // 陀螺仪角速度积分 (仅用于显示和盲跑, LESSONS #1)
   // mpu6050_yaw_integrate(&g_root.drv_mpu);
 
   // === 第2层: HMI + 命令分发 ===
-  // 按键扫描 + 按键→CarCmd→dispatch
+  // 按键扫描 + 去抖 + 按键→CarCmd→dispatch
   // hmi_tick(&g_root.hmi);
-  // hmi_dispatch(&g_root.hmi, &g_root.mtr_a, &g_root.mtr_b, &g_root.flw, &g_root.turn);
 
   // === 第3层: 控制算法 (状态机 tick) ===
-  // 循迹控制
+  // 电机 tick: 读编码器 → PID 计算 → 写 PWM
+  // motapp_tick(&g_root.mtr_a);
+  // motapp_tick(&g_root.mtr_b);
+  // 转弯控制 (可能覆盖电机的速度目标)
+  // turnctrl_tick(&g_root.turn);
+  // 循迹控制 (P2PD 差速修正, 覆盖电机速度目标)
   // follower_tick(&g_root.flw);
-  // 转弯控制 (可能覆盖循迹的电机输出)
-  // turn_tick(&g_root.turn);
-  // 功率控制
-  // mod_pwr_tick(&g_root.powerctrl, 0.01f);
+  // 步进电机脉冲 ISR (由定时器中断独立驱动, 不在此处)
+  // 球板平衡 (在主循环中由摄像头帧驱动, 不在此处)
 
-  // === 第4层: 执行器输出 (最后, 确保 PWM 值已稳定) ===
-  // 电机控制: 读编码器 → PID计算 → PWM更新
-  // mot_tim(&g_root.mtr_a);
-  // mot_tim(&g_root.mtr_b);
+  // === 第4层: 执行器输出 ===
+  // PWM 输出已在 motapp_tick 内部写入, 此处无需额外操作
 
   // === 第5层: 延迟标记 (ISR 中不执行, 标记后由 BackgroundTask 处理) ===
   // if (需要打印传感器数据)  DeferredAction_Set(&g_root.deferred, DEFER_LOG_SENSOR);

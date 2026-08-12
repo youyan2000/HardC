@@ -43,6 +43,12 @@
 #include "mod_cmd_dispatch.h"   // 统一命令分发
 #include "mod_serial_proto.h"   // 调试串口协议
 
+// --- Motor-OOP: 电机控制 Module ---
+#include "mod_motor.h"          // MotApp 电机状态机
+#include "mod_turn.h"           // TurnCtrl 转弯控制
+#include "mod_follower.h"       // Follower 循迹控制
+#include "mod_hmi.h"            // HMI 人机交互
+
 // --- PID-OOP: 控制器 ---
 #include "comp_pid.h"
 #include "pid_standard.h"
@@ -70,6 +76,12 @@
 // #include "comp_motor.h"
 // #include "motor_tim.h"
 
+// --- StepMotor (步进电机, 按需) ---
+// #include "comp_step_motor.h"
+// #include "motor_step.h"
+// #include "bsp_step_motor.h"
+// #include "mod_balance.h"     // 球板平衡
+
 // ======== 2. 项目配置结构体 (YAML 注入目标) ========
 // 这是 PURE DATA — 不包含运行时状态。YmaC 工具在 /* CONFIG BEGIN/END */ 之间注入。
 
@@ -95,6 +107,8 @@ typedef struct {
   // FollowerCfg follower;    // 循迹参数 (按需)
   // PowerCfg   power;         // 功率控制参数 (按需)
   // AdcCfg     adc;           // ADC 采样参数 (按需)
+  // StepMotorCfg step;         // 步进电机参数 (按需)
+  // BalCfg     bal;            // 球板平衡参数 (按需)
 } ProjectConfig;
 
 // 全局配置实例 — YmaC 注入到此变量的 CONFIG BEGIN/END 之间
@@ -121,10 +135,14 @@ typedef struct {
   // AdcFollower drv_follower;    // 红外循迹
 
   // --- Module 实例 (值包含) ---
-  // MotApp    mtr_a;             // 电机A 状态机 (持有 MotorBase* + PidBase*)
-  // Follower  flw;               // 循迹状态机 (持有 MotApp* + PidBase* + TurnCtrl*)
-  // TurnCtrl  turn;              // 转弯状态机 (持有 MotApp*)
-  // Hmi       hmi;               // 人机交互 (持有 ComKey*[] + 命令分发)
+  // MotApp    mtr_a;             // 电机A 状态机 (mod_motor.h)
+  // MotApp    mtr_b;             // 电机B 状态机
+  // Follower  flw;               // 循迹状态机 (mod_follower.h)
+  // TurnCtrl  turn;              // 转弯状态机 (mod_turn.h)
+  // Hmi       hmi;               // 人机交互 (mod_hmi.h)
+  // ModBalance bal;              // 球板平衡 (mod_balance.h, 按需)
+  // StepMotor step_x;            // X轴步进电机 (motor_step.h, 按需)
+  // StepMotor step_y;            // Y轴步进电机 (motor_step.h, 按需)
 
   // --- Module 实例 (通用, 每个项目都需要) ---
   ModComm          mod_comm;         // 帧协议解析
