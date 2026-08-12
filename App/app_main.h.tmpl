@@ -24,6 +24,8 @@
 
 // ======== 1. 引入所有子项目 ========
 // 每个子项目按需引入: Components (父类) → Devices (子类) → Module (业务)
+// 文件已按子系统归入子目录 (如 Components/comm/comp_comm.h), #include 仍按文件名引用,
+// 由 scaffold.py gen 生成的 include 路径解析; 各子系统的文件清单见对应 MANIFEST.yaml
 
 // --- 公共基础设施 ---
 #include "container_of.h"
@@ -33,7 +35,7 @@
 #include "comp_protection.h"
 
 // --- COM-OOP: 通信 ---
-#include "comp_communication.h"
+#include "comp_comm.h"
 #include "com_uart.h"
 #include "com_key.h"
 // #include "com_oled.h"      // 按需取消注释
@@ -56,10 +58,13 @@
 #include "pid_cascade.h"
 #include "pid_parallel.h"       // 可选
 
-// --- PWM-OOP: 电力电子 ---
-// #include "comp_pwm.h"        // 按需取消注释
-// #include "pwm_buckboost.h"
-// #include "mod_powerctrl.h"
+// --- Power-OOP: 电源控制 (PowerStage 集成模块示例: Buck 降压) ---
+#include "comp_power_stage.h"   // PowerStage 父类接口 (ops 虚表 + 状态机)
+#include "comp_pi_reg4.h"       // PiReg4 四态 PI (双环值包含)
+#include "pwm_buckboost.h"      // PwmBuckBoost — 单路 Buck/Boost PWM
+#include "adc_dc_sampler.h"     // AdcDcSampler — 直流采样器
+#include "mod_buck.h"           // ModBuck — Buck 降压控制模块
+// #include "mod_powerctrl.h"   // 状态机模板 (按需)
 
 // --- ADC-OOP: 采样 ---
 // #include "comp_adc.h"
@@ -100,12 +105,17 @@ typedef struct {
   float  csc_vlimit;     // 级联 PID 内环限幅 (vlimit=20 刚好, LESSONS.md #13)
 } MotorCfg;
 
+// 示例: 电源参数组 (Buck 降压 — PowerStage 集成模块)
+// PowerCfg 直接 typedef 自 ModBuckCfg, 保证与模块运行配置零漂移,
+// 可注入字段 = ModBuckCfg 全部字段 (含 0xFB 槽位 0-9 与非槽位通道/限幅)
+typedef ModBuckCfg PowerCfg;
+
 // 项目总配置 — 聚合所有子系统的可调参数
 typedef struct {
   MotorCfg mot_a;
   MotorCfg mot_b;
   // FollowerCfg follower;    // 循迹参数 (按需)
-  // PowerCfg   power;         // 功率控制参数 (按需)
+  PowerCfg   power;           // 电源: Buck 降压 (PowerStage 演示)
   // AdcCfg     adc;           // ADC 采样参数 (按需)
   // StepMotorCfg step;         // 步进电机参数 (按需)
   // BalCfg     bal;            // 球板平衡参数 (按需)
@@ -148,6 +158,13 @@ typedef struct {
   ModComm          mod_comm;         // 帧协议解析
   CmdDispatcher    cmd_dispatch;     // 命令分发器
   SerialProto      serial_proto;     // 串口协议
+
+  // --- Power-OOP: 电力电子设备 (Buck 演示) ---
+  PwmBuckBoost  drv_buck_pwm;   // Buck 降压 PWM 设备 (pwm_buckboost.h)
+  AdcDcSampler  drv_dc_adc;     // 直流采样器 (adc_dc_sampler.h, vout/iout/vin)
+
+  // --- Power-OOP: 电源控制 Module (PowerStage 集成模式示例) ---
+  ModBuck       buck;           // Buck 降压控制 (mod_buck.h)
 
   // --- 诊断 ---
   volatile uint32_t heartbeat;       // ISR 心跳计数 (快通道++)
