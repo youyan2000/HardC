@@ -1,0 +1,14 @@
+id: module/comm
+layer: Module
+description: 通信业务模块 — Comm 帧协议 / CmdDispatch 命令分发 / SerialProto 串口协议 / PMBus 协议栈
+files:
+  - mod_comm.h
+  - mod_comm.c
+  - mod_cmd_dispatch.h
+  - mod_cmd_dispatch.c
+  - mod_serial_proto.h
+  - mod_serial_proto.c
+  - mod_pmbus.h
+  - mod_pmbus.c
+depends:
+  - components/comm

@@ -1,0 +1,8 @@
+id: module/hmi
+layer: Module
+description: HMI 业务模块 — 按键去抖 + OLED 菜单 + 命令分发
+files:
+  - mod_hmi.h
+  - mod_hmi.c
+depends:
+  - module/comm

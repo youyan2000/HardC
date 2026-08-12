@@ -1,0 +1,18 @@
+id: module/motor
+layer: Module
+description: 电机业务模块 — MotApp 状态机 / TurnCtrl 转弯 / Follower 循迹 / FCL 快速电流环
+files:
+  - mod_motor.h
+  - mod_motor.c
+  - mod_turn.h
+  - mod_turn.c
+  - mod_follower.h
+  - mod_follower.c
+  - mod_fcl_ctrl.h
+  - mod_fcl_ctrl.c
+depends:
+  - components/motor
+  - components/pid
+  - components/adc
+  - components/math
+  - devices/pid/pid_cascade.h
