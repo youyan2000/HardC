@@ -190,6 +190,8 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_aci_se.h` | `AciSeConst`, `AciSe` | ACI 转差法转速估计 — 磁链角微分 + 转差计算 (与 comp_aci_fe 配对) |
 | `comp_mod6.h` | `Mod6Cnt` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
 | `comp_impulse.h` | `Impulse` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
+| `comp_sogi_fll.h` | `SogiFll`, `SogiFllOsgCoeff`, `SogiFllLpfCoeff` | SOGI 锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移 |
+| `comp_power_meas.h` | `PowerMeas`, `EnergyAccu` | 电力测量 — Vrms/Irms/P/Q/S/PF/相位角 + 能量脉冲积分 (残余结转) |
 | `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
 | `comp_math.h/c` | — | 数学工具 — 限幅/绝对值/死区/线性映射/校验和/hw sqrt |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
@@ -837,6 +839,40 @@ BLDC 六步换相: 触发有效时换相步 0→1→...→5→0 循环 (电角�
 - `mod6_tick(me, trig)` — 触发沿调用, 返回当前换相步 0~5 (可索引六步换相电压矢量表)
 
 **依赖:** `<stdint.h>`
+
+#### comp_sogi_fll.h — SOGI 锁相环 FLL 变体 (频率锁定环)
+
+> **来源:** TI C2000Ware Digital Power SDK libraries/spll/include/spll_1ph_sogi_fll.h
+> **新增日期:** 2026-08-12
+
+与 comp_pll.h 的 SogiPll (SOGI-PLL, 固定标称频率) 的区别: 增加频率锁定环 (FLL), 用正交输出误差 `ef2 = −(u−u_α)·u_β·γ·dt` 驱动频率积分器 `x3`, `w_dash = wc + x3` 实时跟踪电网频率漂移, 并每拍用自适应频率重算 SOGI 双线性系数. 适用于弱电网/频率漂移场景 (柴油发电机、微电网、变速发电机接口).
+
+**关键 API (static inline):**
+- `sogi_fll_init(me, grid_freq_hz, isr_freq_hz, lpf_b0, lpf_b1, k, gamma)` — 配置 (k=SOGI 阻尼典型 √2, γ=FLL 收敛增益)
+- `sogi_fll_run(me, ac_value)` — 每采样周期调用, 输出 theta/cosine/sine/fo (锁相角/正交量/估计频率 Hz)
+- `sogi_fll_reset(me)` — 复位状态, 保留自适应频率 w_dash
+- `sogi_fll_coeff_calc(me)` — 初始化用系数计算 (清零 FLL 积分器); run() 内部走 `coeff_recalc` 不清零
+
+**依赖:** `<math.h>`
+
+#### comp_power_meas.h — 电力测量 (真有效值/功率/能量积分)
+
+> **来源:** TI C2000Ware Digital Power SDK
+>   power_measurement/include/power_meas_sine_analyzer.h +
+>   energy-metrology_library/energy_metrology_f28p55 (metrology_background/calculations)
+> **新增日期:** 2026-08-12
+
+单相功率计量核心: 逐采样累加 v²/i²/(v·i)/(v_quad·i), 无功经电压历史环形缓冲延迟 1/4 周期 + 插值得 90° 正交电压; 每窗口结算 Vrms/Irms/P/Q/S/PF/相位角. 能量积分按阈值脉冲输出 (模拟表计 LED/刻度盘), 残余结转防精度丢失, 导入/导出分离. DC 去除用一阶高通 y+=(x−y)/16384 消除 ADC 直流偏置.
+
+**关键 API (static inline):**
+- `power_meas_init(me, sample_rate, threshold, window_n)` — window_n = 一周期采样数 (quad_delay 自动 = N/4)
+- `power_meas_sample(me, v, i)` — ISR 逐采样累加 (含过零测频)
+- `power_meas_update(me)` — 每 N 采样结算一次 Vrms/Irms/P/Q/S/PF/φ 并清累加器
+- `power_meas_dc_filter(state, x)` — 一阶 DC 去除
+- `energy_accu_init(me, threshold_wh)` — 脉冲阈值 (如 0.1 Wh)
+- `energy_accu_integrate(me, power_w, dt_s)` — 每窗口调用, 返回本次脉冲数
+
+**依赖:** `<math.h>`, `<stdint.h>`
 
 #### comp_sgen.h — 信号发生器库 (7 种发生器)
 
