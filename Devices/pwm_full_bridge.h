@@ -25,7 +25,15 @@
 #include "comp_pwm.h"
 #include "bsp_pwm.h"
 
-// ======== 子类结构体 —— base 必须是第一个成员 ========
+// 来源: TI controlSUITE PWMDRV_PSFB
+// PSFB ZVS 状态
+typedef enum {
+  PsfbZvsState_Unknown,
+  PsfbZvsState_Achieved,   // 四管均实现 ZVS
+  PsfbZvsState_LeadingLost,// 超前腿 ZVS 丢失 (轻载 — 能量不足)
+  PsfbZvsState_LaggingLost,// 滞后腿 ZVS 丢失 (重载 — di/dt 过大)
+  PsfbZvsState_AllLost,    // 两腿均丢失 ZVS
+} PsfbZvsState;
 typedef struct {
   PwmBase  base;               // 基类 (必须为第一个成员)
 
@@ -45,6 +53,15 @@ typedef struct {
 
   // 工作模式
   bool     center_aligned;     // true=中心对齐
+
+  // === PSFB ZVS 自适应 (控制层访问, 来源: TI controlSUITE PWMDRV_PSFB) ===
+  bool  zvs_adaptive_enable;   // 使能 ZVS 自适应死区
+  float zvs_min_deadtime_ns;   // 最小死区 (ns)
+  float zvs_max_deadtime_ns;   // 最大死区 (ns)
+  float zvs_current_threshold; // 进入 ZVS 的负载电流阈值 (A)
+  float duty_loss_comp;        // 占空比丢失补偿系数 (pu, 典型 0.02~0.08)
+  PsfbZvsState zvs_state;     // 当前 ZVS 状态 (ISR 更新)
+  float zvs_margin_pu;         // ZVS 裕量 (0~1, 1=裕量充足, 0=完全丢失)
 } PwmFullBridge;
 
 // ======== 构造 ========
@@ -76,5 +93,32 @@ void pwm_fb_set_freq(PwmFullBridge *me, uint32_t freq_hz);
 
 // 设置死区
 void pwm_fb_set_deadtime(PwmFullBridge *me, uint32_t deadtime_ns);
+
+// 配置 ZVS 自适应死区
+void pwm_fb_set_zvs_adaptive(PwmFullBridge *me, bool enable,
+                              float min_ns, float max_ns, float i_threshold_a);
+
+// 设置占空比丢失补偿
+void pwm_fb_set_duty_loss_comp(PwmFullBridge *me, float comp);
+
+// ISR 调用: 根据负载电流自适应调整死区
+// i_load: 当前负载电流 (A) — 绝对值
+// 返回: 本周期应使用的死区 (ns)
+float pwm_fb_adaptive_deadtime(PwmFullBridge *me, float i_load);
+
+// ISR 调用: ZVS 裕量估计 — 检查超前腿和滞后腿的 ZVS 状态
+// i_leading:  超前腿电流 (A, 开关时刻)
+// i_lagging:  滞后腿电流 (A, 开关时刻)
+// vds_sample: Vds 采样值 (V, 开通前瞬间)
+// 返回: ZVS 状态
+PsfbZvsState pwm_fb_zvs_margin_update(PwmFullBridge *me,
+                                       float i_leading, float i_lagging,
+                                       float vds_sample);
+
+// 占空比丢失补偿 — 根据负载电流修正实际占空比
+// duty_target: 目标有效占空比 (补偿前)
+// i_load:      负载电流 (A)
+// 返回: 补偿后的占空比 (已 clamp 到 duty_min/duty_max)
+float pwm_fb_duty_loss_compensate(PwmFullBridge *me, float duty_target, float i_load);
 
 #endif

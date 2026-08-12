@@ -34,14 +34,6 @@ static inline float clamp_phase(float deg) {
   return deg;
 }
 
-// B腿相位偏移量 (计数值): phase_counts = period * (phase_deg / 360)
-// 实际: B腿 CMP2 = period/2 + period * (phase_deg / 360)
-// 当 phase=0:   CMP2=period/2, B腿与 A腿同相
-// 当 phase=180: CMP2=period, B腿完全反相
-static inline uint32_t calc_phase_cmp2(uint32_t period, float phase_deg) {
-  return (uint32_t)(period / 2 + period * (phase_deg / 360.0f));
-}
-
 // ======== ops 实现 ========
 
 static void fb_start(PwmBase *base) {
@@ -110,6 +102,7 @@ static void fb_set_duty(PwmBase *base, uint8_t ch, float duty) {
 
 static void fb_set_freq(PwmBase *base, uint32_t freq_hz) {
   PwmFullBridge *me = container_of(base, PwmFullBridge, base);
+  if (freq_hz == 0) return;  // 防除零
   me->period = me->bsp_cfg.clk_hz / freq_hz;
 
   // 两腿同频
@@ -120,10 +113,8 @@ static void fb_set_freq(PwmBase *base, uint32_t freq_hz) {
   fb_set_duty(base, 0, me->duty_a);
   fb_set_duty(base, 1, me->duty_b);
 
-  // 重算移相
-  uint32_t phase_cmp2 = calc_phase_cmp2(me->period, me->phase_deg);
-  // BSP: 通过更新 B腿 CMP2 实现移相调整
-  // (具体实现由 BSP 将 CMP2 写入对应硬件寄存器)
+  // 重算移相 — period 变了, B腿 CMP2 相位偏移需同步更新
+  bsp_set_phase_shift(me->bsp_cfg.handle, me->timer_b, me->phase_deg);
 }
 
 static void fb_set_deadtime(PwmBase *base, uint32_t deadtime_ns) {
@@ -142,8 +133,7 @@ static void fb_set_phase(PwmBase *base, uint8_t ch, float phase_deg) {
   me->phase_deg = clamp_phase(phase_deg);
 
   // 移相通过调整 B腿的 CMP2 (相位参考/复位触发源) 实现
-  uint32_t phase_cmp2 = calc_phase_cmp2(me->period, me->phase_deg);
-  // BSP: bsp_set_phase_shift 内部写 B腿 CMP2 寄存器
+  // BSP: bsp_set_phase_shift 内部计算 CMP2 偏移并写硬件寄存器
   bsp_set_phase_shift(me->bsp_cfg.handle, me->timer_b, me->phase_deg);
 }
 
@@ -187,6 +177,15 @@ void pwm_fb_init(PwmFullBridge *me, uint32_t freq_hz, uint32_t deadtime_ns,
   me->period       = 0;
   me->center_aligned = true;
 
+  // PSFB ZVS 自适应默认值
+  me->zvs_adaptive_enable   = false;
+  me->zvs_min_deadtime_ns   = 100.0f;   // 最小死区 100ns
+  me->zvs_max_deadtime_ns   = 500.0f;   // 最大死区 500ns
+  me->zvs_current_threshold = 1.0f;     // 1A 阈值
+  me->duty_loss_comp        = 0.0f;     // 无补偿
+  me->zvs_state             = PsfbZvsState_Unknown;
+  me->zvs_margin_pu         = 1.0f;     // 初始裕量充足
+
   me->base.mode     = PwmMode_FullBridge;
   me->base.num_ch   = 2;               // A腿 + B腿 = 2 个可独立控制通道
   me->base.duty_min = 0.0f;
@@ -225,4 +224,131 @@ void pwm_fb_set_freq(PwmFullBridge *me, uint32_t freq_hz) {
 
 void pwm_fb_set_deadtime(PwmFullBridge *me, uint32_t deadtime_ns) {
   pwm_set_deadtime(&me->base, deadtime_ns);
+}
+
+// ======== PSFB ZVS 自适应 (来源: TI controlSUITE PWMDRV_PSFB) ========
+
+void pwm_fb_set_zvs_adaptive(PwmFullBridge *me, bool enable,
+                              float min_ns, float max_ns, float i_threshold_a) {
+  me->zvs_adaptive_enable = enable;
+  me->zvs_min_deadtime_ns = min_ns;
+  me->zvs_max_deadtime_ns = max_ns;
+  me->zvs_current_threshold = i_threshold_a;
+}
+
+void pwm_fb_set_duty_loss_comp(PwmFullBridge *me, float comp) {
+  if (comp < 0.0f) comp = 0.0f;
+  if (comp > 0.2f) comp = 0.2f;
+  me->duty_loss_comp = comp;
+}
+
+// 自适应死区: 轻载→长死区(确保 ZVS), 重载→短死区(降导通损耗)
+float pwm_fb_adaptive_deadtime(PwmFullBridge *me, float i_load) {
+  if (!me->zvs_adaptive_enable) {
+    return me->zvs_max_deadtime_ns;  // 禁用→最大死区 (安全侧, 防直通)
+  }
+
+  float i_abs = (i_load < 0.0f) ? -i_load : i_load;
+
+  // 结合 ZVS 裕量: 裕量越低, 死区越偏 max
+  //   dt = dt_basic + (1 - zvs_margin) * (max - min) * 0.5
+  float dt_basic;
+  if (i_abs >= me->zvs_current_threshold) {
+    dt_basic = me->zvs_min_deadtime_ns;
+  } else if (i_abs <= 0.0f) {
+    dt_basic = me->zvs_max_deadtime_ns;
+  } else {
+    float ratio = i_abs / me->zvs_current_threshold;
+    dt_basic = me->zvs_max_deadtime_ns - ratio * (me->zvs_max_deadtime_ns - me->zvs_min_deadtime_ns);
+  }
+
+  // ZVS 裕量修正: 裕量不足时加长死区
+  float margin_corr = (1.0f - me->zvs_margin_pu) * (me->zvs_max_deadtime_ns - me->zvs_min_deadtime_ns) * 0.5f;
+  float dt_final = dt_basic + margin_corr;
+
+  // 硬件限幅
+  if (dt_final < me->zvs_min_deadtime_ns) dt_final = me->zvs_min_deadtime_ns;
+  if (dt_final > me->zvs_max_deadtime_ns) dt_final = me->zvs_max_deadtime_ns;
+
+  return dt_final;
+}
+
+// ======== PSFB ZVS 裕量估计 (来源: TI controlSUITE PWMDRV_PSFB) ========
+//
+// PSFB ZVS 条件:
+//   超前腿 ZVS: 输出滤波电感能量 (大) → 全负载范围易实现 ZVS
+//   滞后腿 ZVS: 谐振电感能量 (小) → 轻载时 ZVS 丢失
+//
+// 判断逻辑:
+//   超前腿: i_leading > I_ZVS_min → ZVS OK, 否则丢失
+//   滞后腿: i_lagging > I_ZVS_min → ZVS OK, 否则丢失
+//   I_ZVS_min = sqrt(Coss * Vbus^2 / L_resonant) (典型 ~0.5A)
+PsfbZvsState pwm_fb_zvs_margin_update(PwmFullBridge *me,
+                                       float i_leading, float i_lagging,
+                                       float vds_sample) {
+  // 最小 ZVS 电流 (粗略估计, 典型值 0.3~0.8A)
+  float i_zvs_min = me->zvs_current_threshold * 0.5f;
+
+  // 电流幅值判断
+  float i_lead_abs = (i_leading < 0.0f) ? -i_leading : i_leading;
+  float i_lag_abs  = (i_lagging < 0.0f) ? -i_lagging : i_lagging;
+
+  bool lead_zvs = (i_lead_abs > i_zvs_min);
+  bool lag_zvs  = (i_lag_abs > i_zvs_min);
+
+  // Vds 硬开关检测 (硬件比较器/ADC)
+  bool vds_ok = (vds_sample < 10.0f);  // Vds < 10V → ZVS 实现
+
+  if (lead_zvs && lag_zvs && vds_ok) {
+    me->zvs_state = PsfbZvsState_Achieved;
+    me->zvs_margin_pu = 1.0f;
+  } else if (!lead_zvs && !lag_zvs) {
+    me->zvs_state = PsfbZvsState_AllLost;
+    me->zvs_margin_pu = 0.0f;
+  } else if (!lead_zvs) {
+    me->zvs_state = PsfbZvsState_LeadingLost;
+    // 超前腿丢失: 大多数情况不会发生 (输出电感能量大)
+    me->zvs_margin_pu = 0.2f;
+  } else {
+    me->zvs_state = PsfbZvsState_LaggingLost;
+    // 滞后腿丢失: 轻载时典型问题
+    // 裕量 = 电流相对于 ZVS 最小电流的比例
+    float margin = i_lag_abs / i_zvs_min;
+    if (margin > 1.0f) margin = 1.0f;
+    me->zvs_margin_pu = margin * 0.8f;  // 上限 0.8 (滞后腿天然裕量较低)
+  }
+
+  return me->zvs_state;
+}
+
+// ======== 占空比丢失补偿 (来源: TI controlSUITE PWMDRV_PSFB) ========
+//
+// 原因: 谐振电感 + 变压器漏感导致 di/dt 有限,
+//       在电流换向期间有效占空比丢失
+//
+//   D_eff = D_cmd - D_loss
+//   D_loss ≈ (2 * L_res * I_load * Fsw) / (n * V_in)
+//          = duty_loss_comp * I_load  (简化线性模型)
+//
+// 补偿: D_cmd = D_target + D_loss
+//   使有效占空比达到目标值
+float pwm_fb_duty_loss_compensate(PwmFullBridge *me, float duty_target, float i_load) {
+  if (me->duty_loss_comp <= 0.0f) {
+    return duty_target;  // 补偿未配置, 直通
+  }
+
+  // 占空比丢失 = comp * I_load (线性模型)
+  float i_abs = (i_load < 0.0f) ? -i_load : i_load;
+  float d_loss = me->duty_loss_comp * i_abs;
+
+  // 补偿后的命令占空比
+  float d_cmd = duty_target + d_loss;
+
+  // 硬件限幅 (含补偿后, 不能超过物理最大值)
+  float d_max = me->base.duty_max - d_loss;  // 确保补偿后不超过 duty_max
+  if (d_max < me->base.duty_min) d_max = me->base.duty_min;
+  if (d_cmd > me->base.duty_max) d_cmd = me->base.duty_max;
+  if (d_cmd < me->base.duty_min) d_cmd = me->base.duty_min;
+
+  return d_cmd;
 }
