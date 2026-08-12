@@ -1,4 +1,4 @@
-# C-OOP — 嵌入式 C 面向对象硬件驱动框架
+# C-OOP — 嵌入式 C 面向对象的电力电子/电机控制硬件驱动框架
 
 > 纯 C99 OOP | 五层扁平架构 | 多平台 (STM32 + C2000) | 文件前缀区分域
 
@@ -27,6 +27,7 @@ BSP/ → Components/ → Devices/ → Module/ → App/
 | GPO | `comp_gpo` | `gpo_led`, `gpo_laser`, `gpo_beep`, `gpo_buzzer`, `gpo_fan` | — |
 | PID | `comp_pid` | `pid_standard`, `pid_cascade`, `pid_p2pd`, `pid_parallel`, `pid_pr`, `pid_qpr`, `pid_dcl`, `pid_grando`, `pid_solar` | — |
 | PWM | `comp_pwm` | `pwm_buckboost`, `pwm_half_bridge`, `pwm_full_bridge`, `pwm_interleaved`, `pwm_resonant`, `pwm_sepic`, `pwm_svpwm` | `mod_powerctrl` |
+| Power | `comp_power_stage` | — | `mod_buck`（PowerStage 示例，YmaC 拓扑选择器入口） |
 | Motor | `comp_motor`, `comp_step_motor` | `motor_tim`, `motor_step` | `mod_motor`, `mod_turn`, `mod_follower`, `mod_balance`, `mod_fcl_ctrl` |
 | VCU | `comp_complex`, `comp_crc`, `comp_viterbi`, `comp_interleaver`, `comp_rs` | — | `mod_pmbus` |
 | DSP | `comp_esmo`, `comp_hfi`, `comp_smo`, `comp_dlog`, `comp_vector`, `comp_pi_reg4`, `comp_bldc_instaspin` | — | `mod_sfra` |
@@ -35,18 +36,30 @@ BSP/ → Components/ → Devices/ → Module/ → App/
 
 ## 快速开始
 
+> 完整 GUI 走查见 [YmaC/README.md](YmaC/README.md) §3「验收走查」。
+
+**选拓扑 → 生成工程 → 调参 → 注入 → 编译**（新项目的唯一入口）：
+
 ```bash
-# 1. 选择或创建拓扑配置
-cp Config/topologies/supercap_3ph.yaml Config/params/my_config.yaml
+# 1. 启动 YmaC 拓扑选择器（GUI，项目根目录）
+python YmaC\yaml_config_builder.py          # Windows
+python YmaC/yaml_config_builder.py          # Linux
 
-# 2. YAML → C 注入
-python YmaC/yaml_config_builder.py --cli my_config
+# 2. 在 Tab2「拓扑选择」：选拓扑（buck 是唯一 ready）→ 填工程名/MCU
+#    → 生成工程（Config/projects/<name>.yaml + build/gen/<name>/）
+#    → 参数表编辑 → 写入参数（Config/params/<name>_<variant>.yaml）
+#    → 注入 App（物化 build/gen/<name>/app_main.c）→ 编译
 
-# 3. 编译
+# 3. 或纯 CLI：从工程 YAML 生成骨架（无 GUI 环境）
+python YmaC/scaffold.py gen Config/projects/<name>.yaml
+
+# 4. 手动编译（注入 App 后）
 mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/starm-clang.cmake
 make -j$(nproc)
 ```
+
+选完拓扑后只剩两件事：在 App 层接外部 I/O（采样输入 / PWM 输出 / HMI），然后用 YmaC 调参（离线 Tab1 注入 + 运行时 Tab3 0xFB 串口帧）。
 
 ## 复用
 
@@ -57,9 +70,10 @@ make -j$(nproc)
 
 | 文档 | 内容 |
 |------|------|
-| [CLAUDE.md](CLAUDE.md) | 项目入口：Git 约定、代码生成规则、App 架构 |
-| [agent.md](agent.md) | OOP 方法论：虚函数表、继承/多态、6 子系统参考 |
-| [LESSONS.md](LESSONS.md) | 44 条调参教训 |
-| [HISTORY.md](HISTORY.md) | 项目完整历程 |
-| [ROADMAP.md](ROADMAP.md) | 多拓扑构建系统路线图 |
-| [docs/](docs/) | 参考项目学习报告 |
+| [CLAUDE.md](CLAUDE.md) | 共同约定：Git 约定、代码生成规则、App 架构（人与 AI 共读） |
+| [agent.md](agent.md) | AI 行为准则 + OOP 方法论：虚函数表、继承/多态、6 子系统参考 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 52 条调参教训 |
+| [docs/debug/HISTORY.md](docs/debug/HISTORY.md) | 项目完整历程 |
+| [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
+| [docs/learning/](docs/learning/) | 学习总结资料（外部项目学习报告 + 架构原则） |
+| [docs/debug/](docs/debug/) | 记录和计划（历史、教训、路线图、设计文档） |

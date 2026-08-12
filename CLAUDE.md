@@ -4,28 +4,38 @@
 
 ## 项目概述
 
-纯 C 语言实现的面向对象嵌入式硬件驱动框架。5 层扁平目录：BSP → Components → Devices → Module → App。文件前缀区分子系统域（ADC/COM/GPO/PID/PWM/Motor）。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
+纯 C 语言实现的面向对象嵌入式硬件驱动框架。5 层目录：BSP → Components → Devices → Module → App，**文件按子系统归入子目录隔离**，每层子目录含 `MANIFEST.yaml` 自描述。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C。
 
 **目录结构：**
 ```
 C-OOP/
-├── BSP/           # L1: 不透明句柄 → 平台抽象
-├── Components/    # L2: comp_*.h/c → 父类 + ops 虚表（前缀=域）
-├── Devices/       # L3: <域>_<子类>.h/c → 具体硬件实现
-├── Module/        # L4: mod_*.h/c → 业务逻辑模块
-├── App/           # L5: 应用入口模板 + PID 调参协议
-├── Config/        # YAML 配置（拓扑 + 参数变体）
-├── YmaC/          # YAML→C 注入工具
-├── docs/          # 学习报告 & 架构文档
-└── cmake/         # 工具链文件
+├── BSP/             # L1: 不透明句柄 → 平台抽象
+├── Components/      # L2: comp_*.h/c → 父类 + ops 虚表
+│   ├── adc/ comm/ gpo/ pid/ pwm/          # 父类域
+│   ├── dsp/ motor/ power/ math/ codec/ sensor/
+│   └── (每子目录含 MANIFEST.yaml 自描述)
+├── Devices/         # L3: <域>_<子类>.h/c → 具体硬件实现
+│   ├── adc/ comm/ gpo/ pid/ pwm/
+│   └── motor/ sensor/
+├── Module/          # L4: mod_*.h/c → 业务逻辑模块
+│   ├── motor/ power/ comm/ hmi/
+├── App/             # L5: 应用入口模板 + PID 调参协议
+├── Config/          # YAML 配置（topologies 拓扑目录 + projects 工程 + params 参数变体）
+├── YmaC/            # yaml_config_builder.py (GUI 配置注入) + scaffold.py (CLI 骨架生成)
+├── docs/
+│   ├── learning/    # 学习总结资料（外部项目学习报告 + 架构原则）
+│   └── debug/       # 记录和计划（HISTORY/LESSONS/ROADMAP + 设计文档）
+└── cmake/           # 工具链文件
 ```
+> 目录分组表、MANIFEST schema、scaffold 工具规范见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第一节。
 
 **核心文档：**
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
-| [LESSONS.md](LESSONS.md) | 调参教训库 (44 条 + 经验模板), git 版本管理, 禁止回退 |
-| [ROADMAP.md](ROADMAP.md) | 多拓扑构建系统路线图 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (52 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
+| [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) | 目录分组、MANIFEST 自描述、scaffold 骨架生成工具设计 |
 
 **App 模板：**
 | 文件 | 用途 |
@@ -122,7 +132,7 @@ Config: 新增 default.yaml 配置模板
 find . -name '*.h' -o -name '*.c' | xargs clang-format -i
 
 # 静态分析
-clang-tidy Components/comp_pid.h -- -I BSP -I Components -I Devices
+clang-tidy Components/pid/comp_pid.h -- -I BSP -I Components -I Devices
 ```
 
 ### 人类协作者的 Git 工作流
@@ -142,7 +152,7 @@ git branch -d feature/my-new-device
 
 ### 子系统独立性
 
-所有子系统通过文件前缀区分（ADC/COM/GPO/PID/PWM/Motor），全部在 `Components/` + `Devices/` + `Module/` 扁平存放。修改子系统内部文件时，确认 [agent.md](agent.md) 中对应的 §8 子系统参考不需要同步更新。如果改了 API、增加了子类、或修改了 ops 虚表签名，**必须同步更新文档**。
+所有子系统通过文件前缀区分（ADC/COM/GPO/PID/PWM/Motor），**文件按子系统归入 `Components/<域>/` + `Devices/<域>/` + `Module/<域>/` 子目录**，每个子目录含 `MANIFEST.yaml` 自描述（依赖声明）。修改子系统内部文件时，确认 [agent.md](agent.md) 中对应的 §8 子系统参考不需要同步更新。如果改了 API、增加了子类、修改了 ops 虚表签名，**必须同步更新文档**，并检查该子系统的 `MANIFEST.yaml` 依赖是否需要增删。
 
 ## App 层开发规则
 
@@ -160,13 +170,15 @@ git branch -d feature/my-new-device
 ## YmaC 配置注入
 
 ```bash
-# GUI 模式
+# GUI 模式（含拓扑选择器）
 cd <项目根目录>
 python YmaC/yaml_config_builder.py
 
 # CLI 模式
 python YmaC/yaml_config_builder.py --cli default
 ```
+
+**拓扑选择器（GUI Tab2）：** 扫 `Config/topologies/<topo>.yaml` 拓扑目录（buck/boost/forward/flyback/buckboost/sepic/cuk/zeta/buck2/vsi_3ph，`status: ready` 才可生成）→ 选拓扑 → 填工程名/MCU → 合成 `Config/projects/<name>.yaml` 并调 scaffold 生成 `build/gen/<name>/` → 参数表编辑（schema 来自拓扑 `params:`）→ 写 `Config/params/<name>_<variant>.yaml` → 注入物化 `app_main.c` → 编译。运行时调参（Tab3）走 0xFB 帧（`pip install pyserial`），槽位与离线 `params.slot` 同源。详见 [YmaC/README.md](YmaC/README.md)。
 
 **工作流:**
 1. 在 `app_main.c` 的 `/* CONFIG BEGIN */` / `/* CONFIG END */` 之间手写默认值
@@ -175,6 +187,26 @@ python YmaC/yaml_config_builder.py --cli default
 4. `apply_config()` 将注入的 POD 值同步到运行时 Instance
 
 **YAML→C 类型映射:** 全大写字符串→C标识符, float→`.10f`, dict→designated initializer, list→C数组。
+
+## 工程骨架生成 (scaffold.py)
+
+> **新项目从 `Config/projects/<project>.yaml` 起步。** 声明式列出需要的子系统，工具自动解析依赖、生成构建文件与 App 骨架。规范见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第二节。
+
+```bash
+# 校验全部 MANIFEST.yaml（结构 + 依赖合法性）
+python YmaC/scaffold.py scan
+
+# 查看某子系统传递闭包依赖（拓扑排序 BSP→…→App）
+python YmaC/scaffold.py deps components/pwm
+
+# 从工程配置生成骨架 → build/gen/<project>/
+python YmaC/scaffold.py gen Config/projects/<project>.yaml
+```
+
+**生成产物**（`build/gen/<project>/`）:
+- `CMakeLists.txt` — 传递闭包内全部 .c 源文件 + 各层 include 路径（扁平 `#include` 无需改动）
+- `<project>_deps.h` — 按层分组的依赖头文件清单
+- `board_init_stub.c` — 每模块 `// TODO: <文件> 在此实例化` 占位，App 层填入真实初始化
 
 ## 构建
 
@@ -188,7 +220,7 @@ make -j$(nproc)
 ## BSP 硬件加速抽象层
 
 > **Components 层禁止直接 include 平台加速库。** 所有硬件加速 (DSP/PWM/ADC) 通过 `BSP/` 层的不透明句柄接口分发。
-> 详见 [LESSONS.md](LESSONS.md) #17 和 [agent.md](agent.md) §3.5.
+> 详见 [docs/debug/LESSONS.md](docs/debug/LESSONS.md) #17 和 [agent.md](agent.md) §3.5.
 
 | 文件 | 内容 |
 |------|------|
@@ -200,23 +232,25 @@ make -j$(nproc)
 
 ## 复用方式
 
-1. **直接拷贝需要的 Component + Device + Module 文件** 到目标工程
+1. **直接拷贝需要的子系统目录**（`Components/<域>/` + `Devices/<域>/` + `Module/<域>/`，连同 `MANIFEST.yaml`）到目标工程，或用 `scaffold.py gen` 从 `project.yaml` 生成骨架
 2. **基于父类继承新子类** — 遵循 agent.md 中的黄金法则（父类为第一成员、container_of 下溯、构造器绑定 ops）
 
 ## 子系统速查
+
+> **每个域一个子目录**：`Components/<域>/`（父类）+ `Devices/<域>/`（子类）+ `Module/<域>/`（业务逻辑）。各目录文件清单与依赖见其 `MANIFEST.yaml`。
 
 | 域 | Component | Devices 子类数 | 句柄头文件 |
 |----|-----------|--------------|-----------|
 | ADC | `comp_adc.h/c` | 3 (Follower/DC/AC Sampler) | `adcs.h` |
 | COM | `comp_comm.h/c` | 9 (UART/SPI/I2C/CAN/Key/MPU6050/OLED/Ultrasonic/Encoder) | `comms.h` |
 | GPO | `comp_gpo.h/c` | 5 (LED/Laser/Beep/Buzzer/Fan) | `gpos.h` |
-| PID | `comp_pid.h/c` + `comp_pi_reg4.h` (四态PI) | 9 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar) | `pids.h` |
+| PID | `comp_pid.h/c` + `comp_pi_reg4.h` (四态PI) + `comp_pid_reg3.h` (三态PID) | 9 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar) | `pids.h` |
 | PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 6 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM) | `pwms.h` |
-| Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) | 1 (TIM) | — |
+| Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) | 1 (TIM) | — |
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
 | VCU | `comp_complex.h` / `comp_crc.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 5 (Complex/CRC/Viterbi/Interleaver/RS) | — |
 
-**独立 Component（无 Devices 层, 单头文件 static inline）：**
+**独立 Component（无 Devices 层, 单头文件 static inline，位于 `Components/dsp/`、`power/`、`math/`、`codec/`、`motor/`、`pid/`）：**
 
 | Component | 用途 |
 |-----------|------|
@@ -235,8 +269,11 @@ make -j$(nproc)
 | `comp_pid_reg3.h` | 三态 PID 调节器 — 反计算抗饱和 + 位置回绕变体 (微分作用在比例输出) |
 | `comp_impulse.h` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_mod6.h` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
+| `comp_sogi_fll.h` | 单相锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移跟踪 |
+| `comp_power_meas.h` | 电力测量 — 真有效值/有功/无功/视在功率/功率因数/相位角 + 能量脉冲积分 (残余结转) |
+| `comp_power_fund.h` | 基波电力分析 — 同步正交相关解调 (IEC 62053), 基波有效值/有功/无功 + THD, 对谐波污染免疫 |
 
-**Module 层 (L4) — 业务逻辑:**
+**Module 层 (L4) — 业务逻辑（位于 `Module/motor/`、`power/`、`comm/`、`hmi/`）：**
 | 模块 | 文件 | 用途 |
 |------|------|------|
 | MotApp | `mod_motor.h/c` | 单电机状态机 (IDLE/SPD/POS/SP) + 超时保护 |
@@ -253,4 +290,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-12 — 补齐 math_blocks v4.3 剩余 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器) + Components/Devices/Module 按域分子目录
+> **最后更新：** 2026-08-12 — 目录按子系统隔离（Components 11 + Devices 7 + Module 4 子目录）+ 24 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分)

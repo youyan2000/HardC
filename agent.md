@@ -4,6 +4,18 @@
 
 ---
 
+## ⚙️ AI 工作准则（行为契约）
+
+> 本文件同时是给 AI 助手的**行为手册**。以下规则是硬约束，与 CLAUDE.md 的共同约定互补：CLAUDE.md 面向人与 AI 双方，本节只约束 AI 的执行方式。
+
+1. **计划先行** — 任何非平凡改动（新功能 / 重构 / 重组 / 涉及 3+ 文件）必须先给出 plan 并获批准，再动手实现。禁止大范围"边做边改"的自由发挥。
+2. **每动作更新 HISTORY + LESSONS** — 每完成一个动作/阶段，同步更新 [docs/debug/HISTORY.md](docs/debug/HISTORY.md)（阶段、commit 归因、错误与修正）与 [docs/debug/LESSONS.md](docs/debug/LESSONS.md)（新教训按经验模板，禁止回退）。文档落后于代码 = 违约。
+3. **遵守代码风格** — 一律遵循 §6 代码风格约定（2 空格缩进、K&R 大括号、命名规范、include guard），提交前用 `.clang-format` / `.clang-tidy` 校验。
+4. **Git 纪律** — 不自动提交；用户允许后**及时**按子系统拆分 commit（见 CLAUDE.md 提交规范）；提交前 `git status` 核对范围。
+5. **写-审双 Agent** — 任何代码生成走强制 `code-review-workflow`（Writer → Reviewer），Reviewer 不可跳过（纯 .md / YAML 修改例外，commit 注明 `no-review: <原因>`）。
+
+---
+
 ## ⭐ 复用规则（最重要！必须先理解）
 
 > **复用方式有且仅有两种：**
@@ -48,6 +60,7 @@
 ```
 Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_main.c 的 /* CONFIG BEGIN/END */ 之间
 ```
+**YmaC 拓扑选择器（GUI Tab2/Tab3）：** 扫 `Config/topologies/<topo>.yaml` 拓扑目录（buck 等，`status: ready` 才可生成）→ 选拓扑 → 合成 `Config/projects/<name>.yaml` 并调 scaffold 生成 `build/gen/<name>/` → 参数表（schema 来自拓扑 `params:`，slot 与 0xFB 帧同源）→ 离线注入物化 `app_main.c` + 运行时串口下发（Tab3, pyserial）。
 详见 [YmaC/README.md](YmaC/README.md)。
 
 ## 2. 公共文件
@@ -98,7 +111,8 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `Module/mod_pmbus.h/c` | **PMBus 协议栈** — SMBus 2.0 + PMBus 1.3 命令集 (Linear11/16 格式), I2C 从机数字电源通信 |
 | **工程** | |
 | `Config/params/` | YAML 配置变体 (default.yaml, aggressive.yaml 等) |
-| `Config/topologies/` | 拓扑级 YAML 配置 (将来: six_switch_acdc.yaml 等) |
+| `Config/topologies/` | 拓扑目录 YAML — 每拓扑一个 (buck/boost/forward/flyback/buckboost/sepic/cuk/zeta/buck2/vsi_3ph), 驱动 GUI 拓扑选择器 |
+| `Config/projects/` | 工程 YAML — 拓扑+MCU 实例化 (acdc_sixswitch.yaml 等), scaffold 骨架生成输入 |
 | `YmaC/` | YAML → C designated initializer 配置注入工具 (Python GUI/CLI) |
 | `cmake/` | ARM Clang + GCC + C2000 工具链文件 |
 
@@ -107,7 +121,7 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | 路径 | 用途 |
 |------|------|
 | [agent.md](agent.md) | 本文件 — AI/人类共读的总纲，完整 OOP 方法论 |
-| [LESSONS.md](LESSONS.md) | 调参教训库 (44 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (52 条 + 经验模板), git 版本管理, 禁止回退 |
 
 ## 3.5 BSP 硬件加速抽象层 🔌
 
@@ -153,7 +167,7 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 #endif
 ```
 
-**关键原则：** 每个 `#if` 分支的行为语义等价（滤波就是滤波，不是直通）。回退路径不是"后续实现"的占位符——它就在当前版本真实工作。见 [LESSONS.md](LESSONS.md) #34.
+**关键原则：** 每个 `#if` 分支的行为语义等价（滤波就是滤波，不是直通）。回退路径不是"后续实现"的占位符——它就在当前版本真实工作。见 [docs/debug/LESSONS.md](docs/debug/LESSONS.md) #34.
 
 ## 4. 子系统总览（按文件前缀区分）
 
@@ -192,12 +206,16 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_impulse.h` | `Impulse` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_sogi_fll.h` | `SogiFll`, `SogiFllOsgCoeff`, `SogiFllLpfCoeff` | SOGI 锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移 |
 | `comp_power_meas.h` | `PowerMeas`, `EnergyAccu` | 电力测量 — Vrms/Irms/P/Q/S/PF/相位角 + 能量脉冲积分 (残余结转) |
+| `comp_power_fund.h` | `PowerFund` | 基波电力分析 — 同步正交相关解调, 基波 Vrms/Irms/P/Q/THD (IEC 62053) |
+| `comp_arc_detect.h` | `ArcDetect` | 光伏电弧检测 — FFT 频带能量 2 子带加权 + 单频干扰滤除 + dB 阈值判定 |
+| `comp_pid_nl.h` | `NlPidCfg`, `NlPidState` | 非线性 PID — P/I/D 各通路独立幂律整形 (α/δ/γ), 强鲁棒控制 |
+| `comp_tcm.h` | `TcmCapture` | 自动调参 TCM — 触发式阶跃响应捕获 (预触发环) + IAE/ISE/ITAE 准则 |
 | `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
 | `comp_math.h/c` | — | 数学工具 — 限幅/绝对值/死区/线性映射/校验和/hw sqrt |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
 
 > 文件按子系统归入子目录：`Components/<域>/`、`Devices/<域>/`、`Module/<域>/`。文件前缀仍是域标识，子目录与之一致（如 `Components/pid/comp_pid.h`、`Devices/pwm/pwm_svpwm.h`、`Module/motor/mod_motor.h`）。
-> 每个子目录含 `MANIFEST.yaml` 自描述（id/files/depends），供 `YmaC/scaffold.py` 做依赖解析和项目骨架生成。完整文件→目录映射见 [docs/build-toolchain-design.md](docs/build-toolchain-design.md) 第一节。
+> 每个子目录含 `MANIFEST.yaml` 自描述（id/files/depends），供 `YmaC/scaffold.py` 做依赖解析和项目骨架生成。完整文件→目录映射见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第一节。
 
 ## 4. OOP 核心模式（C 语言实现）
 
@@ -441,7 +459,7 @@ App/app_main.c                — #include "xxxs.h", 使用句柄
 
 ## 8. 子系统参考文档
 
-各子系统的继承树、文件清单、依赖、和具体复用示例见下方。每个子系统对应一组文件前缀，文件按子系统归入 `Components/<域>/`、`Devices/<域>/`、`Module/<域>/` 子目录。文件→目录映射见 [docs/build-toolchain-design.md](docs/build-toolchain-design.md) 第一节。
+各子系统的继承树、文件清单、依赖、和具体复用示例见下方。每个子系统对应一组文件前缀，文件按子系统归入 `Components/<域>/`、`Devices/<域>/`、`Module/<域>/` 子目录。文件→目录映射见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第一节。
 
 ### 8.1 ADC 子系统 — 多通道采样
 
@@ -873,6 +891,71 @@ BLDC 六步换相: 触发有效时换相步 0→1→...→5→0 循环 (电角�
 - `energy_accu_integrate(me, power_w, dt_s)` — 每窗口调用, 返回本次脉冲数
 
 **依赖:** `<math.h>`, `<stdint.h>`
+
+#### comp_power_fund.h — 基波电力分析 (同步正交相关解调)
+
+> **来源:** TI C2000Ware Digital Power SDK
+>   libraries/energy-metrology_library/energy_metrology_f28p55
+>   (metrology_background.c 正交相关累加 + metrology_calculations.c
+>    calculateFundamentalRMSVoltage/ActivePower/ReactivePower + THD)
+> **新增日期:** 2026-08-12
+
+窄带同步解调, 只在测得电网频率上提取基波 — 对谐波污染免疫. 每采样相位参考步进 `phase += 2π·f_ref·dt` (连续不随结算复位), 以 sinθ/cosθ 正交参考做相关累加 `v_in += v·sinθ; v_cos += v·cosθ; i_in += i·sinθ; i_q += i·(−cosθ)` (TI 无功符号: 滞后电流 → Q>0). 窗口结算 (N 样本): `V_mag2 = sqrt((v_in/N)²+(v_cos/N)²)`, `FRMS = V_mag2·√2`, THD = sqrt(RMS²−FRMS²)/FRMS·100 (RMS 由宽频测量输入).
+
+功率按电压复矢量投影 — **旋转不变**: `P = 2·(v_in·i_in − v_cos·i_q)`, `Q = 2·(v_cos·i_in + v_in·i_q)`. 参考帧与电网电压间的任意相位偏移自动消除, ADC 无需与过零同步; 与 TI 计量库的 VoltagePure 相位对齐数学等价.
+
+**关键 API (static inline):**
+- `power_fund_init(me, sample_rate, f_ref, window_n)` — window_n = 结算窗样本 (典型 4 周期)
+- `power_fund_sample(me, v, i)` — ISR 每采样调用 (相关前先用当前相位, 再步进参考 — 避免首样本错相)
+- `power_fund_update(me, rms_v, rms_i)` — 窗口满结算, 返回 1=有新结果; 清累加器但相位参考保持连续
+- `power_fund_set_freq(me, f_hz)` — 由电网频率估计 (过零/锁相环) 每窗更新, 抑制窗泄漏
+- `power_fund_reset(me)` — 清零累加器与相位参考
+
+**依赖:** `<math.h>`, `<stdint.h>`
+
+#### comp_arc_detect.h — 光伏电弧检测 (FFT 频带能量 + 阈值)
+
+> **来源:** TI C2000Ware Digital Power SDK solutions/tida_010231/source/arc/source/ArcDetect.c
+> **新增日期:** 2026-08-12
+
+直流电弧在频谱上呈现宽频带能量抬升 (宽带噪声), 而开关谐波集中在窄带 — 检测器据此区分: 分析频带 [bin_min, bin_max) 等分低频/高频两半, 各自求最小能量; 单频干扰滤除 (重复 `FilterBins = NumBins·D·0.5` 次, 把每半带最强 bin 替换为本半带最小值) 剔除开关谐波; 频带能量 `BandSum = F·Σ(低频带) + Σ(高频带)`; 转 dB `dB = 10·log10(BandSum) + 2.129 − 90.31 + AD_correction` (2.129 = Hanning 修正, 90.31 = 满刻度偏置); `dB > 阈值 T` 即判电弧. 与 FFT 后端解耦, 输入取幅值平方谱.
+
+**关键 API (static inline):**
+- `arc_detect_init(me, bin_min, bin_max, band_weight, bin_discard, threshold)` — F=低频带加权 (默认 64), D=滤除比例 (默认 0 关), T=判定阈值 (默认 220)
+- `arc_detect_run(me, mag_sq)` — FFT 后传入幅值平方谱, 返回频带能量 (dB)
+- `arc_detect_check(me)` — 读取电弧判定 (1=电弧)
+
+**依赖:** `<math.h>`, `<stdint.h>`
+
+#### comp_pid_nl.h — 非线性 PID (各通路幂律整形)
+
+> **来源:** TI C2000Ware Digital Power SDK libraries/control/DCL/c28/include/DCL_NLPID.h
+> **新增日期:** 2026-08-12
+
+并行式非线性 PID: P/I/D 三通路各自经整形函数 `f(e) = sign(e)·|e|^α` (|e|>δ) 或 `e·γ` (|e|≤δ). α<1 小误差放大 (响应快), α>1 小误差衰减 (抗噪), γ 为线性区增益 — 用 `nl_pid_gamma_from_delta(α,δ) = δ^(α−1)` 保证两区边界连续. 积分带抗饱和 (i16 标志), 微分带二阶滤波 (c1/c2). 输入/输出归一化 ±1 (pu), 误差在 run 内折半预处理 (与 DCL 一致). 用途: 电源启动、负载突变等强鲁棒场景.
+
+**关键 API (static inline):**
+- `nl_pid_cfg_default()` / `nl_pid_init(me)` — 默认配置 (线性等价 kp=1) + 状态清零
+- `nl_pid_gamma_from_delta(α, δ)` — γ = δ^(α−1), 边界连续辅助
+- `nl_pid_set_filter_bw(cfg, fc, dt)` — 微分滤波器带宽双线性换算 c1/c2
+- `nl_pid_run(me, cfg, ref, fdb, clamp_flag)` — 单步, 返回限幅后输出
+
+**依赖:** `<math.h>`
+
+#### comp_tcm.h — 控制器自动调参 (触发式阶跃捕获 + 性能准则)
+
+> **来源:** TI C2000Ware Digital Power SDK libraries/control/DCL/c28/include/DCL_TCM.h
+> **新增日期:** 2026-08-12
+
+TCM (Tuning Criteria Module): armed 状态持续把误差写入预触发环形缓冲; 误差越限 (e>trigMax 或 e<trigMin) 触发捕获 — 回填 lead 个预触发样本, 触发样本作为首个后触发样本, 继续捕获至窗口满 size 样本. 对捕获的误差响应求性能准则: IAE=Σ|e|, ISE=Σe², ITAE=Σ|e|·t. 自动调参: 对每个候选增益重放相同响应, 取准则最小者为最优.
+
+**关键 API (static inline):**
+- `tcm_init(me, buf, lead, size, trig_min, trig_max)` — 捕获缓冲由调用者提供 (长度 ≥ size)
+- `tcm_arm(me)` / `tcm_disarm(me)` — 使能/取消捕获
+- `tcm_run(me, e)` — 每采样周期传误差信号 (IDLE/COMPLETE 下为空操作)
+- `tcm_iae(err, n)` / `tcm_ise(err, n)` / `tcm_itae(err, n, dt)` — 性能准则
+
+**依赖:** `<stdint.h>`, `<math.h>`
 
 #### comp_sgen.h — 信号发生器库 (7 种发生器)
 
