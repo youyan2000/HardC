@@ -1,0 +1,7 @@
+id: components/adc
+layer: Components
+description: ADC 父类 — 采样/校准抽象, 不透明句柄
+files:
+  - comp_adc.h
+  - comp_adc.c
+depends: []

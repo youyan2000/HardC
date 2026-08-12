@@ -1,0 +1,8 @@
+id: components/sensor
+layer: Components
+description: 传感器父类 — MPU 惯性测量单元 (IMU) 抽象 + DMP 固件
+files:
+  - comp_mpu.h
+  - comp_mpu_dmp.c
+depends:
+  - devices/sensor/mpu6050.h

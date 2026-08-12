@@ -1,0 +1,8 @@
+id: components/pid
+layer: Components
+description: PID 控制器父类 + 四态 PI 调节器
+files:
+  - comp_pid.h
+  - comp_pid.c
+  - comp_pi_reg4.h
+depends: []

@@ -1,0 +1,8 @@
+id: components/pwm
+layer: Components
+description: PWM 父类 — 物理参数 API (duty/Hz/ns/deg) + 正弦发生器
+files:
+  - comp_pwm.h
+  - comp_pwm.c
+  - comp_sgen.h
+depends: []

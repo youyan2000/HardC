@@ -1,0 +1,7 @@
+id: components/comm
+layer: Components
+description: 通信父类 — UART/SPI/I2C/CAN 统一接口, 不透明句柄
+files:
+  - comp_comm.h
+  - comp_comm.c
+depends: []

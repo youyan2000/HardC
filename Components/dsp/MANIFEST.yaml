@@ -1,0 +1,31 @@
+id: components/dsp
+layer: Components
+description: DSP 算法库 — 滤波器/锁相环/坐标变换/观测器/斜坡与正弦生成
+files:
+  - comp_esmo.h
+  - comp_hfi.h
+  - comp_dlog.h
+  - comp_filter.h
+  - comp_iir.h
+  - comp_iir_3p3z.h
+  - comp_fft_window.h
+  - comp_pll.h
+  - comp_pll.c
+  - comp_transform.h
+  - comp_transform_abc_dq0.h
+  - comp_sine_analyzer.h
+  - comp_smo.h
+  - comp_aci_fe.h
+  - comp_aci_fe.c
+  - comp_curmod.h
+  - comp_speed.h
+  - comp_angle.h
+  - comp_vhz.h
+  - comp_volt.h
+  - comp_svgen.h
+  - comp_resolver.h
+  - comp_ramp.h
+  - comp_vector.h
+depends:
+  - components/math
+  - BSP/bsp_dsp.h

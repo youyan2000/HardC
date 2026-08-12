@@ -1,0 +1,12 @@
+id: components/math
+layer: Components
+description: 数学库 — 浮点/定点运算 + IQmath + 错误码宏 + 复数运算
+files:
+  - comp_math.h
+  - comp_math.c
+  - comp_iqmath.h
+  - comp_iqmath.c
+  - comp_error.h
+  - comp_complex.h
+depends:
+  - BSP/bsp_dsp.h

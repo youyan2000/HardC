@@ -1,0 +1,9 @@
+id: components/power
+layer: Components
+description: 电源控制组件 — PFC 功率因数校正 / MPPT 最大功率跟踪 / 过压过流保护
+files:
+  - comp_pfc.h
+  - comp_mppt.h
+  - comp_protection.h
+depends:
+  - components/math

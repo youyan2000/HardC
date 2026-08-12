@@ -1,0 +1,9 @@
+id: components/codec
+layer: Components
+description: 编解码组件 — CRC 校验 / Viterbi 卷积译码 / RS 纠错 / 块交织
+files:
+  - comp_crc.h
+  - comp_viterbi.h
+  - comp_rs.h
+  - comp_interleaver.h
+depends: []

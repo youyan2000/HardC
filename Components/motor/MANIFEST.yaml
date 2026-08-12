@@ -1,0 +1,10 @@
+id: components/motor
+layer: Components
+description: 电机父类 — FOC 电机抽象 + BLDC InstaSPIN + 步进电机
+files:
+  - comp_motor.h
+  - comp_motor.c
+  - comp_bldc_instaspin.h
+  - comp_step_motor.h
+  - comp_step_motor.c
+depends: []
