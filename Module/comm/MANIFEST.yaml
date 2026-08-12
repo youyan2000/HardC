@@ -1,6 +1,7 @@
 id: module/comm
 layer: Module
-description: 通信业务模块 — Comm 帧协议 / CmdDispatch 命令分发 / SerialProto 串口协议 / PMBus 协议栈
+ctx: main
+description: 通信业务模块 — Comm 帧协议 / CmdDispatch 命令分发 / SerialProto 串口协议 / PMBus 协议栈 (CTX_MAIN — 协议解析全部在主循环)
 files:
   - mod_comm.h
   - mod_comm.c

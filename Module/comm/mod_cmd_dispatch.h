@@ -28,38 +28,38 @@ typedef enum {
   CMD_NONE = 0x00,
 
   // 系统命令 (0x0x)
-  CMD_SYS_STOP    = 0x01,   // 急停
-  CMD_SYS_START   = 0x02,   // 启动
-  CMD_SYS_PAUSE   = 0x03,   // 暂停
-  CMD_SYS_RESET   = 0x04,   // 复位
-  CMD_SYS_STATUS  = 0x05,   // 查询状态
+  CMD_SYS_STOP = 0x01,    // 急停
+  CMD_SYS_START = 0x02,   // 启动
+  CMD_SYS_PAUSE = 0x03,   // 暂停
+  CMD_SYS_RESET = 0x04,   // 复位
+  CMD_SYS_STATUS = 0x05,  // 查询状态
 
   // 运动命令 (0x1x)
-  CMD_MOT_FORWARD  = 0x10,  // 前进
+  CMD_MOT_FORWARD = 0x10,   // 前进
   CMD_MOT_BACKWARD = 0x11,  // 后退
-  CMD_MOT_LEFT     = 0x12,  // 左转
-  CMD_MOT_RIGHT    = 0x13,  // 右转
-  CMD_MOT_BRAKE    = 0x14,  // 刹车
-  CMD_MOT_SPEED    = 0x15,  // 速度模式 (附带速度值)
+  CMD_MOT_LEFT = 0x12,      // 左转
+  CMD_MOT_RIGHT = 0x13,     // 右转
+  CMD_MOT_BRAKE = 0x14,     // 刹车
+  CMD_MOT_SPEED = 0x15,     // 速度模式 (附带速度值)
 
   // 校准命令 (0x2x)
-  CMD_CAL_START    = 0x20,  // 开始校准
-  CMD_CAL_WHITE    = 0x21,  // 白平衡采样
-  CMD_CAL_BLACK    = 0x22,  // 黑电平采样
-  CMD_CAL_RESULT   = 0x23,  // 校准结果确认
-  CMD_CAL_ABORT    = 0x24,  // 取消校准
+  CMD_CAL_START = 0x20,   // 开始校准
+  CMD_CAL_WHITE = 0x21,   // 白平衡采样
+  CMD_CAL_BLACK = 0x22,   // 黑电平采样
+  CMD_CAL_RESULT = 0x23,  // 校准结果确认
+  CMD_CAL_ABORT = 0x24,   // 取消校准
 
   // PID 命令 (0x3x)
-  CMD_PID_SET      = 0x30,  // 设置 PID 参数
-  CMD_PID_GET      = 0x31,  // 读取 PID 参数
-  CMD_PID_SAVE     = 0x32,  // 保存 PID 到 Flash
-  CMD_PID_RESET    = 0x33,  // 恢复默认 PID
+  CMD_PID_SET = 0x30,    // 设置 PID 参数
+  CMD_PID_GET = 0x31,    // 读取 PID 参数
+  CMD_PID_SAVE = 0x32,   // 保存 PID 到 Flash
+  CMD_PID_RESET = 0x33,  // 恢复默认 PID
 
   // 传感器命令 (0x4x)
-  CMD_SENSOR_ADC   = 0x40,  // 读取 ADC
-  CMD_SENSOR_MPU   = 0x41,  // 读取 MPU6050
-  CMD_SENSOR_ENC   = 0x42,  // 读取编码器
-  CMD_SENSOR_ALL   = 0x4F,  // 读取所有传感器
+  CMD_SENSOR_ADC = 0x40,  // 读取 ADC
+  CMD_SENSOR_MPU = 0x41,  // 读取 MPU6050
+  CMD_SENSOR_ENC = 0x42,  // 读取编码器
+  CMD_SENSOR_ALL = 0x4F,  // 读取所有传感器
 
   CMD_COUNT
 } CarCmd;
@@ -70,11 +70,11 @@ typedef enum {
 typedef bool (*cmd_handler_fn)(CarCmd cmd, const uint8_t *payload, uint16_t len);
 
 // ======== 命令分发器 ========
-typedef struct {
+typedef struct CmdDispatcher {
   cmd_handler_fn handlers[CMD_COUNT];  // 每个命令一个处理器 (NULL = 未注册)
-  CarCmd         last_cmd;             // 最后执行的命令
-  uint32_t       cmd_count;            // 成功执行的命令计数
-  uint32_t       err_count;            // 未注册/非法命令计数
+  CarCmd last_cmd;                     // 最后执行的命令
+  uint32_t cmd_count;                  // 成功执行的命令计数
+  uint32_t err_count;                  // 未注册/非法命令计数
 } CmdDispatcher;
 
 // ======== API ========

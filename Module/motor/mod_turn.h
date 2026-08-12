@@ -33,25 +33,25 @@ typedef enum {
 
 // 转弯状态
 typedef enum {
-  TURN_IDLE,      // 空闲 — 无转弯
-  TURN_RUNNING,   // 转弯中 — 差速 PWM + tick 计数
-  TURN_BRAKING,   // 制动中 — 速度=0, 保持积分
+  TURN_IDLE,     // 空闲 — 无转弯
+  TURN_RUNNING,  // 转弯中 — 差速 PWM + tick 计数
+  TURN_BRAKING,  // 制动中 — 速度=0, 保持积分
 } TurnSt;
 
 // TurnCtrl 实例结构体
-typedef struct {
-  MotApp   *mtr_a;           // [必须] 左电机 MotApp 句柄
-  MotApp   *mtr_b;           // [必须] 右电机 MotApp 句柄
+typedef struct TurnCtrl {
+  MotApp *mtr_a;  // [必须] 左电机 MotApp 句柄
+  MotApp *mtr_b;  // [必须] 右电机 MotApp 句柄
 
-  TurnSt   state;            // 当前状态
-  TurnType type;             // 当前转弯类型
-  int16_t  turn_pwm;         // 转弯时固定 PWM 值
+  TurnSt state;      // 当前状态
+  TurnType type;     // 当前转弯类型
+  int16_t turn_pwm;  // 转弯时固定 PWM 值
 
-  int32_t  target_ticks;     // 目标编码器 tick 数 (由类型查表得到)
-  int32_t  accumulated;      // 已累计 tick 数 (取两侧电机 tick 较大者)
-  int16_t  brake_ticks;      // 制动阶段剩余 tick 数
-  bool     a_forward;        // 电机A 正向? (true=PWM正, false=PWM负)
-  bool     b_forward;        // 电机B 正向?
+  int32_t target_ticks;  // 目标编码器 tick 数 (由类型查表得到)
+  int32_t accumulated;   // 已累计 tick 数 (取两侧电机 tick 较大者)
+  int16_t brake_ticks;   // 制动阶段剩余 tick 数
+  bool a_forward;        // 电机A 正向? (true=PWM正, false=PWM负)
+  bool b_forward;        // 电机B 正向?
 } TurnCtrl;
 
 // ======== 转弯 tick 经验值 (编码器脉冲/轮圈) ========
@@ -59,9 +59,9 @@ typedef struct {
 //        TURN_90_TICKS → 90° 直角弯 @ spd=90
 //        TURN_180_TICKS → 180° 掉头 @ spd=90
 // 实际值因车轮直径/编码器线数而异, 需实验标定
-#define TURN_TICK_90   28    // 90° 转弯 tick 数 (参考值)
-#define TURN_TICK_180  55    // 180° 掉头 tick 数 (参考值)
-#define TURN_BRAKE_TICKS 10   // 制动阶段固定时长 (100ms @ 100Hz)
+#define TURN_TICK_90 28      // 90° 转弯 tick 数 (参考值)
+#define TURN_TICK_180 55     // 180° 掉头 tick 数 (参考值)
+#define TURN_BRAKE_TICKS 10  // 制动阶段固定时长 (100ms @ 100Hz)
 
 // ======== API ========
 

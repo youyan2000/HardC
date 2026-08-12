@@ -19,11 +19,12 @@
 //   - 幅值比用 DB_MIN 保护, 防止 log10(0) 产生 -inf
 
 #include "mod_sfra.h"
+#include <stddef.h>  // NULL
 #include <math.h>
 
-#define SFRA_PI     3.14159265f
-#define SFRA_2PI    6.28318531f
-#define SFRA_DB_MIN 1e-12f       // 最小幅值保护 (防止 log10(0) → -inf)
+#define SFRA_PI 3.14159265f
+#define SFRA_2PI 6.28318531f
+#define SFRA_DB_MIN 1e-12f  // 最小幅值保护 (防止 log10(0) → -inf)
 
 // ======== 初始化 & 重置 ========
 
@@ -37,26 +38,26 @@ void mod_sfra_init(Sfra *me, float dt, const SfraCfg *cfg) {
 
 void mod_sfra_reset(Sfra *me) {
   // 仅重置运行时状态, 保留 cfg / dt / 回调
-  me->current_freq  = me->cfg.f_start;
+  me->current_freq = me->cfg.f_start;
   me->current_omega = SFRA_2PI * me->current_freq;
-  me->freq_index    = 0;
-  me->total_freqs   = 0;
+  me->freq_index = 0;
+  me->total_freqs = 0;
   me->cycle_counter = 0;
-  me->settling      = true;
-  me->sweep_done    = false;
-  me->running       = false;
+  me->settling = true;
+  me->sweep_done = false;
+  me->running = false;
 
   me->inject_phase = 0.0f;
-  me->inject_out   = 0.0f;
-  me->dft_phase    = 0.0f;
+  me->inject_out = 0.0f;
+  me->dft_phase = 0.0f;
 
-  me->inj_re  = 0.0f;
-  me->inj_im  = 0.0f;
+  me->inj_re = 0.0f;
+  me->inj_im = 0.0f;
   me->resp_re = 0.0f;
   me->resp_im = 0.0f;
 
-  me->gain_db      = 0.0f;
-  me->phase_deg    = 0.0f;
+  me->gain_db = 0.0f;
+  me->phase_deg = 0.0f;
   me->sample_count = 0;
 }
 
@@ -69,17 +70,18 @@ static int sfra_calc_total_freqs(const SfraCfg *cfg) {
     return 1;  // 无效配置, 至少出一个点
   }
   float decades = log10f(cfg->f_end / cfg->f_start);
-  int total = (int)(cfg->points_per_decade * decades) + 1;
+  int total = (int) (cfg->points_per_decade * decades) + 1;
   return (total < 1) ? 1 : total;
 }
 
 // 根据频点序号计算频率 (对数步进)
 // freq[k] = f_start * 10^(k * decade_per_step)
 static float sfra_freq_by_index(const SfraCfg *cfg, int index, int total) {
-  if (total <= 1) return cfg->f_start;
+  if (total <= 1)
+    return cfg->f_start;
   float decades = log10f(cfg->f_end / cfg->f_start);
-  float step = decades / (float)(total - 1);
-  float freq = cfg->f_start * powf(10.0f, step * (float)index);
+  float step = decades / (float) (total - 1);
+  float freq = cfg->f_start * powf(10.0f, step * (float) index);
   return freq;
 }
 
@@ -88,23 +90,23 @@ void mod_sfra_start(Sfra *me) {
   me->total_freqs = sfra_calc_total_freqs(&me->cfg);
 
   // 从起始频率开始
-  me->freq_index    = 0;
-  me->current_freq  = me->cfg.f_start;
+  me->freq_index = 0;
+  me->current_freq = me->cfg.f_start;
   me->current_omega = SFRA_2PI * me->current_freq;
 
   // 初始化状态
   me->cycle_counter = 0;
-  me->settling      = true;
-  me->sweep_done    = false;
-  me->running       = true;
+  me->settling = true;
+  me->sweep_done = false;
+  me->running = true;
 
   // DDS 相位从 0 开始, 减少初始瞬态
-  me->inject_phase  = 0.0f;
-  me->inject_out    = 0.0f;
+  me->inject_phase = 0.0f;
+  me->inject_out = 0.0f;
 }
 
 void mod_sfra_stop(Sfra *me) {
-  me->running    = false;
+  me->running = false;
   me->sweep_done = false;
   // 不清零 inject_out: 由下一周期 inject() 处理
 }
@@ -132,10 +134,11 @@ void mod_sfra_inject(Sfra *me) {
   }
 
   // DFT 累加 — 仅在测量阶段
-  if (me->settling) return;
+  if (me->settling)
+    return;
 
   // 注入通道 DFT: X_inj = Σ inject[n] * (cos(ωnT) - j*sin(ωnT))
-  float cos_val  = cosf(me->dft_phase);
+  float cos_val = cosf(me->dft_phase);
   float nsin_val = -sinf(me->dft_phase);  // DFT 的 -j*sin 项
 
   me->inj_re += me->inject_out * cos_val;
@@ -145,10 +148,11 @@ void mod_sfra_inject(Sfra *me) {
 // ======== ISR 响应采集 ========
 
 void mod_sfra_collect(Sfra *me, float response) {
-  if (!me->running || me->settling) return;
+  if (!me->running || me->settling)
+    return;
 
   // 响应通道 DFT (使用与 inject 相同的 dft_phase)
-  float cos_val  = cosf(me->dft_phase);
+  float cos_val = cosf(me->dft_phase);
   float nsin_val = -sinf(me->dft_phase);
 
   me->resp_re += response * cos_val;
@@ -167,26 +171,29 @@ void mod_sfra_collect(Sfra *me, float response) {
 
 // 角度归一化到 [-180°, 180°]
 static float sfra_norm_phase_deg(float deg) {
-  while (deg > 180.0f)  deg -= 360.0f;
-  while (deg < -180.0f) deg += 360.0f;
+  while (deg > 180.0f)
+    deg -= 360.0f;
+  while (deg < -180.0f)
+    deg += 360.0f;
   return deg;
 }
 
 void mod_sfra_background(Sfra *me) {
-  if (!me->running) return;
+  if (!me->running)
+    return;
 
   // ---- 稳定阶段: 等待 settle_cycles 个 ISR 周期 ----
   if (me->settling) {
     if (me->cycle_counter >= me->cfg.settle_cycles) {
       // 稳定完成, 进入测量阶段, 清零 DFT 累加器
-      me->settling      = false;
+      me->settling = false;
       me->cycle_counter = 0;
-      me->sample_count  = 0;
-      me->dft_phase     = 0.0f;
-      me->inj_re        = 0.0f;
-      me->inj_im        = 0.0f;
-      me->resp_re       = 0.0f;
-      me->resp_im       = 0.0f;
+      me->sample_count = 0;
+      me->dft_phase = 0.0f;
+      me->inj_re = 0.0f;
+      me->inj_im = 0.0f;
+      me->resp_re = 0.0f;
+      me->resp_im = 0.0f;
     }
     return;
   }
@@ -205,22 +212,22 @@ void mod_sfra_background(Sfra *me) {
       me->gain_db = 0.0f;  // 注入信号检测不到, 结果不可信
     } else {
       float ratio = resp_mag / inj_mag;
-      if (ratio < SFRA_DB_MIN) ratio = SFRA_DB_MIN;
+      if (ratio < SFRA_DB_MIN)
+        ratio = SFRA_DB_MIN;
       me->gain_db = 20.0f * log10f(ratio);
     }
 
     // 相位: ∠H = ∠resp - ∠inj
     // atan2f(y, x) 返回 [-π, π]
     // DFT 中 Im = -Σ x*sin, 所以相位 = atan2(Im, Re)
-    float inj_phase  = atan2f(me->inj_im, me->inj_re);
+    float inj_phase = atan2f(me->inj_im, me->inj_re);
     float resp_phase = atan2f(me->resp_im, me->resp_re);
-    float phase_diff = resp_phase - inj_phase;      // (rad)
+    float phase_diff = resp_phase - inj_phase;  // (rad)
     me->phase_deg = sfra_norm_phase_deg(phase_diff * 180.0f / SFRA_PI);
 
     // === 回调通知 ===
     if (me->on_point_done) {
-      me->on_point_done(me->user_data, me->freq_index, me->total_freqs,
-                         me->current_freq, me->gain_db, me->phase_deg);
+      me->on_point_done(me->user_data, me->freq_index, me->total_freqs, me->current_freq, me->gain_db, me->phase_deg);
     }
 
     // === 下一个频点 ===
@@ -228,17 +235,17 @@ void mod_sfra_background(Sfra *me) {
     if (me->freq_index >= me->total_freqs) {
       // 扫频完成
       me->sweep_done = true;
-      me->running    = false;
+      me->running = false;
       return;
     }
 
     // 计算新频率 (对数步进)
-    me->current_freq  = sfra_freq_by_index(&me->cfg, me->freq_index, me->total_freqs);
+    me->current_freq = sfra_freq_by_index(&me->cfg, me->freq_index, me->total_freqs);
     me->current_omega = SFRA_2PI * me->current_freq;
 
     // 进入新频点的稳定阶段
-    me->settling      = true;
+    me->settling = true;
     me->cycle_counter = 0;
-    me->sample_count  = 0;
+    me->sample_count = 0;
   }
 }

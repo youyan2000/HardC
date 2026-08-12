@@ -1,6 +1,7 @@
 id: module/hmi
 layer: Module
-description: HMI 业务模块 — 按键去抖 + OLED 菜单 + 命令分发
+ctx: main
+description: HMI 业务模块 — 按键去抖 + OLED 菜单 + 命令分发 (CTX_MAIN)
 files:
   - mod_hmi.h
   - mod_hmi.c

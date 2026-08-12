@@ -32,31 +32,30 @@ typedef enum {
 } MotState;
 
 // 超时 + 到达阈值
-#define MOTAPP_TIMEOUT_TICKS  200   // 2 秒 @ 100Hz — 无命令后自动 IDLE
-#define MOTAPP_POS_ARRIVE_TOL 5     // 位置到达容忍 (编码器 tick, 默认 ±5)
+#define MOTAPP_TIMEOUT_TICKS 200  // 2 秒 @ 100Hz — 无命令后自动 IDLE
+#define MOTAPP_POS_ARRIVE_TOL 5   // 位置到达容忍 (编码器 tick, 默认 ±5)
 
 // MotApp 实例结构体
-typedef struct {
-  MotorBase  *motor;          // [必须] 电机驱动句柄 (motor_write / motor_read)
-  PidBase    *pid_vel;        // [必须] 速度环 PID (SPD 模式, SP 模式内环)
-  PidBase    *pid_pos;        // [可选] 位置环 PID (POS 模式, NULL=不可用)
-  PidCascade *pid_cascade;    // [可选] 级联 PID (SP 模式, NULL=不可用)
+typedef struct MotApp {
+  MotorBase *motor;         // [必须] 电机驱动句柄 (motor_write / motor_read)
+  PidBase *pid_vel;         // [必须] 速度环 PID (SPD 模式, SP 模式内环)
+  PidBase *pid_pos;         // [可选] 位置环 PID (POS 模式, NULL=不可用)
+  PidCascade *pid_cascade;  // [可选] 级联 PID (SP 模式, NULL=不可用)
 
-  MotState  state;            // 当前状态
-  int16_t   target_speed;     // 目标速度 (编码器增量/周期, SPD 模式)
-  int32_t   target_position;  // 目标位置 (累计编码器脉冲, POS/SP 模式)
-  int32_t   current_position; // 当前累计位置 (每 tick += read())
-  int16_t   current_speed;    // 当前速度 (上一 tick 的编码器增量)
-  uint16_t  timeout;          // 超时倒计时 — 0 时自动切 IDLE
-  int16_t   pwm_output;       // 最终 PWM 输出值 (调试/监控用)
-  uint8_t   pos_arrive_tol;   // 位置到达容忍 (可运行时调整, 默认 5)
+  MotState state;            // 当前状态
+  int16_t target_speed;      // 目标速度 (编码器增量/周期, SPD 模式)
+  int32_t target_position;   // 目标位置 (累计编码器脉冲, POS/SP 模式)
+  int32_t current_position;  // 当前累计位置 (每 tick += read())
+  int16_t current_speed;     // 当前速度 (上一 tick 的编码器增量)
+  uint16_t timeout;          // 超时倒计时 — 0 时自动切 IDLE
+  int16_t pwm_output;        // 最终 PWM 输出值 (调试/监控用)
+  uint8_t pos_arrive_tol;    // 位置到达容忍 (可运行时调整, 默认 5)
 } MotApp;
 
 // ======== API ========
 
 // 初始化: 绑定电机句柄 + PID 句柄 (pid_pos 和 pid_cascade 可选传 NULL)
-void motapp_init(MotApp *me, MotorBase *motor, PidBase *pid_vel,
-                  PidBase *pid_pos, PidCascade *pid_cascade);
+void motapp_init(MotApp *me, MotorBase *motor, PidBase *pid_vel, PidBase *pid_pos, PidCascade *pid_cascade);
 
 // 每控制周期调用一次 (ISR 中, 通常 100Hz / 10ms)
 // 内部完成: 读编码器 → 状态分发 → PID 计算 → 写 PWM → 超时检测

@@ -1,6 +1,7 @@
 id: module/motor
 layer: Module
-description: 电机业务模块 — MotApp 状态机 / TurnCtrl 转弯 / Follower 循迹 / FCL 快速电流环
+ctx: fast
+description: 电机业务模块 — MotApp 状态机 / TurnCtrl 转弯 / Follower 循迹 / FCL 快速电流环 (CTX_FAST — 全部在控制 ISR 中 tick)
 files:
   - mod_motor.h
   - mod_motor.c

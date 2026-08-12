@@ -1,6 +1,7 @@
 id: module/power
 layer: Module
-description: 电源业务模块 — PowerCtrl 功率控制 / Buck 降压控制(PowerStage) / Sampler 采样 / SFRA 频响分析 / Balance 平衡
+ctx: fast
+description: 电源业务模块 — PowerCtrl 功率控制 / Buck 降压控制(PowerStage) / Sampler 采样 / SFRA 频响分析 / Balance 平衡 (主 ctx=fast; SFRA 跨 FAST/MAIN, Balance 在 MAIN)
 files:
   - mod_powerctrl.h
   - mod_powerctrl.c
