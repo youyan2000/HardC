@@ -29,43 +29,42 @@
 #define ADC_DC_SAMPLER_H
 
 #include "comp_adc.h"
-#include "stm32f1xx_hal.h"   // 同时兼容 F1/F4/G4 系列
+#include "bsp_adc.h"  // BspAdcHandle 不透明句柄 — 跨平台 (STM32/C2000/MSPM0)
 #include <stdbool.h>
 
 #define ADC_DC_MAX_CH 8  // 直流采样最大通道数
 
 typedef struct {
-  AdcBase            base;          // [首成员!] 基类
-  uint16_t           raw_buf[ADC_DC_MAX_CH]; // [基类绑定] DMA 缓冲区
-  ADC_HandleTypeDef  *hadc;         // HAL ADC 句柄
-  DMA_HandleTypeDef  *hdma;         // HAL DMA 句柄
+  AdcBase base;                     // [首成员!] 基类
+  uint16_t raw_buf[ADC_DC_MAX_CH];  // [基类绑定] DMA 缓冲区
+  BspAdcHandle *hadc;               // BSP ADC 句柄 (STM32: &hadc1, C2000: ADC 基址)
+  BspAdcHandle *hdma;               // BSP DMA 句柄 (STM32: &hdma_adc1, C2000: 触发源)
 
   // 每通道校准参数
   // value[i] = k[i] * raw_f[i] + b[i]
-  float  k[ADC_DC_MAX_CH];          // 线性增益 (V/ADC 或 A/ADC)
-  float  b[ADC_DC_MAX_CH];          // 线性偏置 (V 或 A)
-  float  alpha[ADC_DC_MAX_CH];      // EMA 滤波系数 [0,1], 0=无滤波
+  float k[ADC_DC_MAX_CH];      // 线性增益 (V/ADC 或 A/ADC)
+  float b[ADC_DC_MAX_CH];      // 线性偏置 (V 或 A)
+  float alpha[ADC_DC_MAX_CH];  // EMA 滤波系数 [0,1], 0=无滤波
   // alpha ≈ 2*PI*fc*Ts, 例: fc=10Hz, Ts=1ms → alpha≈0.063
 
   // 输出
-  float  value[ADC_DC_MAX_CH];      // 工程量 (V 或 A)
-  float  raw_f[ADC_DC_MAX_CH];      // 滤波后 ADC 值 (诊断用)
+  float value[ADC_DC_MAX_CH];  // 工程量 (V 或 A)
+  float raw_f[ADC_DC_MAX_CH];  // 滤波后 ADC 值 (诊断用)
 
-  uint8_t num_ch;                   // 实际通道数 (1 ~ ADC_DC_MAX_CH)
+  uint8_t num_ch;  // 实际通道数 (1 ~ ADC_DC_MAX_CH)
 } AdcDcSampler;
 
 // === API =====================================================================
 
 // 初始化直流采样器
-// hadc:   CubeMX ADC 句柄
-// hdma:   CubeMX DMA 句柄
-// num_ch: 通道数 (1~8), 对应 CubeMX ADC 扫描序列的 Rank1~RankN
+// hadc:   BSP ADC 句柄 (STM32: &hadc1, C2000: ADC0_BASE 等 driverlib 基址)
+// hdma:   BSP DMA/触发句柄 (STM32: &hdma_adc1, C2000: NULL — 由 ePWM 触发)
+// num_ch: 通道数 (1~8), 对应 ADC 扫描序列的 Rank1~RankN
 // k:      线性增益数组 [num_ch] (传 NULL 则默认 k=1.0)
 // b:      线性偏置数组 [num_ch] (传 NULL 则默认 b=0.0)
 // alpha:  EMA 系数数组 [num_ch] (传 NULL 则默认 alpha=0, 即无滤波)
-void adc_dc_sampler_init(AdcDcSampler *me, ADC_HandleTypeDef *hadc,
-                         DMA_HandleTypeDef *hdma, uint8_t num_ch,
-                         const float *k, const float *b, const float *alpha);
+void adc_dc_sampler_init(AdcDcSampler *me, BspAdcHandle *hadc, BspAdcHandle *hdma, uint8_t num_ch, const float *k,
+                         const float *b, const float *alpha);
 
 // 反初始化: 停止 DMA、清空 ops
 void adc_dc_sampler_deinit(AdcDcSampler *me);
