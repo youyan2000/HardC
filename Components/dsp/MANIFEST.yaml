@@ -9,14 +9,17 @@ files:
   - comp_iir.h
   - comp_iir_3p3z.h
   - comp_fft_window.h
+  - comp_impulse.h
   - comp_pll.h
   - comp_pll.c
+  - comp_sogi_fll.h
   - comp_transform.h
   - comp_transform_abc_dq0.h
   - comp_sine_analyzer.h
   - comp_smo.h
   - comp_aci_fe.h
   - comp_aci_fe.c
+  - comp_aci_se.h
   - comp_curmod.h
   - comp_speed.h
   - comp_angle.h
