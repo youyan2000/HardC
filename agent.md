@@ -82,7 +82,7 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `Components/comp_iir.h` | **IIR 数字补偿器库** — DF22/DF23/2P2Z float + Q15/Q31 定点, 控制环补偿 |
 | `Components/comp_sgen.h` | **信号发生器库** — 7 种发生器 (定频/扫频/HP1单音/HP2双音/T3D三音/Profile分段/死区线) |
 | `Components/comp_fft_window.h` | **FFT 窗函数库** — 18 种窗 float+Q31, 相干增益/ENBW, 与 bsp_dsp_fft.h 配合 |
-| `Components/comp_protection.h` | 保护框架：阈值检测、去抖、分级响应 |
+| `Components/protection/comp_protection.h` | 保护框架：阈值检测、去抖、分级响应 |
 | `Components/comp_adc.h/c` | ADC 父类：AdcBase + AdcOps 虚表 |
 | `Components/comp_pwm.h/c` | PWM 父类：PwmBase + PwmOps 虚表 |
 | `Components/comp_pid.h/c` | PID 父类：PidBase + PidOps 虚表 |
@@ -190,7 +190,8 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_fft_window.h` | (FftWinType 枚举) | 18 种 FFT 窗函数 float + Q31 (fill_q31/apply_q31), 相干增益/ENBW |
 | `comp_pi_reg4.h` | `PiReg4Cfg`, `PiReg4State` | 4 状态 PI 调节器 — 设定值滤波 + P + I + 前馈, 双抗积分饱和 |
 | `comp_pid_reg3.h` | `PidReg3Cfg`, `PidReg3State` | 3 状态 PID — 反计算抗饱和 + 位置回绕变体, 微分作用在比例输出 |
-| `comp_protection.h` | — | 保护框架 — 阈值检测、去抖、分级响应 |
+| `comp_protection.h` | — | 保护框架 — 阈值检测、去抖、分级响应 (Components/protection/ 域) |
+| `comp_protection_3lvl.h` | `Prot3LvlDelay` | 三电平逆变器延迟保护 — 主开关立即关断 + 内开关故障消隐延迟关断 (ride-through, 非锁存自重新布防) |
 | `comp_pfc.h` | `PfcICmd`, `PfcBLICmd`, `PfcBlIcmd`, `PfcInvRmsSqr`, `PfcInvSqr` | PFC 电流指令, 含无桥桥臂选择 |
 | `comp_esmo.h` | `EsmoCfg`, `EsmoState` | eSMO 滑模观测器 — PLL 角度/速度跟踪 |
 | `comp_dlog.h` | `Dlog1ch`, `Dlog4ch` | 数据记录器 — 环形缓冲 + 触发 + 预分频 |

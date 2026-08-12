@@ -12,7 +12,7 @@ C-OOP/
 ├── BSP/             # L1: 不透明句柄 → 平台抽象
 ├── Components/      # L2: comp_*.h/c → 父类 + ops 虚表
 │   ├── adc/ comm/ gpo/ pid/ pwm/          # 父类域
-│   ├── dsp/ motor/ power/ math/ codec/ sensor/
+│   ├── dsp/ motor/ power/ protection/ math/ codec/ sensor/
 │   └── (每子目录含 MANIFEST.yaml 自描述)
 ├── Devices/         # L3: <域>_<子类>.h/c → 具体硬件实现
 │   ├── adc/ comm/ gpo/ pid/ pwm/
@@ -275,6 +275,8 @@ make -j$(nproc)
 | `comp_power_calib.h` | 结果级校准 POD — 死区减法 (保符号对称死区), 即 TI NV 持久化结构体 |
 | `comp_power_event.h` | 电压事件检测 — 暂降/暂升/中断状态机 + 事件计数/时长 (滞回 + 交叉检测) |
 | `comp_power_fund.h` | 基波电力分析 — 同步正交相关解调 (IEC 62053), 基波有效值/有功/无功 + THD, 对谐波污染免疫 |
+| `comp_protection.h` | 保护框架 — 阈值检测、去抖、分级响应 (Components/protection/ 域) |
+| `comp_protection_3lvl.h` | 三电平逆变器延迟保护 — 主开关立即关断 + 内开关故障消隐延迟关断 (ride-through, 非锁存自重新布防) |
 
 **Module 层 (L4) — 业务逻辑（位于 `Module/motor/`、`power/`、`comm/`、`hmi/`）：**
 | 模块 | 文件 | 用途 |
@@ -293,4 +295,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-12 — 目录按子系统隔离（Components 11 + Devices 7 + Module 4 子目录）+ 24 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分)
+> **最后更新：** 2026-08-13 — 目录按子系统隔离（Components 12 + Devices 7 + Module 4 子目录）+ 25 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分 / 三相计量 / 三电平逆变器延迟保护 + protection 独立域)
