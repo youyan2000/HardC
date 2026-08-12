@@ -1,12 +1,11 @@
 id: components/power
 layer: Components
-description: 电源控制组件 — PFC 功率因数校正 / MPPT 最大功率跟踪 / 电力测量(单相+三相) / Goertzel 逐谐波 / 结果级校准 / 暂降暂升事件 / 过压过流保护 / PowerStage 电源控制父类
+description: 电源控制组件 — PFC 功率因数校正 / MPPT 最大功率跟踪 / 电力测量(单相+三相) / Goertzel 逐谐波 / 结果级校准 / 暂降暂升事件 / PowerStage 电源控制父类
 files:
   - comp_pfc.h
   - comp_mppt.h
   - comp_power_meas.h
   - comp_power_fund.h
-  - comp_protection.h
   - comp_power_stage.h
   - comp_power_goertzel.h
   - comp_power_calib.h
