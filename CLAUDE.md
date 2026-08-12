@@ -193,6 +193,8 @@ make -j$(nproc)
 | 文件 | 内容 |
 |------|------|
 | [BSP/bsp_dsp.h](BSP/bsp_dsp.h) | 硬件加速抽象 — sqrt/biquad, 平台检测 (CMSIS-DSP/C2000Ware/纯C回退) |
+| [BSP/bsp_dsp_fir.h](BSP/bsp_dsp_fir.h) | FIR 滤波器硬件加速 (4 后端: CMSIS-DSP/C2000/纯C/Q15 定点) |
+| [BSP/bsp_dsp_fft.h](BSP/bsp_dsp_fft.h) | FFT 快速傅里叶变换 (RFFT + CFFT, 3 后端) |
 | [BSP/bsp_pwm.h](BSP/bsp_pwm.h) | PWM 不透明句柄 + 物理参数 API (duty/Hz/ns/deg) |
 | [BSP/bsp_adc.h](BSP/bsp_adc.h) | ADC 校准/启动抽象 |
 
@@ -206,12 +208,45 @@ make -j$(nproc)
 | 域 | Component | Devices 子类数 | 句柄头文件 |
 |----|-----------|--------------|-----------|
 | ADC | `comp_adc.h/c` | 3 (Follower/DC/AC Sampler) | `adcs.h` |
-| COM | `comp_comm.h/c` | 8 (UART/SPI/I2C/CAN/Key/MPU6050/OLED/Ultrasonic) | `comms.h` |
+| COM | `comp_comm.h/c` | 9 (UART/SPI/I2C/CAN/Key/MPU6050/OLED/Ultrasonic/Encoder) | `comms.h` |
 | GPO | `comp_gpo.h/c` | 5 (LED/Laser/Beep/Buzzer/Fan) | `gpos.h` |
-| PID | `comp_pid.h/c` | 6 (Standard/Cascade/P2PD/Parallel/PR/QPR) | `pids.h` |
-| PWM | `comp_pwm.h/c` | 5 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant) | `pwms.h` |
-| Motor | `comp_motor.h/c` | 1 (TIM) | — |
+| PID | `comp_pid.h/c` + `comp_pi_reg4.h` (四态PI) | 9 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar) | `pids.h` |
+| PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 6 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM) | `pwms.h` |
+| Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) | 1 (TIM) | — |
+| StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
+| VCU | `comp_complex.h` / `comp_crc.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 5 (Complex/CRC/Viterbi/Interleaver/RS) | — |
+
+**独立 Component（无 Devices 层, 单头文件 static inline）：**
+
+| Component | 用途 |
+|-----------|------|
+| `comp_esmo.h` | 增强滑模观测器 (eSMO) — PLL 锁相环角度/速度估计 (PMSM/BLDC) |
+| `comp_dlog.h` | 数据记录器 (Dlog1ch/Dlog4ch) — 环形缓冲 + 触发 + 预分频 |
+| `comp_vector.h` | 向量/矩阵批量运算 (add/sub/mul/dot/absmax/clamp + Vector3) |
+| `comp_pfc.h` | PFC 功率因数校正 — 电流指令 + 无桥 PFC (PfcBlIcmd) + RMS² 倒数 |
+| `comp_complex.h` | 复数运算 (Complex) — 加减乘除/共轭/模/幅角/极坐标转换 |
+| `comp_crc.h` | CRC 校验 — 8/16/32 位循环冗余校验, 查表法 + 比特流 |
+| `comp_viterbi.h` | Viterbi 解码器 — 卷积码最大似然译码, 分支度量 + 回溯 |
+| `comp_interleaver.h` | 交织器 — 块交织/解交织 (行列交织器), 地址生成 |
+| `comp_rs.h` | RS 编解码 — Reed-Solomon 纠错码, Berlekamp-Massey + Forney 算法 |
+| `comp_pi_reg4.h` | 四态 PI 调节器 — 带抗饱和的 PI 控制 (正常/上限/下限/跟踪) |
+| `comp_bldc_instaspin.h` | BLDC InstaSPIN — 无传感器 FOC, FAST 观测器 + 磁链/转矩估计 |
+
+**Module 层 (L4) — 业务逻辑:**
+| 模块 | 文件 | 用途 |
+|------|------|------|
+| MotApp | `mod_motor.h/c` | 单电机状态机 (IDLE/SPD/POS/SP) + 超时保护 |
+| TurnCtrl | `mod_turn.h/c` | 编码器 tick 计数转弯 (UTURN/LTURN/RTURN) |
+| Follower | `mod_follower.h/c` | P2PD 循迹 (8路红外→差速修正) |
+| HMI | `mod_hmi.h/c` | 按键去抖 + OLED 菜单 + 命令分发 |
+| ModBalance | `mod_balance.h/c` | 球板平衡 (步进电机+PID, 骨架) |
+| CmdDispatch | `mod_cmd_dispatch.h/c` | 统一命令分发 (按键/串口→CarCmd→回调) |
+| ModComm | `mod_comm.h/c` | 帧协议解析 (0xAA 帧头) |
+| SerialProto | `mod_serial_proto.h/c` | 调试串口协议 (0xFA/FC/EE/EF + PID 调参) |
+| SFRA | `mod_sfra.h/c` | 软件频响分析仪 — DDS扰动注入 + DFT采集 + Bode图输出 |
+| FCL | `mod_fcl_ctrl.h/c` | 快速电流环 — dq 轴双环 PI + 交叉解耦 + 反电动势前馈 |
+| PMBus | `mod_pmbus.h/c` | PMBus 协议栈 — SMBus 2.0 + PMBus 1.3 命令集 (I2C 从机) |
 
 ---
 
-> **最后更新：** 2026-08-12 — 扁平化重构：子项目目录 → 文件前缀分层、Templates/→App/、conf/→Config/params/、comp_communication→comp_comm、com_iic→com_i2c、BSP 驱动→Devices
+> **最后更新：** 2026-08-12 — 多 Agent 并行移植 controlSUITE 6 算法 (eSMO/DLOG/Vector/PFC/SVPWM-DPWM/SFRA) + 文档同步更新
