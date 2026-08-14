@@ -1,9 +1,11 @@
 id: components/codec
 layer: Components
-description: 编解码组件 — CRC 校验 / Viterbi 卷积译码 / RS 纠错 / 块交织
+description: 编解码组件 — CRC 校验 / Viterbi 卷积译码 / RS 纠错 / 块交织 / 校验和 / 大小端转换
 files:
   - comp_crc.h
   - comp_viterbi.h
   - comp_rs.h
   - comp_interleaver.h
+  - comp_checksum.h
+  - comp_endian.h
 depends: []
