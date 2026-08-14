@@ -44,7 +44,7 @@
 ### 1.1 App 层架构规则 🔥
 
 > **整个项目只有一组 App（`App/app_main.c.tmpl` + `App/app_main.h.tmpl`）。其他都是 Module（`mod_*`）。**
-> 参考: WEILAI_SuperCap (`User/app/app_main.c`) + LitteCar CMake (`User/Application/app_main.c`)。
+> 参考: `User/app/app_main.c` + CMake `User/Application/app_main.c`。
 
 | 规则 | 说明 |
 |:---|:---|
@@ -63,6 +63,39 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 **YmaC 拓扑选择器（GUI Tab2/Tab3）：** 扫 `Config/topologies/<topo>.yaml` 拓扑目录（buck 等，`status: ready` 才可生成）→ 选拓扑 → 合成 `Config/projects/<name>.yaml` 并调 scaffold 生成 `build/gen/<name>/` → 参数表（schema 来自拓扑 `params:`，slot 与 0xFB 帧同源）→ 离线注入物化 `app_main.c` + 运行时串口下发（Tab3, pyserial）。
 详见 [YmaC/README.md](YmaC/README.md)。
 
+### 1.2 三上下文执行契约 🔥
+
+> 项目的运行时骨架是**三件事**：硬实时闭环、监控、人机交互。三件事时序要求不同，跑在三个上下文。
+
+| 上下文 | 承载 | 优先级 | 要求 |
+|--------|------|--------|------|
+| **CTX_FAST** | 硬实时闭环（采样→控制→发波→快保护） | 高 | 周期确定、执行时间 ≪ 周期、不可差错 |
+| **CTX_SLOW** | 监控（慢保护去抖、状态聚合、心跳、喂狗） | 中 | 软实时、可抖动、确认问题即关断 |
+| **CTX_MAIN** | 人机交互（HMI、协议、日志、调参） | 低 | 非实时、跟得上人的速度即可 |
+
+**全序 + 单一抢占源 → 调用树即上下文。** CTX_FAST 由控制定时器 ISR 承载，CTX_SLOW 由独立监控定时器 ISR 承载（或 FAST 降频驱动），CTX_MAIN 是主循环。三者优先级总序，只有 FAST 能抢占。因此不需要线程调度、锁、`in_isr` 判断——一个函数跑在哪个上下文，看它从哪个 App 钩子被调，编译期即定。
+
+**App 钩子 ↔ 上下文映射（固定命名，xrobot 侧生成代码按此接线）：**
+
+| App 钩子 | 上下文 | 何时跑 |
+|----------|--------|--------|
+| `App_OnControlTick()` | CTX_FAST | 控制定时器 ISR（如 10kHz） |
+| `App_OnSlowTick()` | CTX_SLOW | 监控定时器 ISR（如 1kHz） |
+| `BackgroundTask()` | CTX_MAIN | 主循环 |
+
+**每上下文能做什么：**
+- **CTX_FAST**：只做确定的事——采样 fetch/process、控制计算、发波、快保护、交接（写 Latest / 入 SPSC / 写邮箱 / 置 Flag）。禁止 printf、软件 I2C、OLED、malloc、一切阻塞。
+- **CTX_SLOW**：慢保护去抖、状态聚合、心跳/喂狗、软关断判决。可轻微抖动；确认故障即置关断，硬件封波负责及时。监控三件套 = [bsp_watchdog.h](BSP/bsp_watchdog.h)（硬件喂狗）+ comp_protection.h `Heartbeat`/`Debounce`（死锁判定/去抖分级）——见 §2。
+- **CTX_MAIN**：所有耗时 I/O——printf、OLED、软件 I2C、协议解析、调参响应、从 SPSC 出队日志。
+
+**跨上下文数据只用五原语交接，禁止裸共享变量：** PingPong 双缓冲（DMA→FAST，[Components/dsp/comp_double_buffer.h](Components/dsp/comp_double_buffer.h)）/ Latest-value 锁存（FAST→SLOW/MAIN，[Components/dsp/comp_latch.h](Components/dsp/comp_latch.h)）/ SPSC 环形缓冲（ISR→MAIN，[Components/dsp/comp_ring.h](Components/dsp/comp_ring.h)）/ Command 邮箱（MAIN→FAST，周期边界生效，[Components/dsp/comp_mailbox.h](Components/dsp/comp_mailbox.h)）/ Event-Flag（ISR→MAIN）。五者均已物化：前四者为 static inline 头文件；**Event-Flag = [comp_protection.h](Components/protection/comp_protection.h) §5 `DeferredAction`**——ISR 置位 / MAIN 轮询清零（LibXR Event 的刻意简化：无阻塞等待，因 C-OOP 无线程，"等待"= 各上下文按自身周期轮询），错误分级归 [comp_error.h](Components/math/comp_error.h) bitmask。五原语全部落地；**PingPong→ADC 已接线**：`adc_dc_sampler` 内嵌 `DoubleBuffer`，DMA 完成 ISR（`adc_dc_sampler_on_dma_complete`，经 `bsp_adc_restart_dma` 重装）标 pending，FAST 每周期 `adc_dc_sampler_fetch` 切快照 + 只碰活动块（fetch/process 分离，撕裂读消除；安全前提=ADC 由控制定时器触发，每控制周期一次完成）。**首个 Module 消费者：** ModBuck（[Module/power/mod_buck.h](Module/power/mod_buck.h)）——Latest 锁存写 vout 遥测 / Command 邮箱 `mod_buck_set_vref` 周期边界生效 / SPSC 环推保护事件（fire-and-forget，`IO_NONE` 语义）。
+
+**五原语源自 LibXR（bsp-dev-c），非自创：** 参照 `LibXR/src/structure/queue/spsc_queue.*`（SPSCQueue）、`src/structure/double_buffer.*`（DoubleBuffer）、`src/middleware/event.*`（Event）、`src/middleware/message/topic.*`（Topic + Sync/ASync/Queued/Callback 订阅者）。本仓库翻译为纯C static inline（无模板 → 字节/单槽/值语义），各头文件已注明来源；与 LibXR 的刻意差异（如 mailbox 单槽覆盖 vs QueuedSubscriber 排队）在头文件里显式声明。参照 LibXR 公开仓库（QDU-Robomaster/bsp-dev-c）学习，各头文件标"来源: LibXR"处为本仓库移植。
+
+**I/O 完成契约：** 发起 I/O 时定完成行为——`IO_ASYNC_CB` / `IO_ASYNC_FLAG` / `IO_SYNC`（仅 MAIN）/ `IO_NONE`（显式忽略），枚举见 [Components/contract/comp_io.h](Components/contract/comp_io.h)。完成行为写进接口，不许悄悄丢掉。
+
+**归属约定：** 每个 Module 在 MANIFEST 声明 `ctx: fast|slow|main`；tick 函数按上下文命名（`_tick_fast` / `_tick_slow`）或在注释声明上下文；App 层按上下文接线，Module 不决定自己跑在哪。
+
 ## 2. 公共文件
 
 | 路径 | 用途 |
@@ -74,9 +107,12 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `BSP/bsp_dsp_fft.h` | **FFT 加速抽象** — RFFT + CFFT (BspRfftInst/BspCfftInst), 3 后端分发 |
 | `BSP/bsp_pwm.h` | **PWM BSP 接口** — 不透明句柄 + 物理参数 API (duty/Hz/ns/deg) |
 | `BSP/bsp_adc.h` | **ADC BSP 接口** — 校准/启动抽象 (bsp_adc_calibrate / bsp_adc_start_dma) |
+| `BSP/bsp_watchdog.h` | **看门狗 BSP 接口** — IWDG/C2000 WDT 抽象 (bsp_watchdog_init/feed), 移植自 LibXR Watchdog/STM32Watchdog |
+| `BSP/bsp_watchdog_stm32.c` | 看门狗 STM32 后端 — HAL IWDG, 分频/重载自动计算 (LibXR stm32_watchdog.cpp) |
+| `BSP/bsp_watchdog_c2000.c` | 看门狗 C2000 后端 — WDCR/WDKEY 喂狗 (Phase 3 按数据手册核对) |
 | `BSP/bsp_delay.h/c` | 微秒延时抽象 |
 | **Components** | (前缀 = 父类域) |
-| `Components/comp_math.h/c` | 数学工具：限幅、绝对值、死区、线性映射、校验和、硬件加速 sqrt |
+| `Components/math/comp_math.h` | 数学工具：限幅、绝对值、死区、线性映射、硬件加速 sqrt (math_sqrt_f32 / math_inv_sqrtf) |
 | `Components/comp_error.h` | 统一错误码 bitmask 系统 (ERROR_SET/CLEAR/IS_SET 宏) |
 | `Components/comp_filter.h` | 数字滤波器：一阶低通 + 二阶巴特沃斯低通 (biquad DFI) |
 | `Components/comp_iir.h` | **IIR 数字补偿器库** — DF22/DF23/2P2Z float + Q15/Q31 定点, 控制环补偿 |
@@ -215,7 +251,7 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_pid_nl.h` | `NlPidCfg`, `NlPidState` | 非线性 PID — P/I/D 各通路独立幂律整形 (α/δ/γ), 强鲁棒控制 |
 | `comp_tcm.h` | `TcmCapture` | 自动调参 TCM — 触发式阶跃响应捕获 (预触发环) + IAE/ISE/ITAE 准则 |
 | `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
-| `comp_math.h/c` | — | 数学工具 — 限幅/绝对值/死区/线性映射/校验和/hw sqrt |
+| `comp_math.h` | — | 数学工具 — 限幅/绝对值/死区/线性映射/hw sqrt (math_sqrt_f32 / math_inv_sqrtf) |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
 
 > 文件按子系统归入子目录：`Components/<域>/`、`Devices/<域>/`、`Module/<域>/`。文件前缀仍是域标识，子目录与之一致（如 `Components/pid/comp_pid.h`、`Devices/pwm/pwm_svpwm.h`、`Module/motor/mod_motor.h`）。
@@ -432,7 +468,7 @@ App/app_main.c                — #include "xxxs.h", 使用句柄
 改引脚/定时器/HAL 句柄即可，其他地方一行不动：
 
 1. 复制需要的 `Component + Device + Module` 文件到目标工程
-2. 确保 `BSP/container_of.h` 和 `Components/comp_math.h/c` 加入 include path
+2. 确保 `BSP/container_of.h` 和 `Components/comp_math.h` 加入 include path
 3. 修改 Device 文件中的硬件句柄以适配你的硬件
 4. 应用层通过全局句柄头文件（`gpos.h` / `pwms.h` / `comms.h` / `pids.h`）操作，不感知子类
 
@@ -477,7 +513,7 @@ AdcBase (虚表 + 名称 + DMA 缓冲区指针 + 位置偏差)
 
 **AdcOps 虚表（3 必须 + 2 可选）：** start_dma(必须) / read_ch(必须) / process(必须) / get_sum2(可选) / get_ch_bin(可选)
 
-**依赖：** `BSP/container_of.h`, `Components/comp_math.h/c`, STM32 HAL
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h`, STM32 HAL
 
 ### 8.2 COM 子系统 — 通信外设
 
@@ -497,7 +533,7 @@ CommBase (虚表 + 名称 + 接收缓冲区 + 当前字节)
 
 **CommOps 虚表（4 必须 + 2 可选）：** send(必须) / bgn(必须) / read(必须) / avail(必须) / is_ok(可选) / reset(可选)
 
-**依赖：** `BSP/container_of.h`, `Components/comp_math.h/c`, `Components/comp_mpu.h`, STM32F1 HAL
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h`, `Components/comp_mpu.h`, STM32F1 HAL
 
 **ComEncoder 位置编码器 (CommBase 子类)：**
 
@@ -544,7 +580,7 @@ PidBase (虚表 + dt + out_min/out_max + anti_windup)
 
 **PidOps 虚表（2 必须 + 1 可选）：** compute(必须) / reset(必须) / on_saturation(可选)
 
-**依赖：** `BSP/container_of.h`, `Components/comp_math.h/c`, `<math.h>`
+**依赖：** `BSP/container_of.h`, `Components/comp_math.h`, `<math.h>`
 
 ### 8.5 PWM 子系统 — 电力电子拓扑
 
@@ -612,7 +648,7 @@ ALIGN (强制对齐) → OPENLOOP (开环加速, V/f 控制) → CLOSED (BEMF ZC
 
 ### 8.7 StepMotor 子系统 — 步进电机
 
-> **来源:** Car_Control_Study_Report §17~§23 (三版步进电机对比 + Bug 清单)
+> **来源:** 既有项目经验（三版步进电机对比 + Bug 清单）
 > **新增日期:** 2026-08-12
 
 **继承树：**
@@ -628,7 +664,7 @@ set_rate(必须) / set_steps(必须) / get_steps(必须) / set_ramp(必须) / se
 
 **相序表可注入：** 全步进 4 拍 (A→C→B→D) / 半步进 8 拍 (A→AC→C→...), 微步进需驱动芯片硬件支持
 
-**关键约束 (Bug 规避, 报告 §22):**
+**关键约束 (Bug 规避):**
 - 状态全在结构体成员, 禁止 `static` 局部变量
 - 速度控制必须写定时器 LOAD 寄存器 (period 不能是死字段)
 - BSP 注入的 ctx 必须被实际使用 (禁止 `(void)ctx`)
@@ -636,7 +672,7 @@ set_rate(必须) / set_steps(必须) / get_steps(必须) / set_ramp(必须) / se
 
 **Module 层：** `mod_balance.h/c` (球板平衡, 步进电机 + PID + 摄像头坐标)
 
-**依赖：** `Components/comp_step_motor.h/c`, `BSP/bsp_step_motor.h`, `BSP/container_of.h`, `Components/comp_math.h/c`
+**依赖：** `Components/comp_step_motor.h/c`, `BSP/bsp_step_motor.h`, `BSP/container_of.h`, `Components/comp_math.h`
 
 ### 8.8 独立 Component（无 Devices 层）
 
@@ -1241,8 +1277,8 @@ pmbus_set_status_bit(me, bit, active)           →  设置状态位 (同步更�
 ```c
 // 1. 定义命令表
 static const PmbusCmdEntry pmbus_cmds[] = {
-  { PMBUS_CMD_READ_VOUT, "VOUT", false, 2, pmbus_read_vout, NULL },
-  { PMBUS_CMD_VOUT_COMMAND, "Vset", true, 2, pmbus_read_vset, pmbus_write_vset },
+  { PMB_CMD_READ_VOUT, "VOUT", false, 2, pmbus_read_vout, NULL },
+  { PMB_CMD_VOUT_COMMAND, "Vset", true, 2, pmbus_read_vset, pmbus_write_vset },
   // ...
 };
 
@@ -1312,6 +1348,33 @@ pmbus_init(&pmbus, pmbus_cmds, ARRAY_SIZE(pmbus_cmds), &power_ctrl);
 - `interleaver_reset(me)` — 清空缓冲, 复位所有指针
 
 **典型配置:** DVB 标准: B=12, D=17 (配合 RS(204,188))
+
+**依赖:** `<stdint.h>`
+
+#### comp_checksum.h — 校验和计算 (8/16/32 位累加)
+
+> **来源:** 原 Components/math/comp_math.h 拆分 (2026-08-14)
+
+**无符号累加校验和:** 逐元素相加, 自然溢出截断, O(n), 无查表/无依赖, ISR 安全, 与 comp_crc.h (多项式校验) 互补
+
+**关键 API (全部 static inline):**
+- `math_sum_u8(addr, len)` — 逐字节累加, 返回 uint8_t
+- `math_sum_u16(addr, len)` — 逐 16 位字累加, 返回 uint16_t
+- `math_sum_u32(addr, len)` — 逐 32 位字累加, 返回 uint32_t
+
+**依赖:** `<stdint.h>`
+
+#### comp_endian.h — 大小端转换 (16/32 位)
+
+> **来源:** 原 Components/math/comp_math.h 拆分 (2026-08-14)
+
+**字节序翻转:** 原地修改或源→目标双缓冲拷贝, 用于外部大端协议 (PMBus/SMBus) 与内部小端数据交换
+
+**关键 API (全部 static inline):**
+- `math_endian_reverse_16(addr)` — 16 位原地翻转 (字节 0↔1)
+- `math_endian_reverse_16_copy(src, dst)` — 16 位翻转后拷贝
+- `math_endian_reverse_32(addr)` — 32 位原地翻转 (字节 0↔3, 1↔2)
+- `math_endian_reverse_32_copy(src, dst)` — 32 位翻转后拷贝
 
 **依赖:** `<stdint.h>`
 

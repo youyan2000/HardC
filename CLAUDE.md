@@ -49,7 +49,7 @@ C-OOP/
 | 技能 | 用途 |
 |------|------|
 | [.claude/skills/embedded-oop-c](.claude/skills/embedded-oop-c/SKILL.md) | C 语言 OOP 完整方法论 |
-| [.claude/skills/eugene-code-style](.claude/skills/eugene-code-style/SKILL.md) | 代码风格：2空格缩进、K&R大括号、命名约定 |
+| [.claude/skills/c-code-style](.claude/skills/c-code-style/SKILL.md) | 代码风格：2空格缩进、K&R大括号、命名约定 |
 | [.claude/skills/stm32-hal](.claude/skills/stm32-hal/SKILL.md) | STM32 HAL/LL 专业知识 |
 | [.claude/skills/code-review-workflow](.claude/skills/code-review-workflow/SKILL.md) | **强制**写-审双Agent工作流 |
 
@@ -90,10 +90,12 @@ Config: 新增 default.yaml 配置模板
 | `.vscode/ .idea/` | IDE 配置因人而异 |
 | `.DS_Store Thumbs.db` | OS 垃圾文件 |
 | `__pycache__/ *.pyc` | Python 缓存（YmaC 工具） |
+| `.claude/settings.json` | 本地 AI 权限配置 — 含本机路径与私有项目引用，不上传 GitHub |
+| `docs/AGENT-SYNC.md` 等内部规划 | 双 AI 交接日志 / 重整计划，私有工作笔记 |
+| `docs/learning/` 学习报告 | 私人学习笔记（分析其他战队项目，含本机路径） |
 
 | 不忽略 | 原因 |
 |--------|------|
-| `.claude/settings.json` | 项目级 AI 工具配置，团队共享 |
 | `*.yaml` (Config/) | 配置文件，是源码的一部分 |
 
 ### AI 助手操作 Git 的规则
@@ -107,7 +109,7 @@ Config: 新增 default.yaml 配置模板
    - 是否有未跟踪的构建产物？→ 先更新 `.gitignore`
    - 是否破坏了文档的一致性？→ agent.md 和代码同步更新
 4. **永远不要提交这些内容：**
-   - API 密钥、密码、token（包括 `.claude/` 中非 settings.json 的敏感文件）
+   - API 密钥、密码、token（`.claude/settings.json` 及其余 `.claude/` 敏感文件均不入库）
    - 编译产物（`.o`, `.elf`, `.bin`）
    - IDE 个人配置（`.vscode/`, `.idea/`）
 5. **`git status` 先看一眼再动手。** 不确定该不该提交的文件，先问用户。
@@ -157,7 +159,7 @@ git branch -d feature/my-new-device
 ## App 层开发规则
 
 > **App 层只有一组文件。禁止自由发挥。** 所有项目必须基于 [App/app_main.c.tmpl](App/app_main.c.tmpl) 和 [App/app_main.h.tmpl](App/app_main.h.tmpl) 开始。
-> 参考: WEILAI_SuperCap `User/app/app_main.c` (263行) + LitteCar CMake `User/Application/app_main.c` (311行)。
+> 参考: `User/app/app_main.c` (263行) + CMake `User/Application/app_main.c` (311行)。
 
 1. **根结构体 `ProjectRoot`** — 嵌入所有 Device + Module 实例（值包含，零 malloc）
 2. **配置 POD `ProjectConfig`** — 纯数据结构，YmaC 注入目标，与运行时 Instance 分离
@@ -165,7 +167,7 @@ git branch -d feature/my-new-device
 4. **`apply_config()`** — 配置 POD → 运行时 Instance 同步（启动时 + YAML 注入后 + 0xFB 调参后）
 5. **`App_OnControlTick()`** — ISR 调用，顺序: 传感器→HMI→控制算法→执行器。禁止 printf
 6. **`BackgroundTask()`** — 主循环，做所有耗时 I/O: printf、软件 I2C、OLED、串口应答
-7. **`extern ProjectRoot g_root`** — Module 可通过 extern 访问兄弟模块（参考 LitteCar `extern Car car`）
+7. **`extern ProjectRoot g_root`** — Module 可通过 extern 访问兄弟模块（`extern Car car` 同款用法）
 
 ## YmaC 配置注入
 
@@ -248,7 +250,7 @@ make -j$(nproc)
 | PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 6 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM) | `pwms.h` |
 | Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) | 1 (TIM) | — |
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
-| VCU | `comp_complex.h` / `comp_crc.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 5 (Complex/CRC/Viterbi/Interleaver/RS) | — |
+| VCU | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 6 (CRC/Checksum/Endian/Viterbi/Interleaver/RS) | — |
 
 **独立 Component（无 Devices 层, 单头文件 static inline，位于 `Components/dsp/`、`power/`、`math/`、`codec/`、`motor/`、`pid/`）：**
 
@@ -260,6 +262,8 @@ make -j$(nproc)
 | `comp_pfc.h` | PFC 功率因数校正 — 电流指令 + 无桥 PFC (PfcBlIcmd) + RMS² 倒数 |
 | `comp_complex.h` | 复数运算 (Complex) — 加减乘除/共轭/模/幅角/极坐标转换 |
 | `comp_crc.h` | CRC 校验 — 8/16/32 位循环冗余校验, 查表法 + 比特流 |
+| `comp_checksum.h` | 校验和 — 8/16/32 位无符号累加 (自然溢出), static inline, ISR 安全 |
+| `comp_endian.h` | 大小端转换 — 16/32 位原地翻转 + 双缓冲拷贝, static inline |
 | `comp_viterbi.h` | Viterbi 解码器 — 卷积码最大似然译码, 分支度量 + 回溯 |
 | `comp_interleaver.h` | 交织器 — 块交织/解交织 (行列交织器), 地址生成 |
 | `comp_rs.h` | RS 编解码 — Reed-Solomon 纠错码, Berlekamp-Massey + Forney 算法 |
@@ -295,4 +299,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-13 — 目录按子系统隔离（Components 12 + Devices 7 + Module 4 子目录）+ 25 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分 / 三相计量 / 三电平逆变器延迟保护 + protection 独立域)
+> **最后更新：** 2026-08-14 — 目录按子系统隔离（Components 12 + Devices 7 + Module 4 子目录）+ 25 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分 / 三相计量 / 三电平逆变器延迟保护 + protection 独立域)；comp_math 按功能域拆分 (校验和/大小端 → codec/, inv_sqrtf 内联为 math_inv_sqrtf)
