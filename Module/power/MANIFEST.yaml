@@ -1,7 +1,7 @@
 id: module/power
 layer: Module
 ctx: fast
-description: 电源业务模块 — PowerCtrl 功率控制 / Buck 降压控制(PowerStage) / Sampler 采样 / SFRA 频响分析 / Balance 平衡 (主 ctx=fast; SFRA 跨 FAST/MAIN, Balance 在 MAIN)
+description: 电源业务模块 — PowerCtrl 功率控制 / Buck 降压控制(PowerStage) / Sampler 采样 / SFRA 频响分析 / Balance 平衡 / SuperCap 超级电容功率环(PowerStage) / CurrentShare 三相均流 (主 ctx=fast; SFRA 跨 FAST/MAIN, Balance 在 MAIN)
 files:
   - mod_powerctrl.h
   - mod_powerctrl.c
@@ -13,6 +13,10 @@ files:
   - mod_sfra.c
   - mod_balance.h
   - mod_balance.c
+  - mod_supercap.h
+  - mod_supercap.c
+  - mod_current_share.h
+  - mod_current_share.c
 depends:
   - components/motor
   - components/pid
@@ -20,6 +24,9 @@ depends:
   - components/pwm
   - components/adc
   - components/math
-  - components/dsp
+  - components/contract  # comp_ring/latch/mailbox — 跨上下文交接原语 (事件流/遥测/命令邮箱)
+  - components/dsp       # comp_filter (LowPassFilter) — 超级电容裁判功率低通
+  - components/protection # comp_protection (Hysteresis/Debounce/ModeSync) — 超级电容保护/均流
   - devices/pwm
   - devices/adc
+  - BSP/container_of.h   # mod_supercap ops container_of 下溯
