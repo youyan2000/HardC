@@ -2,7 +2,7 @@
 #define MOD_COMM_H
 
 // Module 层帧协议解析器
-// 基于 UART 的变长帧协议, 参考 SmCar Rx_FSM 三帧协议模式
+// 基于 UART 的变长帧协议, 参考 Rx_FSM 三帧协议模式
 //
 // 帧格式:
 //   [帧头 0xAA 1B][命令 CMD 1B][长度 LEN 1B][数据 DATA 0~255B][校验 CHK 1B]

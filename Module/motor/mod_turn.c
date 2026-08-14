@@ -1,6 +1,5 @@
 // 转弯控制模块 — TurnCtrl (Module 层实现)
-// 来源: LitteCar_STM32 TurnCtrl (tick 计数转弯)
-//       + Car_Control_Study_Report §7.3 (UTURN/LTURN/RTURN + 位置调整)
+// TurnCtrl (tick 计数转弯)
 //       + LESSONS #3 (固定 tick, 不用陀螺仪)
 //       + LESSONS #4 (rotate_stop 用 M_IDLE, 不清积分)
 //       + LESSONS #5 (→LF_RUN 过渡必须清级联 PID, 由调用者负责)

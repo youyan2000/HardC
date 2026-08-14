@@ -2,9 +2,8 @@
 #define MOD_HMI_H
 
 // 人机交互模块 — HMI (Module 层)
-// 来源: LitteCar_STM32 HMI (按键+OLED菜单+命令分发)
-//       + MyFinal_Work user_hmi.c (3按键+OLED菜单)
-//       + Car_Control_Study_Report §8 (传感器系统: 按键+OLED+MPU6050)
+// HMI (按键+OLED菜单+命令分发)
+//       + user_hmi.c (3按键+OLED菜单)
 //
 // 核心设计:
 //   - 按键事件 → CarCmd 枚举 → cmd_dispatch_execute → 各模块回调

@@ -1,7 +1,6 @@
 // 人机交互模块 — HMI (Module 层实现)
-// 来源: LitteCar_STM32 mod_hmi.c (按键→CarCmd 映射 + OLED 菜单)
-//       + MyFinal_Work user_hmi.c (3 按键去抖 + OLED 菜单状态机)
-//       + Car_Control_Study_Report §8 (按键+OLED+MPU6050 传感器系统)
+// mod_hmi.c (按键→CarCmd 映射 + OLED 菜单)
+//       + user_hmi.c (3 按键去抖 + OLED 菜单状态机)
 //
 // 架构: 按键事件 → CarCmd → cmd_dispatch_execute → 各模块回调
 //       物理输入和通信输入走同一路径, 零代码重复

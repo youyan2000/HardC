@@ -1,5 +1,5 @@
 // Module 层帧协议解析器 —— 基于 UART 的变长帧协议
-// 参考 SmCar Rx_FSM 三帧协议模式 (0xFE/0xFD/0xEF 头)
+// Rx_FSM 三帧协议模式 (0xFE/0xFD/0xEF 头)
 // 帧格式: [0xAA][CMD][LEN][DATA 0~255B][CHK] — XOR 逐字节累加校验
 //
 // 状态机: R_IDLE → R_CMD → R_LEN → R_DAT → R_CHK → (回调) → R_IDLE

@@ -3,9 +3,8 @@
 
 // 电机应用模块 — MotApp (Module 层)
 // 单电机状态机: IDLE / SPD(速度控制) / POS(位置控制) / SP(级联位置+速度)
-// 来源: LitteCar_STM32 app_motor.h/c (MotApp 3-ops 虚表模式)
-//       + 3507_2026_eugene (200 tick 超时 + CarConfig POD 注入)
-//       + Car_Control_Study_Report §7.1 (4 状态覆盖所有 DC 电机需求)
+// app_motor.h/c (MotApp 3-ops 虚表模式)
+//       + 200 tick 超时 + CarConfig POD 注入
 //
 // 核心设计:
 //   - 模块只通过 MotorBase* / PidBase* 操作下层, 不直接持有硬件指针 (LESSONS #40)

@@ -1,7 +1,6 @@
 // 电机应用模块 — MotApp (Module 层实现)
-// 来源: LitteCar_STM32 app_motor.c mot_tick() 状态机
-//       + 3507_2026_eugene 200 tick 超时 + apply_car_cfg 同步
-//       + Car_Control_Study_Report §7.1 (4 状态 + 级联 PID)
+// app_motor.c mot_tick() 状态机
+//       + 200 tick 超时 + apply_car_cfg 同步
 //
 // 架构约束:
 //   - Module 层不直接操作硬件寄存器, 全部通过 MotorBase*/PidBase* (LESSONS #40)

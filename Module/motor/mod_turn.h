@@ -2,8 +2,7 @@
 #define MOD_TURN_H
 
 // 转弯控制模块 — TurnCtrl (Module 层)
-// 来源: LitteCar_STM32 TurnCtrl (编码器 tick 计数转弯)
-//       + Car_Control_Study_Report §7.3 (3 种转弯: UTURN/LTURN/RTURN)
+// TurnCtrl (编码器 tick 计数转弯)
 //       + LESSONS #3 (不用陀螺仪, 用 tick 计数)
 //       + LESSONS #4 (制动不清积分)
 //       + LESSONS #5 (切回循迹前清级联 PID)

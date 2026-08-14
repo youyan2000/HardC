@@ -2,21 +2,21 @@
 #define MOD_SERIAL_PROTO_H
 
 // 调试串口协议框架 — COM-OOP Module 层
-// 来源: LitteCar 串口协议设计 (5 种帧类型: 0xFA/0xFB/0xFC/0xEE/0xEF)
+// 串口协议设计 (5 种帧类型: 0xFA/0xFB/0xFC/0xEE/0xEF)
 //
 // 设计原则:
 //   - 每种帧有独立帧头, 接收状态机按帧头路由
 //   - ISR 只收不处理 (存到 ring buffer 式的线性缓冲), 主循环处理 + 应答
 //   - 支持 Runtime 调参, 无需重新烧录
 //
-// 帧头与用途对照 (参考 LitteCar app_main.h):
+// 帧头与用途对照 (参考 app_main.h):
 //   0xFA — 控制命令 (映射 CarCmd, 2 字节帧)
 //   0xFB — PID 批量调参 (固定长度, 含 pi_check 0x40490FDA 校验)
 //   0xFC — 传感器查询 + 标定参数 (变长帧)
 //   0xEE — 校准流程控制 (2 字节帧, 多步状态机)
 //   0xEF — 底层直控 (2 字节帧, 映射 CarCmd)
 //
-// 数据流 (参考 LitteCar):
+// 数据流:
 //   ISR: byte → serial_proto_feed() → 状态机累积 → frame_ready 标志
 //   主循环: serial_proto_process() → 按帧头路由到对应处理器
 //
@@ -34,7 +34,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ======== 帧头定义 (与 LitteCar 协议对齐) ========
+// ======== 帧头定义 ========
 #define FRAME_CTRL 0xFA      // 控制命令 (映射 CarCmd, 2 字节帧)
 #define FRAME_PID_TUNE 0xFB  // PID 批量调参 (固定长度, 含 π 校验)
 #define FRAME_SENSOR 0xFC    // 传感器查询 + 标定参数 (变长帧)
@@ -46,7 +46,15 @@
 // pi_check = 0x40490FDA (π 的 IEEE 754 表示), 作为帧完整性魔数
 #define PID_TUNE_PI_MAGIC 0x40490FDAu
 
-typedef struct __attribute__((packed)) {
+// C28x 字寻址 (char=16bit): TI CGT 不支持 __attribute__((packed)) 也不认 #pragma pack —
+// 0xFB 帧在 C2000 按字布局 (无子字字段), 字节布局 (33B) 是 STM32 专属 (下方断言已按平台守卫).
+#if defined(__TI_COMPILER_VERSION__)
+#define SERIAL_PID_FRAME_PACKED
+#else
+#define SERIAL_PID_FRAME_PACKED __attribute__((packed))
+#endif
+
+typedef struct SERIAL_PID_FRAME_PACKED {
   uint8_t header;     // [0]  0xFB
   uint32_t pi_check;  // [1-4] π magic (0x40490FDA) — 帧完整性校验
   uint8_t slot;       // [5]  PID 槽位 (0-9 对应 10 组独立 PID)
@@ -59,11 +67,13 @@ typedef struct __attribute__((packed)) {
   uint16_t crc16;     // [30-31] CRC-16/XMODEM (覆盖 [0..29])
   uint8_t tail;       // [32] 帧尾 0xFE
 } SerialPidFrame;
-// sizeof(SerialPidFrame) = 1 + 4 + 1 + 6*4 + 2 + 1 = 33 bytes (packed)
+// sizeof(SerialPidFrame) = 1 + 4 + 1 + 6*4 + 2 + 1 = 33 bytes packed (STM32 字节布局)
 
-// 编译期断言: 确保结构体无 padding
+// 编译期断言: 确保结构体无 padding (仅 STM32 字节布局成立; C2000 字寻址无子字对齐)
 #ifndef __cplusplus
+#if !defined(__TI_COMPILER_VERSION__)
 _Static_assert(sizeof(SerialPidFrame) == 33, "SerialPidFrame must be 33 bytes packed");
+#endif
 #endif
 
 // ======== 传感器查询帧 (0xFC) ========

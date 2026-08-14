@@ -2,9 +2,8 @@
 #define MOD_FOLLOWER_H
 
 // 循迹控制模块 — Follower (Module 层)
-// 来源: LitteCar_STM32 Follower (红外 → P2PD → 差速)
-//       + 3507_2026_eugene Follower (tp=cp 同步 + task 独立参数)
-//       + Car_Control_Study_Report §7.2 (P2PD 循迹算法)
+// Follower (红外 → P2PD → 差速)
+//       + Follower (tp=cp 同步 + task 独立参数)
 //       + LESSONS #1 (不用陀螺仪)
 //       + LESSONS #2 (P2PD 非线性 PID, 不用于线性 PID)
 //       + LESSONS #8 (corr ≤ base - 1 限幅)

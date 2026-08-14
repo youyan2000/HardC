@@ -2,7 +2,7 @@
 #define MOD_CMD_DISPATCH_H
 
 // 统一命令分发框架 — COM-OOP Module 层
-// 来源: LitteCar CarCmd 统一分发模式 (mod_hmi.h/c — car_cmd_dispatch)
+// CarCmd 统一分发模式 (mod_hmi.h/c — car_cmd_dispatch)
 //
 // 核心设计:
 //   物理输入 (按键/GPIO) ─→ CarCmd 枚举 ─→ cmd_dispatch_execute() ─→ 各模块回调
@@ -91,16 +91,16 @@ bool cmd_dispatch_execute(CmdDispatcher *me, CarCmd cmd, const uint8_t *payload,
 
 // ======== 多输入源适配 (模板函数, 用户按实际硬件填充) ========
 
-// GPIO 按键事件 → CarCmd (参考 LitteCar hmi_dispatch 按键映射)
+// GPIO 按键事件 → CarCmd (hmi_dispatch 按键映射)
 // button_id: 按键编号 (0-based), event: 0=单击 1=双击 2=长按
 // 返回 CMD_NONE 表示该按键+事件组合无对应命令
 CarCmd cmd_from_button(uint8_t button_id, uint8_t event);
 
-// 串口 0xFA 帧命令字节 → CarCmd (参考 LitteCar car_cmd_rx 0x01=前进 等)
+// 串口 0xFA 帧命令字节 → CarCmd (car_cmd_rx 0x01=前进 等)
 // cmd_byte: 0xFA 帧头后的 1 字节命令码
 CarCmd cmd_from_serial_byte(uint8_t cmd_byte);
 
-// 串口 0xEF 帧命令字节 → CarCmd (参考 LitteCar car_cmd_ef_rx 0x0A=掉头 等)
+// 串口 0xEF 帧命令字节 → CarCmd (car_cmd_ef_rx 0x0A=掉头 等)
 // 与 0xFA 协议共用 CarCmd 枚举, 但命令字节映射不同
 CarCmd cmd_from_direct_byte(uint8_t cmd_byte);
 

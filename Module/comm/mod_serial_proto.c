@@ -1,5 +1,5 @@
 // 调试串口协议框架 — COM-OOP Module 层
-// 来源: LitteCar 串口协议设计 (mod_hmi.c car_cmd_rx / car_cmd_ef_rx / cfg_rx)
+// 串口协议设计 (mod_hmi.c car_cmd_rx / car_cmd_ef_rx / cfg_rx)
 //
 // 5 种帧类型, 接收状态机按帧头路由:
 //   0xFA: 控制命令 (2 字节) → CarCmd → CmdDispatcher

@@ -1,10 +1,10 @@
 // 统一命令分发框架 — COM-OOP Module 层
-// 来源: LitteCar car_cmd_dispatch() 统一分发模式 (mod_hmi.c)
+// car_cmd_dispatch() 统一分发模式 (mod_hmi.c)
 //
 // 核心思想: 所有输入源 (按键/串口/CAN) 映射到同一 CarCmd 枚举,
 //           通过注册的回调函数统一分发, 零代码重复。
 //
-// 数据流 (参考 LitteCar):
+// 数据流:
 //   按键事件 → hmi_dispatch → CarCmd → car_cmd_dispatch() → mot_*/turn_*/follower_*
 //   串口 0xFA → car_cmd_rx    → CarCmd → car_cmd_dispatch() → (同上)
 //   串口 0xEF → car_cmd_ef_rx → CarCmd → car_cmd_dispatch() → (同上)
@@ -61,11 +61,11 @@ bool cmd_dispatch_execute(CmdDispatcher *me, CarCmd cmd, const uint8_t *payload,
 
 // ======== 输入源适配模板 ========
 // 以下为框架模板, 用户根据实际硬件映射填充。
-// 参考 LitteCar mod_hmi.c 中的 hmi_dispatch() / car_cmd_rx() / car_cmd_ef_rx()。
+// mod_hmi.c 中的 hmi_dispatch() / car_cmd_rx() / car_cmd_ef_rx()。
 
 // 按键 → CarCmd 映射 (模板)
 //
-// 参考 LitteCar 实际映射:
+// 实际映射:
 //   KEY1(button=0): 单击→CMD_TASK_1   双击→CMD_TURN_LEFT_90
 //   KEY2(button=1): 单击→CMD_TASK_2   双击→CMD_TURN_RIGHT_90  长按→编码器标定
 //   KEY3(button=2): 单击/长按→CMD_STOP  双击→CMD_OLED_PAGE
@@ -81,7 +81,7 @@ CarCmd cmd_from_button(uint8_t button_id, uint8_t event) {
 
 // 串口 0xFA 命令字节 → CarCmd 映射 (模板)
 //
-// 参考 LitteCar car_cmd_rx 实际映射:
+// car_cmd_rx 实际映射:
 //   0x01→CMD_FORWARD   0x02→CMD_BACKWARD   0x03→CMD_STOP
 //   0x11→CMD_TURN_LEFT_90   0x12→CMD_TURN_RIGHT_90   0x13→CMD_TURN_180
 //   0x21→CMD_TRACE_TOGGLE   0x22→CMD_TRACE_ON   0x23→CMD_TRACE_OFF
@@ -95,7 +95,7 @@ CarCmd cmd_from_serial_byte(uint8_t cmd_byte) {
 
 // 串口 0xEF 命令字节 → CarCmd 映射 (模板)
 //
-// 参考 LitteCar car_cmd_ef_rx 实际映射:
+// car_cmd_ef_rx 实际映射:
 //   0x0A→CMD_TURN_180   0x0B→CMD_TURN_RIGHT_90   0x0C→CMD_TURN_LEFT_90
 //   0x0F→CMD_STOP   0x18→CMD_FORWARD   0x19→CMD_BACKWARD
 //   0x1A→CMD_TURN_LEFT_SLOW   0x1B→CMD_TURN_RIGHT_SLOW   0x1C→CMD_TRACE_TOGGLE
