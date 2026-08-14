@@ -1,4 +1,4 @@
-# C-OOP — 嵌入式 C 面向对象硬件驱动库
+# HardC — 嵌入式 C 面向对象硬件驱动库
 
 本仓库用 ANSI C 实现面向对象模式的嵌入式硬件驱动框架。按 bsp-dev-c 风格组织为五层扁平目录（BSP → Components → Devices → Module → App），文件前缀区分子系统域。跨平台：STM32 (HAL/HRTIM) + TI C2000 (ePWM/CLA) + 纯C回退。
 
@@ -88,7 +88,7 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 - **CTX_SLOW**：慢保护去抖、状态聚合、心跳/喂狗、软关断判决。可轻微抖动；确认故障即置关断，硬件封波负责及时。监控三件套 = [bsp_watchdog.h](BSP/bsp_watchdog.h)（硬件喂狗）+ comp_protection.h `Heartbeat`/`Debounce`（死锁判定/去抖分级）——见 §2。
 - **CTX_MAIN**：所有耗时 I/O——printf、OLED、软件 I2C、协议解析、调参响应、从 SPSC 出队日志。
 
-**跨上下文数据只用五原语交接，禁止裸共享变量：** PingPong 双缓冲（DMA→FAST，[Components/contract/comp_double_buffer.h](Components/contract/comp_double_buffer.h)）/ Latest-value 锁存（FAST→SLOW/MAIN，[Components/contract/comp_latch.h](Components/contract/comp_latch.h)）/ SPSC 环形缓冲（ISR→MAIN，[Components/contract/comp_ring.h](Components/contract/comp_ring.h)）/ Command 邮箱（MAIN→FAST，周期边界生效，[Components/contract/comp_mailbox.h](Components/contract/comp_mailbox.h)）/ Event-Flag（ISR→MAIN）。五者均已物化：前四者为 static inline 头文件；**Event-Flag = [comp_protection.h](Components/protection/comp_protection.h) §5 `DeferredAction`**——ISR 置位 / MAIN 轮询清零（LibXR Event 的刻意简化：无阻塞等待，因 C-OOP 无线程，"等待"= 各上下文按自身周期轮询），错误分级归 [comp_error.h](Components/math/comp_error.h) bitmask。五原语全部落地；**PingPong→ADC 已接线**：`adc_dc_sampler` 内嵌 `DoubleBuffer`，DMA 完成 ISR（`adc_dc_sampler_on_dma_complete`，经 `bsp_adc_restart_dma` 重装）标 pending，FAST 每周期 `adc_dc_sampler_fetch` 切快照 + 只碰活动块（fetch/process 分离，撕裂读消除；安全前提=ADC 由控制定时器触发，每控制周期一次完成）。**首个 Module 消费者：** ModBuck（[Module/power/mod_buck.h](Module/power/mod_buck.h)）——Latest 锁存写 vout 遥测 / Command 邮箱 `mod_buck_set_vref` 周期边界生效 / SPSC 环推保护事件（fire-and-forget，`IO_NONE` 语义）。
+**跨上下文数据只用五原语交接，禁止裸共享变量：** PingPong 双缓冲（DMA→FAST，[Components/contract/comp_double_buffer.h](Components/contract/comp_double_buffer.h)）/ Latest-value 锁存（FAST→SLOW/MAIN，[Components/contract/comp_latch.h](Components/contract/comp_latch.h)）/ SPSC 环形缓冲（ISR→MAIN，[Components/contract/comp_ring.h](Components/contract/comp_ring.h)）/ Command 邮箱（MAIN→FAST，周期边界生效，[Components/contract/comp_mailbox.h](Components/contract/comp_mailbox.h)）/ Event-Flag（ISR→MAIN）。五者均已物化：前四者为 static inline 头文件；**Event-Flag = [comp_protection.h](Components/protection/comp_protection.h) §5 `DeferredAction`**——ISR 置位 / MAIN 轮询清零（LibXR Event 的刻意简化：无阻塞等待，因 HardC 无线程，"等待"= 各上下文按自身周期轮询），错误分级归 [comp_error.h](Components/math/comp_error.h) bitmask。五原语全部落地；**PingPong→ADC 已接线**：`adc_dc_sampler` 内嵌 `DoubleBuffer`，DMA 完成 ISR（`adc_dc_sampler_on_dma_complete`，经 `bsp_adc_restart_dma` 重装）标 pending，FAST 每周期 `adc_dc_sampler_fetch` 切快照 + 只碰活动块（fetch/process 分离，撕裂读消除；安全前提=ADC 由控制定时器触发，每控制周期一次完成）。**首个 Module 消费者：** ModBuck（[Module/power/mod_buck.h](Module/power/mod_buck.h)）——Latest 锁存写 vout 遥测 / Command 邮箱 `mod_buck_set_vref` 周期边界生效 / SPSC 环推保护事件（fire-and-forget，`IO_NONE` 语义）。
 
 **五原语源自 LibXR（bsp-dev-c），非自创：** 参照 `LibXR/src/structure/queue/spsc_queue.*`（SPSCQueue）、`src/structure/double_buffer.*`（DoubleBuffer）、`src/middleware/event.*`（Event）、`src/middleware/message/topic.*`（Topic + Sync/ASync/Queued/Callback 订阅者）。本仓库翻译为纯C static inline（无模板 → 字节/单槽/值语义），各头文件已注明来源；与 LibXR 的刻意差异（如 mailbox 单槽覆盖 vs QueuedSubscriber 排队）在头文件里显式声明。参照 LibXR 公开仓库（QDU-Robomaster/bsp-dev-c）学习，各头文件标"来源: LibXR"处为本仓库移植。
 
@@ -545,7 +545,7 @@ CommBase (虚表 + 名称 + 接收缓冲区 + 当前字节)
 
 **ComEncoder 位置编码器 (CommBase 子类)：**
 
-> **来源:** TI controlSUITE position_manager, 翻译为 C-OOP 纯C 版本
+> **来源:** TI controlSUITE position_manager, 翻译为 HardC 纯C 版本
 
 **支持协议:** BiSS-C (RS485 双向, MA+SLO+CRC6) / Endat22 (RS485 双向, 命令帧+MRS码) / SinCos (模拟 1Vpp 差分, 正余弦插值) / T-Format (串行单向, 纯接收) / PTO (脉冲序列 ABZ+UVW, 正交计数)
 
@@ -628,7 +628,7 @@ MotorBase (虚表 + 名称 + ops)
 
 #### comp_bldc_instaspin.h — InstaSPIN-BLDC 无传感器方波驱动
 
-> **来源:** TI InstaSPIN-BLDC 算法概念 (SPRA590/SPRA695/SPRABQ7), 解绑自 ROM 实现, 翻译为 C-OOP 纯C float inline 版本
+> **来源:** TI InstaSPIN-BLDC 算法概念 (SPRA590/SPRA695/SPRABQ7), 解绑自 ROM 实现, 翻译为 HardC 纯C float inline 版本
 > **新增日期:** 2026-08-12
 
 **三阶段启动 + 闭环换向:**
@@ -1164,7 +1164,7 @@ TCM (Tuning Criteria Module): armed 状态持续把误差写入预触发环形�
 
 ### 8.9 Module — 频响分析仪 (SFRA)
 
-> **来源:** TI controlSUITE SFRA/v1.20/Float, 翻译为 C-OOP 纯C float 版本
+> **来源:** TI controlSUITE SFRA/v1.20/Float, 翻译为 HardC 纯C float 版本
 > **新增日期:** 2026-08-12
 
 **SFRA 软件频率响应分析仪 — 在线 Bode 图测量，无需外接 FRA 仪器。**
@@ -1195,7 +1195,7 @@ mod_sfra_collect(&sfra, output);
 
 ### 8.10 Module — 快速电流环 (FCL)
 
-> **来源:** TI controlSUITE motor_control/libs/FCL, 翻译为 C-OOP Module 层纯C float 版本
+> **来源:** TI controlSUITE motor_control/libs/FCL, 翻译为 HardC Module 层纯C float 版本
 > **新增日期:** 2026-08-12
 
 **FCL 快速电流环 — dq 旋转坐标系高带宽 PI 电流控制 + 交叉解耦 + 反电动势前馈 + 有源阻尼。**
@@ -1239,7 +1239,7 @@ fcl_run(&fcl, i_d, i_q, i_d_ref, i_q_ref, omega_e, v_bus);
 
 ### 8.11 Module — PMBus 协议栈
 
-> **来源:** TI controlSUITE comms/PMBus, 翻译为 C-OOP 纯C 版本
+> **来源:** TI controlSUITE comms/PMBus, 翻译为 HardC 纯C 版本
 > **新增日期:** 2026-08-12
 
 **PMBus 协议栈 — 基于 I2C 从机的数字电源通信协议 (SMBus 2.0 物理层 + PMBus 1.3 命令层)。**
@@ -1302,7 +1302,7 @@ pmbus_init(&pmbus, pmbus_cmds, ARRAY_SIZE(pmbus_cmds), &power_ctrl);
 
 ### 8.12 VCU 信道编码组件
 
-> **来源:** TI controlSUITE VCU 库 (v2_00/v2_10), 翻译为 C-OOP 纯C inline 版本
+> **来源:** TI controlSUITE VCU 库 (v2_00/v2_10), 翻译为 HardC 纯C inline 版本
 > **新增日期:** 2026-08-12
 
 **应用场景:** 数字电视 (DVB-C/S/T) / 电力线通信 (PLC/G3-PLC) / 无线充电通信 (Qi/NFC) / 深空通信级联码

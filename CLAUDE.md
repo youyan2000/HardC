@@ -1,4 +1,4 @@
-# CLAUDE.md — C-OOP 项目入口（AI + 人类共读）
+# CLAUDE.md — HardC 项目入口（AI + 人类共读）
 
 > 本文件是 AI 助手和人类协作者的共同入口。它记录项目级别的约定，不重复代码本身已有的信息。
 
@@ -8,7 +8,7 @@
 
 **目录结构：**
 ```
-C-OOP/
+HardC/
 ├── BSP/             # L1: 不透明句柄 → 平台抽象
 ├── Components/      # L2: comp_*.h/c → 父类 + ops 虚表
 │   ├── adc/ comm/ gpo/ pid/ pwm/          # 父类域

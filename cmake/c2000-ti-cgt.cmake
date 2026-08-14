@@ -1,7 +1,7 @@
 # =====================================================================
 #  c2000-ti-cgt.cmake — TI cl2000 (C2000 CGT) 工具链文件
 #
-#  C2000 生态无官方 CMake 支持 (CCS 用 gmake). 本文件由 C-OOP 自建,
+#  C2000 生态无官方 CMake 支持 (CCS 用 gmake). 本文件由 HardC 自建,
 #  标志学自 CCS gmake 的编译行 (RELEASE/subdir_rules.mk):
 #     cl2000 -v28 -ml -mt --cla_support=cla2 --float_support=fpu32
 #            --tmu_support=tmu0 --vcu_support=vcu0 -O3 --abi=eabi
@@ -9,11 +9,11 @@
 #
 #  用法:
 #     cmake -S . -B build \
-#       -DCMAKE_TOOLCHAIN_FILE=<C-OOP>/cmake/c2000-ti-cgt.cmake \
+#       -DCMAKE_TOOLCHAIN_FILE=<HardC>/cmake/c2000-ti-cgt.cmake \
 #       -DC2000_CGT_ROOT="<TI CCS 安装>/ccs/tools/compiler/ti-cgt-c2000_<ver>"
 #
 #  若 cl2000 的 CMake 探测/try-compile 失败 (STATIC_LIBRARY 目标类型不可用),
-#  C-OOP 会退化为生成 coop.makefile 片段交由 CCS gmake 纳入 (见 ymac_cfg 文档).
+#  HardC 会退化为生成 hardc.makefile 片段交由 CCS gmake 纳入 (见 ymac_cfg 文档).
 # =====================================================================
 
 cmake_minimum_required(VERSION 3.13)
@@ -49,7 +49,7 @@ set(CMAKE_AR           "${C2000_CGT_BIN}/ar2000.exe")
 # 误当源文件. CMake 的 include 机制自带空格路径转义. (CCS gmake 由 makefile 隐式带)
 include_directories("${C2000_CGT_ROOT}/include")
 
-# cl2000 是"编译"驱动 (加 -z 才链接); 这里只做编译, 链接由 coop 目标/外部工程负责
+# cl2000 是"编译"驱动 (加 -z 才链接); 这里只做编译, 链接由 hardc 目标/外部工程负责
 set(CMAKE_C_OUTPUT_EXTENSION .obj)
 
 # 统一架构标志 (C28x FPU32 + TMU0 + VCU0 + CLA2). --c99 为 cl2000 的 C99 开关

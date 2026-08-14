@@ -1,4 +1,4 @@
-# C-OOP 项目 .clang-tidy
+# HardC 项目 .clang-tidy
 
 # 用法: clang-tidy <file> -- -I BSP -I Components -I Devices -I Module
 

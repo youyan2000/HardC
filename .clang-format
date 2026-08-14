@@ -1,4 +1,4 @@
-# C-OOP 项目 .clang-format
+# HardC 项目 .clang-format
 
 # 基于 Google 风格，适配嵌入式 C + 2空格缩进 + K&R 大括号
 # 用法: clang-format -i <file>
