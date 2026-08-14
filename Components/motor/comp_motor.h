@@ -1,7 +1,6 @@
 // 电机驱动平台层 —— 抽象基类
 // 子类: TIM PWM + AB 编码器 (motor_tim)
 //
-// 来源: LitteCar 项目 (SmCar/LitteCar_STM32)
 // 适配: STM32_OOP 框架 (this → me, 统一 include 路径)
 
 #ifndef COMP_MOTOR_H

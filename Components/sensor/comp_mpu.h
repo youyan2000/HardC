@@ -1,5 +1,4 @@
 // MPU6050 平台层 API —— 芯片能力声明
-// 源自: LitteCar 项目 (SmCar/LitteCar_STM32/c8t6_car_24H/User/Components/comp_mpu.h)
 
 #ifndef COMP_MPU_H
 #define COMP_MPU_H

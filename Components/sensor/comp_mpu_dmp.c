@@ -1007,7 +1007,7 @@ static int dmp_set_shake_reject_timeout(unsigned short time)
 // DMP 特性使能（决定 FIFO 包格式）
 // ============================================================
 
-// 使用与参考项目相同的特性组合（6 轴四元数 + 校准陀螺仪 + 原始加速度计 + 陀螺自校准 + Tap）
+// 使用相同特性组合（6 轴四元数 + 校准陀螺仪 + 原始加速度计 + 陀螺自校准 + Tap）
 #define DMP_FEATURE_TAP             (0x001)
 #define DMP_FEATURE_ANDROID_ORIENT  (0x002)
 #define DMP_FEATURE_LP_QUAT         (0x004)

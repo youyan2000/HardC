@@ -3,12 +3,6 @@
 
 // GPO 平台层 —— 通用输出抽象基类
 // 基类只定义三个能力: 开 / 关 / 调电压(PWM set)
-// 子类按设备类型分:
-//   GpoLed    — LED (GPIO 开关 / PWM 调光)
-//   GpoLaser  — 激光笔 (GPIO)
-//   GpoBeep   — 有源蜂鸣器 (GPIO)
-//   GpoBuzzer — 无源蜂鸣器 (PWM)
-//   GpoFan    — 风扇 (PWM)
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -17,7 +11,7 @@
 typedef enum {
   GpoLedBoard,     // 板载 LED
   GpoLedUser,      // 用户 LED
-  GpoLaser,        // 激光笔
+  GpoLaser,        // 激光
   GpoBeep,         // 有源蜂鸣器
   GpoBuzzer,       // 无源蜂鸣器
   GpoFan,          // 风扇

@@ -2,16 +2,14 @@
 #define COMP_STEP_MOTOR_H
 
 // 步进电机平台层 — 抽象基类 (独立于 DC 电机 comp_motor)
-// 来源: Car_Control_Study_Report §23.3 (理想 vtable 设计)
-//       + Car_Control_Study_Report §18~§22 (三版 Bug 清单全部规避)
-//       + 3507_2026_eugene motor_step.h/c (OOP 版步进电机)
+// 参考: motor_step.h/c (OOP 版步进电机)
 //
 // 与 comp_motor.h 的关系:
 //   - comp_motor: DC 电机 (3-ops: write/encode/read, 有编码器反馈)
 //   - comp_step_motor: 步进电机 (6-ops, 开环脉冲控制)
-//   两者独立, 不共享 vtable — 因为语义完全不同 (报告 §10.1, §23.2)
+//   两者独立, 不共享 vtable — 因为语义完全不同
 //
-// Bug 规避 (报告 §22):
+// Bug 规避:
 //   - ✅ 状态全在结构体成员, 无 static 局部变量 (Bug #1)
 //   - ✅ 速度控制通过 set_rate → 定时器 LOAD 寄存器 (Bug #2)
 //   - ✅ ctx 必须被使用, 不能 (void)ctx (Bug #4)
@@ -25,14 +23,14 @@
 
 // ======== 相序表 (可注入, 支持不同驱动模式) ========
 // 半步进 8 拍: {A, AC, C, CB, B, BD, D, DA}
-// 全步进 4 拍: {A, C, B, D}  (A→C→B→D 即 MyFinal_Work 线束顺序)
+// 全步进 4 拍: {A, C, B, D}  (A→C→B→D 线束顺序)
 // 微步进需要硬件支持 (A4988/DRV8825 等驱动芯片)
 typedef struct {
   uint8_t phases[8];   // 相位序列 (每字节 bit0=A, bit1=B, bit2=C, bit3=D)
   uint8_t num_steps;   // 相位数: 4=全步进, 8=半步进
 } StepPhaseTable;
 
-// 预设: 4 相全步进 A→C→B→D (匹配 MyFinal_Work 线束重映射)
+// 预设: 4 相全步进 A→C→B→D
 #define STEP_PHASE_TABLE_FULL_4  \
   { .phases = {0x01, 0x04, 0x02, 0x08}, .num_steps = 4 }
 

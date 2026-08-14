@@ -1,4 +1,4 @@
-// 关键保护机制组件 — 从 WEILAI + LitteCar 学到的工业级保护模式
+// 关键保护机制组件 — 工业级保护模式
 //
 // 提供:
 //   1. 滞回比较器 (防模式抖动)
@@ -11,8 +11,8 @@
 //
 // 全部 static inline, 零调用开销, ISR 安全.
 //
-// 来源: RM WEILAI_SuperCap (模式切换保护+均流+去抖动)
-//       LitteCar_STM32 (PWM限幅+ISR安全)
+// 模式切换保护+均流+去抖动
+//       PWM限幅 + ISR安全
 
 #ifndef COMP_PROTECTION_H
 #define COMP_PROTECTION_H
@@ -30,7 +30,7 @@ extern "C" {
  *
  * 用途: 防止模式切换抖动 — 进入窗口窄, 退出窗口宽
  *
- * WEILAI Buck-Boost 实例:
+ * Buck-Boost 实例:
  *   进入窗口: 0.97 < ratio < 1.03  (窄, 不轻易进入)
  *   退出窗口: ratio < 0.90 或 ratio > 1.10 (宽, 不轻易退出)
  */
@@ -69,7 +69,7 @@ static inline bool Hysteresis_Update(Hysteresis *me, float value) {
  *
  * 用途: 连续 N 次触发才确认, 防止噪声误报
  *
- * WEILAI 配置:
+ * 配置:
  *   WARNING 级别: debounce 可配 (如 10次)
  *   FAULT 级别:   固定 80 次 (~2.8ms @28kHz)
  */
@@ -117,7 +117,7 @@ static inline void Debounce_SetThreshold(Debounce *me, uint32_t threshold) {
  *
  * 用途: 在输出的最后一步强制限幅, 不依赖调用者
  *
- * LitteCar 教训 #7: PWM 输出必须限幅
+ * 教训 #7: PWM 输出必须限幅
  *   "电机 PWM ±7200, 在 write_impl 中 hard clamp, 不可依赖调用者"
  */
 
@@ -145,7 +145,7 @@ static inline uint32_t HardClamp_u32(uint32_t value, uint32_t lo, uint32_t hi) {
  * 用途: 模式切换的第一周期, 所有通道统一用平均输出过渡
  *       防止各通道因模式差异产生环流损坏驱动器
  *
- * WEILAI 实现:
+ * 实现:
  *   if (cur_mode != last_mode) {
  *     sync_cmd = (alpha_cmd + beta_cmd + gamma_cmd) / 3.0f;
  *     统一用 sync_cmd 更新所有通道一个周期;
@@ -190,8 +190,12 @@ static inline bool ModeSync_Update(ModeSync *me, uint8_t cur_mode,
  *
  * 用途: ISR 中只 set flag, 主循环中执行耗时操作 (printf/send/log)
  *
- * LitteCar 教训 #6: 不要在 ISR 中发串口
+ * 教训 #6: 不要在 ISR 中发串口
  *   "所有 printf/comm_send 在主循环 BackgroundTask() 中完成"
+ *
+ * 本结构 = 五原语之 Event-Flag (ISR→MAIN), 见 agent.md §1.2
+ *   LibXR Event 的刻意简化 (无阻塞等待): C-OOP 无线程, "等待" = 各上下文按自身周期轮询
+ *   错误分级 (WARNING/FAULT) 归 comp_error.h bitmask, 本结构只做 ISR→MAIN 的置位/轮询交接
  */
 
 // 预定义 action 标记位 (可扩展至 32 个)
@@ -234,7 +238,7 @@ static inline bool DeferredAction_IsPending(const DeferredAction *me,
  *   - 快通道 ISR 中 heartbeat_++
  *   - 慢通道 ISR 中检查: 连续 N tick 心跳不变 → 停止喂狗 → IWDG 复位
  *
- * WEILAI: HRTIM ISR heartbeat++, TIM2 ISR 检查, 100 tick 不变 → 复位
+ * HRTIM ISR heartbeat++, TIM2 ISR 检查, 100 tick 不变 → 复位
  */
 
 typedef struct {

@@ -1,6 +1,5 @@
 // 步进电机平台层 — 基类实现
-// 来源: Car_Control_Study_Report §23.3 (StepMotorBase 设计)
-//       基类只管理: 相序表绑定 + 软限位 + 公共状态字段初始化
+// 基类只管理: 相序表绑定 + 软限位 + 公共状态字段初始化
 
 #include "comp_step_motor.h"
 #include <stddef.h>   // NULL

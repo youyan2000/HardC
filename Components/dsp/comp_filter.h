@@ -13,7 +13,7 @@
 //
 // static inline 函数适合 ISR 热路径, 零调用开销。
 //
-// 来源: RM WEILAI_SuperCap (既有滤波器) + 经典模拟原型 (Butterworth/Chebyshev)
+// 既有滤波器 + 经典模拟原型 (Butterworth/Chebyshev)
 //       与 RBJ Audio EQ Cookbook (BPF/BSF/Notch)
 
 #ifndef COMP_FILTER_H

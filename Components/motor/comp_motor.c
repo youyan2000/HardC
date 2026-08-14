@@ -2,7 +2,6 @@
 // 子类: MotTim (TIM4 PWM + AB 编码器)
 // 应用层只通过 MotorBase* 句柄 + motor_write/encode/read 操作
 //
-// 来源: LitteCar 项目 (SmCar/LitteCar_STM32)
 // 适配: STM32_OOP 框架 (this → me, 统一 include 路径)
 
 #include "comp_motor.h"
