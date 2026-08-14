@@ -1,5 +1,5 @@
 // 平台层数学工具库
-// 提供限幅、绝对值、大小端转换、求校验和等通用数学操作
+// 提供限幅、绝对值、线性映射、快速开方等通用数学操作
 // static inline 函数适合 ISR 热路径, 零调用开销
 
 #ifndef COMP_MATH_H
@@ -109,8 +109,16 @@ static inline float math_map_f(float x, float in_min, float in_max,
   return (x - in_min) / (in_max - in_min) * (out_max - out_min) + out_min;
 }
 
-// 平方根倒数 (快速算法, Legacy — 推荐用 math_sqrt_f32)
-float inv_sqrtf(float x);
+// 平方根倒数 (Quake III 快速算法, Legacy — 非 FPU/TMU 目标的软回退)
+// 有 FPU/TMU 时推荐 math_sqrt_f32 (硬件加速)
+static inline float math_inv_sqrtf(float x) {
+  float xhalf = 0.5f * x;
+  int32_t i = *(int32_t *)&x;
+  i = 0x5f3759df - (i >> 1);
+  x = *(float *)&i;
+  x = x * (1.5f - xhalf * x * x);
+  return x;
+}
 
 // 硬件加速平方根 (通过 BSP/bsp_dsp.h 分发)
 //   STM32: CMSIS-DSP arm_sqrt_f32 → FPU VSQRT 单周期
@@ -119,18 +127,5 @@ float inv_sqrtf(float x);
 static inline float math_sqrt_f32(float x) {
   return bsp_sqrt_f32(x);
 }
-
-// 大小端转换 (原地修改)
-void math_endian_reverse_16(void *addr);
-void math_endian_reverse_32(void *addr);
-
-// 大小端转换 (源 → 目标, 双缓冲)
-void math_endian_reverse_16_copy(const void *src, void *dst);
-void math_endian_reverse_32_copy(const void *src, void *dst);
-
-// 无符号校验和 (8/16/32 位)
-uint8_t  math_sum_u8 (const uint8_t  *addr, uint32_t len);
-uint16_t math_sum_u16(const uint16_t *addr, uint32_t len);
-uint32_t math_sum_u32(const uint32_t *addr, uint32_t len);
 
 #endif

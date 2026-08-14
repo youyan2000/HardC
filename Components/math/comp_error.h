@@ -3,8 +3,6 @@
 
 // 嵌入式 OOP 统一错误码系统 —— bitmask 模式
 //
-// 来源: RM WEILAI_SuperCap (HKUST 超级电容项目)
-//
 // 使用方式:
 //   uint8_t err = 0;
 //   ERROR_SET(err, ERROR_UNDER_VOLTAGE);
