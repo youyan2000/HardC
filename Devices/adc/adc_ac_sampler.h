@@ -1,7 +1,7 @@
 /**
  * @file    adc_ac_sampler.h
  * @brief   三相交流采样驱动 —— 继承 AdcBase，差分+单端同步采样 + 三相重构
- * @note    参考 电赛2025A —— STM32G474, ADC1, TIM1_TRGO 触发, DMA 循环
+ * @note    参考 STM32G474 配置: ADC1, TIM1_TRGO 触发, DMA 循环
  *
  * 继承关系:
  *   AdcBase  <—  AdcAcSampler (本文件)
@@ -11,7 +11,7 @@
  *   电流通道 (i_ch[], 差分): 最多 8 路 — 典型: Ia_inv,Ib_inv,Ic_inv, Ia_rec,Ib_rec,Ic_rec + 2 spare
  *   参考通道 (vref_ch, 单端): 1 路  — 典型: Vref_1V65
  *
- *   典型 7ch 配置 (电赛2025A 原版):
+ *   典型 7ch 配置:
  *     i_ch[0..3] = {0,1,2,3}  → Ia_inv, Ic_inv, Ia_rec, Ic_rec
  *     v_ch[0..1] = {4,5}      → Vab, Vbc
  *     vref_ch    = 6          → Vref_1V65
@@ -41,6 +41,7 @@
 #define ADC_AC_SAMPLER_H
 
 #include "comp_adc.h"
+#include "comp_io.h"          // 运行时契约: I/O 完成方式 (转换完成置 data_ready = IO_ASYNC_FLAG)
 #include "stm32g4xx_hal.h"
 #include <stdbool.h>
 
@@ -54,6 +55,7 @@ typedef struct {
   uint16_t           raw_buf[ADC_AC_MAX_CH]; // [基类绑定] DMA 缓冲区
   ADC_HandleTypeDef  *hadc;         // HAL ADC 句柄
   DMA_HandleTypeDef  *hdma;         // HAL DMA 句柄
+  IoCompletion       completion;    // 完成契约: 发起时声明完成方式 (本设备固定 IO_ASYNC_FLAG)
 
   // ---- 通道配置 (init 后可按 PCB 布局手动修改) ----
   uint8_t num_ch;                   // ADC 扫描通道总数 (如 7, 13)
@@ -91,6 +93,7 @@ typedef struct {
 // === API =====================================================================
 
 // 初始化三相交流采样器
+// completion: 完成契约 — 转换完成回调置 data_ready 标志 (IO_ASYNC_FLAG), 消费者轮询; 传其他值即契约违约
 // hadc:   CubeMX ADC 句柄
 // hdma:   CubeMX DMA 句柄
 // num_ch: ADC 扫描总通道数 (如 7 或 13)
@@ -99,7 +102,7 @@ typedef struct {
 // i_ch:   电流通道在 raw 中的索引 [num_i] (传 NULL 则默认 0,1,2...)
 // v_ch:   电压通道在 raw 中的索引 [num_v] (传 NULL 则默认 num_i, num_i+1...)
 // vref_ch: 参考电压通道索引 (如 6 或 12)
-void adc_ac_sampler_init(AdcAcSampler *me, ADC_HandleTypeDef *hadc,
+void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, ADC_HandleTypeDef *hadc,
                          DMA_HandleTypeDef *hdma,
                          uint8_t num_ch, uint8_t num_v, uint8_t num_i,
                          const uint8_t *i_ch, const uint8_t *v_ch,
@@ -109,6 +112,7 @@ void adc_ac_sampler_init(AdcAcSampler *me, ADC_HandleTypeDef *hadc,
 void adc_ac_sampler_deinit(AdcAcSampler *me);
 
 // ADC 转换完成回调 — 在 HAL_ADC_ConvCpltCallback 中调用
+// 契约: 生产者置 data_ready 标志 (IO_ASYNC_FLAG) — 与 init 声明不符即配置错误, 不可静默 (assert)
 // DMA 已将数据写入 base.raw[], 执行电压电流重构 + RMS
 void adc_ac_sampler_fetch(AdcAcSampler *me);
 

@@ -1,7 +1,7 @@
 /**
  * @file    adc_ac_sampler.c
  * @brief   三相交流采样器实现 —— AdcBase 子类
- * @note    参考 电赛2025A drv_adc_sampler.c
+ * @note    参考 drv_adc_sampler.c
  *
  * 实现 AdcOps 虚函数表:
  *   .start_dma → start_dma_impl (启动 ADC DMA 循环扫描)
@@ -176,7 +176,7 @@ static const AdcOps sampler_ops = {
 
 // ====== 构造器 ===============================================================
 
-void adc_ac_sampler_init(AdcAcSampler *me, ADC_HandleTypeDef *hadc,
+void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, ADC_HandleTypeDef *hadc,
                          DMA_HandleTypeDef *hdma,
                          uint8_t num_ch, uint8_t num_v, uint8_t num_i,
                          const uint8_t *i_ch, const uint8_t *v_ch,
@@ -199,6 +199,10 @@ void adc_ac_sampler_init(AdcAcSampler *me, ADC_HandleTypeDef *hadc,
   me->num_ch = num_ch;
   me->num_v  = num_v;
   me->num_i  = num_i;
+
+  // 完成契约: 转换完成→置 data_ready 标志, 消费侧轮询 — 只支持 IO_ASYNC_FLAG (声明其他值 = 违约)
+  me->completion = completion;
+  assert(me->completion == IO_ASYNC_FLAG);
 
   // 通道索引 (用户传入, NULL 则自动分配: 先电流再电压最后参考)
   if (i_ch) {
@@ -253,6 +257,8 @@ void adc_ac_sampler_init(AdcAcSampler *me, ADC_HandleTypeDef *hadc,
 
 // ADC 转换完成回调 — 在 HAL_ADC_ConvCpltCallback 中调用
 void adc_ac_sampler_fetch(AdcAcSampler *me) {
+  // 契约: 生产者置 data_ready 标志 (IO_ASYNC_FLAG) — init 声明不符即配置错误不可静默
+  assert(me->completion == IO_ASYNC_FLAG);
   adc_process(&me->base);
 }
 
