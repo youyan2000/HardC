@@ -1,7 +1,7 @@
 // SFRA 软件频率响应分析仪 — 在线 Bode 图测量
 //
 // 来源: TI controlSUITE SFRA/v1.20/Float (SFRA_F_Include.h)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 应用: 在线测量电源/电机控制环路频率响应, 无需外接 FRA 仪器
 //

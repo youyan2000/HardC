@@ -1,7 +1,7 @@
 // 电机控制 — 电流模型 (转子磁链角度估计)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (cur_mod.h, cur_const.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 算法 (异步电机矢量控制核心):
 //   Imd(k+1) = Imd(k) + Kr × (Ids - Imd(k))     ← 励磁电流一阶 LPF
@@ -18,6 +18,7 @@
 #define COMP_CURMOD_H
 
 #include "comp_angle.h"
+#include "comp_math.h"
 
 // ======================= CurMod (电流模型磁链观测器) =======================
 

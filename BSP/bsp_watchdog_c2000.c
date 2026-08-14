@@ -13,7 +13,7 @@
 //   WDPS 编码: /1../64 = 1..7  (旧 C2000 的 0=/1 1=/64… 表是 F2833x, 不适用本系列)
 // 超时范围 ≈ 51.2µs (/2×/1) ~ 6.71s (/4096×/64); 请求超限自动钳位.
 // 注: F28004x WDCLK 固定由 INTOSC1 (10MHz) 驱动, 与 SYSCLK 无关 → clock_hz 忽略.
-// 由 cmake/C-OOP.CMake 的 c2000 分支编译 (Phase 3 落地).
+// 由 cmake/HardC.CMake 的 c2000 分支编译 (Phase 3 落地).
 
 #include "bsp_watchdog.h"
 #include <stdint.h>

@@ -1,7 +1,7 @@
 // 位置编码器驱动 — CommBase 的子类 (Devices 层)
 //
 // 来源: TI controlSUITE position_manager
-// 翻译为 C-OOP 纯C 版本
+// 翻译为 HardC 纯C 版本
 //
 // 支持协议:
 //   BiSS-C   — RS485 双向, MA脉冲 + SLO数据, CRC6 校验

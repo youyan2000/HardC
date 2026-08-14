@@ -1,7 +1,7 @@
 // SEPIC 单开关变频 PWM 实现
 //
 // 来源: TI controlSUITE DPLib PWMDRV_1ch (digital_power)
-// 翻译为 C-OOP 风格
+// 翻译为 HardC 风格
 //
 // 核心机制:
 //   - 单通道 PWM, 占空比控制输出/输入电压比: Vout/Vin = D/(1-D)

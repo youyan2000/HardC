@@ -1,7 +1,7 @@
 // 数字滤波器库扩展 — 3P3Z 控制器 (三极点三零点)
 //
 // 来源: TI controlSUITE digital_power CNTL_3P3Z_F (f28x7x_v1.0/C_macros)
-// 翻译为 C-OOP 纯C float static inline 版本
+// 翻译为 HardC 纯C float static inline 版本
 //
 // 差分方程 (Direct Form 1):
 //   Out[k] = A1*Out[k-1] + A2*Out[k-2] + A3*Out[k-3]

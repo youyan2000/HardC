@@ -1,7 +1,7 @@
 // 电机控制 — 相电压计算 (从调制函数反推实际电压)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (volt_calc.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 从三相调制函数 Mfunc 和直流母线电压 DcBus 反推实际相电压:
 //   VphaseA = (Vdc/3) × (2×MfuncA - MfuncB - MfuncC)

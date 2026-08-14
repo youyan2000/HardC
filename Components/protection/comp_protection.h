@@ -194,7 +194,7 @@ static inline bool ModeSync_Update(ModeSync *me, uint8_t cur_mode,
  *   "所有 printf/comm_send 在主循环 BackgroundTask() 中完成"
  *
  * 本结构 = 五原语之 Event-Flag (ISR→MAIN), 见 agent.md §1.2
- *   LibXR Event 的刻意简化 (无阻塞等待): C-OOP 无线程, "等待" = 各上下文按自身周期轮询
+ *   LibXR Event 的刻意简化 (无阻塞等待): HardC 无线程, "等待" = 各上下文按自身周期轮询
  *   错误分级 (WARNING/FAULT) 归 comp_error.h bitmask, 本结构只做 ISR→MAIN 的置位/轮询交接
  */
 

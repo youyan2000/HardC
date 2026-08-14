@@ -1,7 +1,7 @@
 // 异步电机磁链估计器实现
 //
 // 来源: TI controlSUITE ACIFE_MACRO (motor_control/math_blocks/v4.3)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 
 #include "comp_aci_fe.h"
 #include <string.h>

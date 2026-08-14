@@ -1,7 +1,7 @@
 // 数据记录器 — ISR 实时数据捕获环形缓冲区 (纯C, 无硬件依赖)
 //
 // 来源: TI controlSUITE solar/v1.2/float (DLOG_1CH_F.h, DLOG_4CH_F.h)
-// 翻译为 C-OOP 纯C float static inline 版本
+// 翻译为 HardC 纯C float static inline 版本
 //
 // 两种变体:
 //   Dlog1ch  — 单通道数据记录器 (单个 float 信号)

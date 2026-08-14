@@ -1,7 +1,7 @@
 // PID_GRANDO 全功能 PID 控制器 — 设定点权重 + D 滤波 + 前馈 + 回算抗饱和
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (pid_grando.h)
-// 翻译为 C-OOP PidBase 子类
+// 翻译为 HardC PidBase 子类
 //
 // 与 PidDcl 的关键差异:
 //   1. Km 前馈权重 — 加 D 项可对设定点 Kg 加权 (缺省 Km=0)

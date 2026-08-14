@@ -1,7 +1,7 @@
 // 斜坡发生器 — 开环相位/频率生成器
 //
 // 来源: TI controlSUITE solar/v1.2/float (RAMPGEN_F), motor_control (rampgen.h, rmp_cntl.h)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 用途:
 //   RampGen  — 自由运行斜坡 (开环相位发生器, 用于 SPWM 调制波生成)

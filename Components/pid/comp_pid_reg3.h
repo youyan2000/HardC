@@ -1,7 +1,7 @@
 // 3 状态 PID 调节器 — 反计算抗饱和 + 位置回绕变体
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3/pid_reg3.h
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 与 comp_pi_reg4 (四态 PI: 前馈 + 设定值滤波) 不同的侧重:
 //   reg3 采用反计算 (back-calculation) 抗饱和: 输出被限幅时, 把饱和差

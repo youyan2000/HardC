@@ -3,7 +3,7 @@
 // 来源: TI C2000Ware Digital Power SDK
 //   libraries/3_level_inv_delayed_protection_scheme
 //   (type4_pwm_protection_source.h: DC 事件 + AQ 触发 + RED 上升沿延迟计数)
-// 翻译为 C-OOP 纯C 版本 (TI 的 EPWM 硬件实现 → 软件计时器)
+// 翻译为 HardC 纯C 版本 (TI 的 EPWM 硬件实现 → 软件计时器)
 //
 // 两层保护策略:
 //   1. 主开关: 故障边沿立即逐周期关断 (TI: CBC 逐周期) — main_trip 镜像故障

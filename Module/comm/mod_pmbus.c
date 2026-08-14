@@ -1,7 +1,7 @@
 // PMBus 协议栈 — SMBus 2.0 + PMBus 1.3 命令集子集实现
 //
 // 来源: TI controlSUITE comms/PMBus
-// 翻译为 C-OOP 纯C 版本
+// 翻译为 HardC 纯C 版本
 //
 // 协议流程:
 //   I2C 写: START + ADDR(W) + CMD + DATA... + STOP

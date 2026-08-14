@@ -1,7 +1,7 @@
 // 最新值锁存 — FAST→SLOW/MAIN 遥测交接 (纯C, 零 malloc, 无锁)
 //
 // 来源: LibXR (bsp-dev-c/Jiu-xiao) src/middleware/message/ — Topic<T> + ASyncSubscriber (异步主动拉取最新)
-// 翻译为 C-OOP 纯C 单槽最新值 static inline 版本 (LibXR 用模板+发布订阅, C-OOP 无模板 → 单生产者直写 + dirty/seq)
+// 翻译为 HardC 纯C 单槽最新值 static inline 版本 (LibXR 用模板+发布订阅, HardC 无模板 → 单生产者直写 + dirty/seq)
 //
 // 用途: FAST 循环内写最新测量值, SLOW/MAIN 侧按需读取
 //   - 生产者 (FAST) 调用 latch_write

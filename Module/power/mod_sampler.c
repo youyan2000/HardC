@@ -1,4 +1,4 @@
-// 采样管理状态机实现 — ADC-OOP Module 层
+// 采样管理状态机实现 — ADHardC Module 层
 // Module 层状态机模式
 //
 // 状态转换图:

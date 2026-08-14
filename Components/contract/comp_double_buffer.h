@@ -1,7 +1,7 @@
 // 双缓冲 (PingPong) — DMA→FAST 采样快照 / 发送-日志双缓冲 (纯C, 零 malloc, 无锁)
 //
 // 来源: LibXR (bsp-dev-c/Jiu-xiao) src/structure/double_buffer.{hpp,cpp} — DoubleBuffer
-// 翻译为 C-OOP 纯C static inline 版本 (LibXR 用类+模板, C-OOP 无类 → 字节缓冲 + 显式状态位)
+// 翻译为 HardC 纯C static inline 版本 (LibXR 用类+模板, HardC 无类 → 字节缓冲 + 显式状态位)
 //
 // 用途: 一块连续内存对半切分成两个等大缓冲, DMA/外设写一块的同时 FAST 处理另一块
 //   - 生产侧 (如 DMA 完成 ISR): FillPending / EnablePending → 标 pending 就绪

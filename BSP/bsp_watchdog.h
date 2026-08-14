@@ -1,7 +1,7 @@
 // BSP 看门狗硬件抽象接口 — IWDG (STM32) / WDT (C2000)
 //
 // 来源: LibXR (bsp-dev-c/Jiu-xiao) src/driver/watchdog.hpp + driver/st/stm32_watchdog.cpp
-// 翻译为 C-OOP 纯C BSP 层接口 (不透明句柄 + 配置 POD)
+// 翻译为 HardC 纯C BSP 层接口 (不透明句柄 + 配置 POD)
 //
 // 上层 Module/App 只调 bsp_watchdog_* 函数, 不直接操作看门狗寄存器.
 //

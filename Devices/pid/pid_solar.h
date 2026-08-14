@@ -1,7 +1,7 @@
 // 太阳能 PI 控制器 — 条件积分抗饱和 PI
 //
 // 来源: TI controlSUITE solar/v1.2/float (CNTL_PI_F — PI with anti-windup)
-// 翻译为 C-OOP PidBase 子类
+// 翻译为 HardC PidBase 子类
 //
 // 与 PidStandard 的关键差异:
 //   1. 条件积分抗饱和: 当 Out != PreSat 时冻结积分 (简单高效)

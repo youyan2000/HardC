@@ -1,7 +1,7 @@
 // BSP 看门狗 STM32 后端 — bsp_watchdog.h 的 STM32 实现 (HAL IWDG)
 //
 // 移植自: LibXR driver/st/stm32_watchdog.cpp — 分频/重载自动计算表 + HAL_IWDG_Refresh
-// 由 cmake/C-OOP.CMake 的 st 分支编译; 系列由 bsp_stm32_hal.h 选择.
+// 由 cmake/HardC.CMake 的 st 分支编译; 系列由 bsp_stm32_hal.h 选择.
 // 仅当 HAL_IWDG_MODULE_ENABLED 时编译 (LibXR 同款门控, 未启用 IWDG 的工程不链接).
 
 #include "bsp_watchdog.h"

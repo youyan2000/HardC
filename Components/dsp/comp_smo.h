@@ -1,7 +1,7 @@
 // 电机控制 — 滑模观测器 (Sliding Mode Observer for PMSM)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (smopos.h, smopos_const.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 算法:
 //   I_est(k+1) = Fsmopos × I_est(k) + Gsmopos × (V - E - Z)

@@ -1,7 +1,7 @@
 // DSP 测试信号 — 脉冲发生器
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3/impulse.h
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 每 Period 个采样周期输出一个满幅脉冲 (0x7FFF 满刻度), 其余周期输出 0.
 // 用途: 注入阶跃/冲激测试信号, 配合频响分析仪观测系统动态响应.

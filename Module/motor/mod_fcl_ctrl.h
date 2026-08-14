@@ -1,7 +1,7 @@
 // 快速电流环 (Fast Current Loop) — dq 旋转坐标系高带宽电流控制
 //
 // 来源: TI controlSUITE motor_control/libs/FCL
-// 翻译为 C-OOP Module 层纯C float 版本
+// 翻译为 HardC Module 层纯C float 版本
 //
 // 算法: dq 轴双环 PI 电流控制 + 交叉解耦 + 反电动势前馈 + 有源阻尼
 //

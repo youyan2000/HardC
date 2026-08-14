@@ -1,8 +1,5 @@
 // 六开关 SVPWM —— PwmBase 子类, 三相电压源逆变器空间矢量调制
 //
-// 来源: TI controlSUITE motor_control/math_blocks/v4.3 (SVGEN)
-// 翻译为 C-OOP 风格
-//
 // 拓扑: 3 个半桥 (6 开关) 构成三相逆变桥
 // 应用: 三相 AC/DC 整流器、三相 DC/AC 并网逆变器、PMSM/BLDC 电机驱动
 //
@@ -31,7 +28,6 @@ typedef enum {
 } SvpwmMode;
 
 // DPWM 不连续调制子模式 (仅 SvpwmMode_5Seg 时生效)
-// 来源: TI controlSUITE svgen_dpwm.h
 typedef enum {
   SvpwmDpwm_MIN,   // DPWMMIN: 最低相钳位到 0, 仅用零矢量 V0
   SvpwmDpwm_MAX,   // DPWMMAX: 最高相钳位到 1, 仅用零矢量 V7
@@ -42,7 +38,7 @@ typedef enum {
 
 // 六开关 SVPWM 子类
 typedef struct {
-  PwmBase base;                       // 基类 (必须为第一个成员)
+  PwmBase base;                       // 基类
 
   // BSP 硬件绑定 — 3 个半桥腿 = 6 个开关管
   BspPwmHandle *bsph;                // BSP 硬件句柄 (board_init 绑定, NULL=未绑定)
@@ -85,7 +81,7 @@ void svpwm_init(PwmSvpwm *me, uint32_t freq_hz, uint32_t deadtime_ns,
                 BspPwmTimer timer_b, uint32_t output_mask_b,
                 BspPwmTimer timer_c, uint32_t output_mask_c);
 
-// 反初始化
+// 析构
 void svpwm_deinit(PwmSvpwm *me);
 
 // 设置 αβ 电压矢量 — 自动计算扇区 + 6 路占空比

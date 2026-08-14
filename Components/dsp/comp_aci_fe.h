@@ -1,7 +1,7 @@
 // 电机控制 — 异步电机磁链估计器 (ACI Flux Estimator)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (aci_fe.h, aci_fe_const.h)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 算法 (电流模型 + 电压模型 PI 融合):
 //   电流模型: 从 Id 估计转子磁链 → FluxDrE = K1×FluxDrE + K2×IDsE

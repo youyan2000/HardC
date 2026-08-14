@@ -1,7 +1,7 @@
 // MPPT 最大功率点跟踪库 — P&O / INC-V / INC-I
 //
 // 来源: TI controlSUITE solar/v1.2/float (MPPT_PNO_F, MPPT_INCC_F, MPPT_INCC_I_F)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 三种算法:
 //   MpptPno   — 扰动观察法 (Perturb & Observe), 最简单, 适合稳定光照

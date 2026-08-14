@@ -1,7 +1,7 @@
 // SPSC 无锁环形缓冲 — 单生产者单消费者跨上下文交接 (纯C, 零 malloc, 无锁)
 //
 // 来源: LibXR (bsp-dev-c/Jiu-xiao) src/structure/queue/spsc_queue_base.hpp — SPSCQueueBase
-// 翻译为 C-OOP 纯C 字节环形缓冲 static inline 版本 (LibXR 用模板+动态分配, C-OOP 无模板 → 按字节+调用者缓冲)
+// 翻译为 HardC 纯C 字节环形缓冲 static inline 版本 (LibXR 用模板+动态分配, HardC 无模板 → 按字节+调用者缓冲)
 //
 // 用途: ISR→MAIN 字节流 (事件帧/日志流/遥测队列)
 //   - 生产者 (如 ISR) 调用 ring_push / ring_write, 永不阻塞

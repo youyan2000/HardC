@@ -2,7 +2,7 @@
 //
 // 上层 Components/Devices 只调 bsp_adc_* (不透明 void* 句柄),
 // 本文件把句柄还原为 HAL 句柄并调用 HAL_ADC_*.
-// 由 cmake/C-OOP.CMake 的 st 分支编译; 系列由 bsp_stm32_hal.h 选择.
+// 由 cmake/HardC.CMake 的 st 分支编译; 系列由 bsp_stm32_hal.h 选择.
 
 #include "bsp_adc.h"
 #include "bsp_stm32_hal.h"

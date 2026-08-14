@@ -1,7 +1,7 @@
 // 电机控制 — 模 6 换相计数器
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3/mod6_cnt.h
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // BLDC 六步换相: 每次触发输入有效, 换相步计数器递增 (0→1→...→5→0).
 // 计数 0~5 对应六种换相状态 (电机电角度每 60° 换相一次).

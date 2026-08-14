@@ -1,7 +1,7 @@
 #ifndef MOD_SAMPLER_H
 #define MOD_SAMPLER_H
 
-// 采样管理状态机模板 — ADC-OOP Module 层
+// 采样管理状态机模板 — ADHardC Module 层
 // Module 层状态机模式
 //
 // 状态: INIT → CAL_ZERO → CAL_SPAN → CAL_DONE → RUN → OVERFLOW → FAULT

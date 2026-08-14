@@ -2,7 +2,7 @@
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3
 //   (svgen_comm.h — 連續SVM, svgen_dpwm.h — 不连续PWM, svgen_mf.h — 幅频输入SVM)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 三种方案:
 //   SvgenComm — 连续 SVM (中点注入), 开关次数多但谐波小

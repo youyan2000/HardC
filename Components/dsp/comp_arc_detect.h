@@ -2,7 +2,7 @@
 //
 // 来源: TI C2000Ware Digital Power SDK solutions/tida_010231/source/arc/source/ArcDetect.c
 //       (arc_detect() 频带能量计算) + arc_isr.c (阈值判定)
-// 翻译为 C-OOP 纯C float 版本, 与 FFT 后端解耦 (输入取幅值平方谱)
+// 翻译为 HardC 纯C float 版本, 与 FFT 后端解耦 (输入取幅值平方谱)
 //
 // 直流电弧特征: 频谱在宽频带内能量大幅抬升 (宽带噪声), 而正常负载/开关噪声集中在窄带 (开关谐波). 因此电弧检测核心 = 分析频带内宽带能量 → dB,越限即判电弧.
 //

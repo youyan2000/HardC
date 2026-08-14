@@ -1,7 +1,7 @@
 // DCL 风格二自由度 PID —— PidBase 子类
 //
 // 来源: TI controlSUITE DCL (Digital Controller Library)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 与 PidStandard 的关键差异:
 //   1. Kr 设定点权重 — Kr=1.0=标准PID, Kr=0.0=I-PD (P只对反馈作用), 默认0.5

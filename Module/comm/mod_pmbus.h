@@ -1,7 +1,7 @@
 // PMBus 协议栈 — SMBus 2.0 + PMBus 1.3 命令集子集
 //
 // 来源: TI controlSUITE comms/PMBus
-// 翻译为 C-OOP 纯C 版本
+// 翻译为 HardC 纯C 版本
 //
 // 定位: Module 层, 基于 I2C 从机的数字电源通信协议栈
 // 协议: SMBus 2.0 (I2C 物理层) + PMBus 1.3 (命令层)
@@ -25,7 +25,7 @@
 
 // PMBus 标准命令码 (子集 — 按需扩展)
 // 注意: 常量前缀用 PMB_CMD_ 而非 PMBUS_CMD_ — TI C2000 driverlib 的 pmbus_common.h
-// 用 #define PMBUS_CMD_* 定义同名宏, C-OOP 枚举成员若同名会在 preinclude driverlib.h
+// 用 #define PMBUS_CMD_* 定义同名宏, HardC 枚举成员若同名会在 preinclude driverlib.h
 // 的 C2000 构建里全部宏展开成 (0x..U) → "expected an identifier" (cl2000 实测).
 typedef enum {
   PMB_CMD_PAGE              = 0x00,

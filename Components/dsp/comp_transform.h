@@ -1,7 +1,7 @@
 // 坐标变换库 — Clarke / Park / iPark
 //
 // 来源: TI controlSUITE motor_control/math_blocks (clarke.h, park.h, ipark.h)
-// 翻译为 C-OOP 纯C float inline 版本 (去掉 _iq 定点依赖)
+// 翻译为 HardC 纯C float inline 版本 (去掉 _iq 定点依赖)
 //
 // 三后端策略:
 //   默认 float — 直接浮点乘法 (适用于 M4F/M7/FPU C2000)

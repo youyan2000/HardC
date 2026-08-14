@@ -1,7 +1,7 @@
 // IIR 数字补偿器库 — DF22 (二阶) / DF23 (三阶) / 2P2Z (极零点)
 //
 // 来源: TI controlSUITE DCL (DF22, DF23) + Solar (CNTL_2P2Z_F)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 三种实现适用于不同场景:
 //   DF22  — 二阶 Direct Form 2, 最少状态存储, 适合 M4F/M7 的 CMSIS-DSP biquad 加速
