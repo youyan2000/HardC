@@ -92,6 +92,7 @@ void pwm_bb_init_phases(PwmBuckBoost *me, uint32_t freq_hz, uint8_t num_phases, 
 void pwm_bb_init(PwmBuckBoost *me, uint32_t freq_hz, BspPwmTimer timer, uint32_t output_mask, PwmMode mode,
                  bool sync_rect);
 
+// 析构
 void pwm_bb_deinit(PwmBuckBoost *me);
 
 // ======== 占空比律 (运行时调参) ========
