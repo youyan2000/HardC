@@ -587,15 +587,16 @@ PidBase (虚表 + dt + out_min/out_max + anti_windup)
 **继承树：**
 ```
 PwmBase (虚表 + 模式 + 通道数 + 频率 + 占空比限幅 + 运行状态)
-├── PwmBuckBoost   — 单路 Buck/Boost (可选同步整流)
+├── PwmBuckBoost   — 单路/多相 Buck/Boost (相位参数化 N=1..3, BUCK/BOOST/BUCKBOOST duty law 入 Device, 可选同步整流)
 ├── PwmHalfBridge  — 半桥互补 PWM (中心对齐 + 死区)
 ├── PwmFullBridge  — 全桥移相 PWM (A/B 两腿 + 移相角控制功率)
 ├── PwmInterleaved — 多相交错并联 PWM (N 相均匀错相 360°/N)
 ├── PwmResonant    — 谐振变频 PWM (50% 固定占空比 + 变频控制)
-└── PwmSvpwm       — 六开关 SVPWM (三相逆变桥, 7段对称 + 5段 DPWM 断续调制)
+├── PwmSvpwm       — 六开关 SVPWM (三相逆变桥, 7段对称 + 5段 DPWM 断续调制)
+└── PwmWpt         — 无线充电线圈驱动 (单相半桥, 占空比下限 + VB_LIMIT_BY_DUTY + 频率分频)
 ```
 
-**PwmOps 虚表（4 必须 + 2 可选）：** start(必须) / stop(必须) / set_duty(必须) / set_freq(必须) / is_running(可选) / get_status(可选)
+**PwmOps 虚表（4 必须 + 3 可选）：** start(必须) / stop(必须) / set_duty(必须) / set_freq(必须) / set_deadtime(可选) / set_phase(可选) / emergency_stop(可选)（`pwm_set_*` 包装对 NULL 安全检查, 可选可省略不实现）
 
 **BSP 物理参数 API (推荐)：** `bsp_pwm_config_ch`, `bsp_pwm_set_duty_f`, `bsp_pwm_set_freq_hz`, `bsp_pwm_set_deadtime_ns`, `bsp_pwm_set_phase_deg`, `bsp_pwm_set_complementary`, `bsp_pwm_isr`
 
@@ -1377,5 +1378,70 @@ pmbus_init(&pmbus, pmbus_cmds, ARRAY_SIZE(pmbus_cmds), &power_ctrl);
 - `math_endian_reverse_32_copy(src, dst)` — 32 位翻转后拷贝
 
 **依赖:** `<stdint.h>`
+
+#### comp_ask.h — ASK/OOK 无线充电信令 codec
+
+> **来源:** 无线充电 (WPT) E 侧 2000Hz ASK 包络调制 (2026-08-14)
+
+**包格式 (12 bit, MSB-first, uint16_t 低 12 位):** bit11=req (1=请求充电), bit10..3=power_w (0..255), bit2=EVEN 偶校验 (覆盖 bit11..3), bit1..0=pad (恒 0)
+
+**奇偶校验:** 全 12 位 XOR 归约 = 0 → `ask_parity_ok` true; 任何单比特翻转破坏偶性被检出
+
+**关键 API (全部 static inline):**
+- `ask_encode_pkt(req, power_w)` — 编码 12-bit 包 (偶校验位自动置位)
+- `ask_parity_ok(pkt)` — 偶校验通过检测
+- `ask_decode_pkt(pkt, &req, &pw)` — 提取 req + power_w (指针可 NULL)
+- `AskDecode_Init/Update(me, carrier)` — 2000Hz 包络采样解码状态机 (20 采样/位多数表决, 首载波采样触发同步, 收满 12 位自动重同步支持连续流, 返回 true=收满一包)
+
+**时序常量:** `ASK_CARRIER_HZ=2000 / ASK_BIT_RATE_HZ=100 / ASK_PKT_BITS=12 / ASK_SAMPLES_PER_BIT=20`
+
+**依赖:** `<stdint.h>`, `<stdbool.h>`
+
+### 8.13 Module — 超级电容功率管理 (SuperCap)
+
+> **来源:** WEILAI 三相并联超级电容 + HKUST 2024 F3 / 2025 PCM 历史版 (2026-08-14)
+> 对照 [docs/learning/SuperCap_Projects_Study_Report.md](docs/learning/SuperCap_Projects_Study_Report.md). 拓扑 `supercap_3ph.yaml`, `phases: 1..3`.
+
+**三相并联超电核心差距:** 单级 → N 相并联 (相序映射 + 均流 + 切换同步 + N×电流 PI). 相位参数化 N=1..3, 单相时均流/相序/切换同步退化为无操作.
+
+#### mod_supercap.h/c — 功率环 (PowerStage 派生, ctx fast)
+
+**级联 (每 28.3kHz tick):**
+```
+p_referee = LPF(power_lpf, va × i_chassis)   # 实测裁判功率 (120Hz)
+p_setpoint = PI(pid_p, sp=referee_power, fbk=p_referee)   # 期望功率
+p_setpoint clamp [p_lim_lo, p_lim_hi]        # 功率限幅 (i_lim×va / cap_ilimit×vb)
+taper 近满压 → i_side = p_setpoint / va
+```
+
+**保护:** charge_ok Hysteresis (28.6/28.0) 满电停充, discharge_ok Hysteresis (18/19) 低压切除, short_deb/unbalance_deb Debounce → FAULT (0x08/0x40) → 急停 + 事件环
+
+**Cfg POD 槽位 0-9** (supercap_3ph.yaml params.slot 一致): pid_p_kp/ki, charge_stop_v(28.6), charge_resume_v(28.0), vcut_lo(18), vcut_hi(19), i_lim_a, cap_in_ilimit, cap_out_ilimit, share_gain
+
+**PowerStage 基类重解释 (头注释声明):** base.vref=充电目标电压, base.iref=裁判电流参考 (派生值, 非控制输入); 级联绕过 base.loop[2] (per-phase PI 归 mod_current_share)
+
+**关键 API:** mod_supercap_init/bind/sync_cfg/tick/start/stop/emergency/apply_tune; MAIN 侧 mod_supercap_set_referee_power (命令邮箱周期边界生效), mod_supercap_evt_pop (事件环排空)
+
+**依赖:** comp_power_stage/pi_reg4/filter/protection/math/error/ring/latch/mailbox + adc_dc_sampler + mod_current_share
+
+#### mod_current_share.h/c — 三相均流 (普通结构, ctx fast)
+
+**职责 (每 tick):** ratio=vb/va → 模式迟滞 (0.97/1.03 进, 0.90/1.10 出) → ibase=paside/N → 每相 share_error=clamp(share_gain×(iavg−iphase)) → 电流 PI (sp=ibase+share_error, fbk=iphase) → alpha=1+u → ModeSync 切换同步 → 写 PwmBuckBoost
+
+**N=1 退化:** iavg=iphase → share_error=0, ibase=paside, ModeSync(1)=恒等; 迟滞仍选模式
+
+**关键 API:** mod_share_init/bind/tick/emergency/release; FAST 注入 set_voltages/set_paside/set_currents
+
+**依赖:** comp_pi_reg4/protection/math + pwm_buckboost
+
+#### mod_can_proto.h/c — 精简 CAN 协议 (ctx main, 新文件)
+
+**帧:** 0x051 遥测 (200Hz: refereePowerLimit u8 / chassisPower/refereePower/SuperCapOutputMx u16 编码 / OutPutCapability u8); 0x061 接收 (enableCONV bit + refereePowerLimit u16)
+
+**功率编码 (WEILAI mod_conn.h):** u16 = p×64+16384, 量程 -256W~+768W, 分辨率 0.015625W
+
+**关键 API:** mod_can_init/bind/tx_telemetry/poll/on_frame; I/O 接缝回调 (send/poll/on_referee) 可绑任意 CAN 设备, host 可测
+
+**ctx:** main — 收发全部主循环/低速上下文, 不进 28kHz 控制 ISR
 
 

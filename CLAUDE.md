@@ -247,10 +247,10 @@ make -j$(nproc)
 | COM | `comp_comm.h/c` | 9 (UART/SPI/I2C/CAN/Key/MPU6050/OLED/Ultrasonic/Encoder) | `comms.h` |
 | GPO | `comp_gpo.h/c` | 5 (LED/Laser/Beep/Buzzer/Fan) | `gpos.h` |
 | PID | `comp_pid.h/c` + `comp_pi_reg4.h` (四态PI) + `comp_pid_reg3.h` (三态PID) | 9 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar) | `pids.h` |
-| PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 6 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM) | `pwms.h` |
+| PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 7 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM/WPT) | `pwms.h` |
 | Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) | 1 (TIM) | — |
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
-| Codec | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 6 (CRC/Checksum/Endian/Viterbi/Interleaver/RS) | — |
+| Codec | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` / `comp_ask.h` | 7 (CRC/Checksum/Endian/Viterbi/Interleaver/RS/ASK) | — |
 | Contract | `comp_io.h` (I/O 完成契约) + `comp_double_buffer.h` / `comp_latch.h` / `comp_ring.h` / `comp_mailbox.h` (五原语跨上下文交接) | — (独立) | — |
 
 **独立 Component（无 Devices 层, 单头文件 static inline，位于 `Components/dsp/`、`power/`、`math/`、`codec/`、`motor/`、`pid/`、`contract/`）：**
@@ -268,6 +268,7 @@ make -j$(nproc)
 | `comp_viterbi.h` | Viterbi 解码器 — 卷积码最大似然译码, 分支度量 + 回溯 |
 | `comp_interleaver.h` | 交织器 — 块交织/解交织 (行列交织器), 地址生成 |
 | `comp_rs.h` | RS 编解码 — Reed-Solomon 纠错码, Berlekamp-Massey + Forney 算法 |
+| `comp_ask.h` | ASK/OOK 无线充电信令 — 12-bit 包 (req+功率+偶校验) 编解码 + 2000Hz 包络解码状态机 |
 | `comp_pi_reg4.h` | 四态 PI 调节器 — 带抗饱和的 PI 控制 (正常/上限/下限/跟踪) |
 | `comp_bldc_instaspin.h` | BLDC InstaSPIN — 无传感器 FOC, FAST 观测器 + 磁链/转矩估计 |
 | `comp_aci_se.h` | ACI 转差法转速估计器 — 磁链角微分 + 转差计算 (与 comp_aci_fe 配对) |
@@ -297,7 +298,10 @@ make -j$(nproc)
 | SFRA | `mod_sfra.h/c` | 软件频响分析仪 — DDS扰动注入 + DFT采集 + Bode图输出 |
 | FCL | `mod_fcl_ctrl.h/c` | 快速电流环 — dq 轴双环 PI + 交叉解耦 + 反电动势前馈 |
 | PMBus | `mod_pmbus.h/c` | PMBus 协议栈 — SMBus 2.0 + PMBus 1.3 命令集 (I2C 从机) |
+| SuperCap | `mod_supercap.h/c` | 超级电容功率环 — 级联功率控制 + 满电停充/低压切除 + 短路/失平衡保护 (PowerStage 派生) |
+| CurrentShare | `mod_current_share.h/c` | 三相均流 — 模式迟滞 + 逐相电流均衡 + 切换同步 (N=1..3) |
+| CanProto | `mod_can_proto.h/c` | 超级电容 CAN 协议 — 0x051 遥测 / 0x061 裁判功率 (ctx main) |
 
 ---
 
-> **最后更新：** 2026-08-14 — 目录按子系统隔离（Components 12 + Devices 7 + Module 4 子目录）+ 25 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分 / 三相计量 / 三电平逆变器延迟保护 + protection 独立域)；comp_math 按功能域拆分 (校验和/大小端 → codec/, inv_sqrtf 内联为 math_inv_sqrtf)
+> **最后更新：** 2026-08-14 — 目录按子系统隔离（Components 12 + Devices 7 + Module 4 子目录）+ 25 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分 / 三相计量 / 三电平逆变器延迟保护 + protection 独立域)；comp_math 按功能域拆分 (校验和/大小端 → codec/, inv_sqrtf 内联为 math_inv_sqrtf)；supercap_3ph 拓扑 (pwm_buckboost 相位参数化 N=1..3 + mod_supercap/mod_current_share/mod_can_proto + WPT 备件 comp_ask/pwm_wpt, 拓扑 status: planned 待 App 整合)
