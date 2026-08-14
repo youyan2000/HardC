@@ -11,14 +11,14 @@
 
 #include "mod_buck.h"
 #include "container_of.h"
-#include "comp_math.h"   // math_clamp_f
+#include "comp_math.h"  // math_clamp_f
 #include <string.h>
 
 // 控制周期 (秒) — 100us = 10kHz, 须与 App_OnControlTick 调用频率一致
-#define MOD_BUCK_DT  0.0001f
+#define MOD_BUCK_DT 0.0001f
 
 // 故障去抖确认次数 (OVP/OCP 连续 N tick 触发才急停, 防噪声误报)
-#define MOD_BUCK_FAULT_DEBOUNCE_N  8u
+#define MOD_BUCK_FAULT_DEBOUNCE_N 8u
 
 // ======== 内部辅助 ========
 
@@ -26,10 +26,11 @@
 static inline void buck_sample(ModBuck *me) {
   me->vout = adc_dc_sampler_get_value(me->adc, me->cfg.adc_ch_vout);
   me->iout = adc_dc_sampler_get_value(me->adc, me->cfg.adc_ch_iout);
-  me->vin  = adc_dc_sampler_get_value(me->adc, me->cfg.adc_ch_vin);
+  me->vin = adc_dc_sampler_get_value(me->adc, me->cfg.adc_ch_vin);
   if (me->vin <= 0.0f) {
-    me->vin = 1.0f;   // 防前馈除零
+    me->vin = 1.0f;  // 防前馈除零
   }
+  latch_write(&me->telemetry, me->vout);  // FAST→SLOW 遥测 (Latest 锁存, 故障周期也更新)
 }
 
 // 软启动: 当前参考每 tick 上升 soft_start_step, 限到目标; 参考下调时立即跟随
@@ -40,7 +41,7 @@ static inline float buck_soft_start(ModBuck *me, float target) {
       me->soft_start_ref = target;
     }
   } else if (me->soft_start_ref > target) {
-    me->soft_start_ref = target;   // set_ref 下调 vref 时防卡在高值
+    me->soft_start_ref = target;  // set_ref 下调 vref 时防卡在高值
   }
   return me->soft_start_ref;
 }
@@ -65,8 +66,15 @@ static void buck_run(ModBuck *me) {
     }
     if (me->base.debounce_cnt >= MOD_BUCK_FAULT_DEBOUNCE_N) {
       power_stage_emergency(&me->base);
+      // 事件流 (SPSC 环, fire-and-forget = IO_NONE): 满则丢, 关键跳闸已由 emergency 硬件封波兜底
+      if (me->vout > me->base.ovp) {
+        ring_push(&me->evt, MOD_BUCK_EVT_FAULT_OVP);
+      }
+      if (me->iout > me->base.ocp) {
+        ring_push(&me->evt, MOD_BUCK_EVT_FAULT_OCP);
+      }
     }
-    return;   // 故障期间不刷新 PWM
+    return;  // 故障期间不刷新 PWM
   }
   me->base.debounce_cnt = 0;
 
@@ -93,7 +101,7 @@ static void buck_init(PowerStage *base) {
   ModBuck *me = container_of(base, ModBuck, base);
   pi_reg4_init(&me->pid_v.st);
   pi_reg4_init(&me->pid_i.st);
-  me->soft_start_ref   = 0.0f;
+  me->soft_start_ref = 0.0f;
   me->vout = me->iout = me->vin = 0.0f;
   me->i_ref = me->duty_pi = me->duty = 0.0f;
   me->base.debounce_cnt = 0;
@@ -103,6 +111,16 @@ static void buck_init(PowerStage *base) {
 static void buck_tick(PowerStage *base) {
   ModBuck *me = container_of(base, ModBuck, base);
 
+  // 周期边界收取 MAIN 命令 (Command 邮箱): 最新命令生效, 跨上下文无锁安全
+  uint32_t c;
+  float a;
+  if (mailbox_poll(&me->cmd, &c, &a)) {
+    if (c == MOD_BUCK_CMD_SET_VREF) {
+      me->cfg.vref = a;
+      mod_buck_sync_cfg(me);
+    }
+  }
+
   switch (me->base.st) {
   case PST_INIT:
     // 自检通过 → 空闲 (真实工程在此检查 PWM/ADC 就绪)
@@ -110,7 +128,7 @@ static void buck_tick(PowerStage *base) {
     break;
 
   case PST_IDLE:
-    break;   // 等待 start
+    break;  // 等待 start
 
   case PST_RUN:
     buck_run(me);
@@ -118,7 +136,7 @@ static void buck_tick(PowerStage *base) {
 
   case PST_FAULT_HOLD:
   case PST_FAULT:
-    break;   // 保持封波, 等待 start 恢复
+    break;  // 保持封波, 等待 start 恢复
 
   case PST_RECOVER:
     // 恢复: 软启动从 0 重新开始, 进入 RUN (软启在 RUN 内完成)
@@ -133,14 +151,14 @@ static void buck_tick(PowerStage *base) {
 
 static void buck_start(PowerStage *base) {
   ModBuck *me = container_of(base, ModBuck, base);
-  if (me->base.st == PST_IDLE || me->base.st == PST_FAULT ||
-      me->base.st == PST_RECOVER) {
-    me->soft_start_ref    = 0.0f;   // 重新软启动
+  if (me->base.st == PST_IDLE || me->base.st == PST_FAULT || me->base.st == PST_RECOVER) {
+    me->soft_start_ref = 0.0f;  // 重新软启动
     me->base.debounce_cnt = 0;
     // 清双环积分器 — FAULT 急停后残留的饱和积分会顶满电流指令, 破坏软启动
     pi_reg4_reset(&me->pid_v.st);
     pi_reg4_reset(&me->pid_i.st);
     me->base.st = PST_RUN;
+    // 不进事件环: start/stop 常由 MAIN (HMI/命令) 调用, 事件环单生产者必须为 FAST
     if (me->base.pwm) {
       pwm_start(me->base.pwm);
     }
@@ -153,13 +171,15 @@ static void buck_stop(PowerStage *base) {
     pwm_stop(me->base.pwm);
   }
   me->base.st = PST_IDLE;
+  // 同 buck_start: START/STOP 状态变化由调用方读 mod_buck_state 观察, 不推事件环
 }
 
 static void buck_emergency(PowerStage *base) {
-  power_stage_emergency(base);   // 默认辅助: FAULT + pwm_emergency_stop
+  power_stage_emergency(base);  // 默认辅助: FAULT + pwm_emergency_stop
 }
 
 static void buck_set_ref(PowerStage *base, float vref, float iref) {
+  // 同步批量改参考 (MAIN, 启动/配置期); 运行期热调单值走 mod_buck_set_vref (命令邮箱周期边界生效)
   ModBuck *me = container_of(base, ModBuck, base);
   me->cfg.vref = vref;
   me->cfg.iref = iref;
@@ -168,16 +188,16 @@ static void buck_set_ref(PowerStage *base, float vref, float iref) {
 
 static void buck_apply_tune(PowerStage *base, const float coef[10]) {
   ModBuck *me = container_of(base, ModBuck, base);
-  me->cfg.vref             = coef[0];
-  me->cfg.iref             = coef[1];
-  me->cfg.pid_v.kp         = coef[2];
-  me->cfg.pid_v.ki         = coef[3];
-  me->cfg.pid_i.kp         = coef[4];
-  me->cfg.pid_i.ki         = coef[5];
-  me->cfg.ff_weight        = coef[6];
-  me->cfg.ovp              = coef[7];
-  me->cfg.ocp              = coef[8];
-  me->cfg.soft_start_step  = coef[9];
+  me->cfg.vref = coef[0];
+  me->cfg.iref = coef[1];
+  me->cfg.pid_v.kp = coef[2];
+  me->cfg.pid_v.ki = coef[3];
+  me->cfg.pid_i.kp = coef[4];
+  me->cfg.pid_i.ki = coef[5];
+  me->cfg.ff_weight = coef[6];
+  me->cfg.ovp = coef[7];
+  me->cfg.ocp = coef[8];
+  me->cfg.soft_start_step = coef[9];
   mod_buck_sync_cfg(me);
 }
 
@@ -187,14 +207,14 @@ static PstSt buck_state(PowerStage *base) {
 
 // ======== 虚表 ========
 static const PowerStageOps buck_ops = {
-  .init       = buck_init,
-  .tick       = buck_tick,
-  .start      = buck_start,
-  .stop       = buck_stop,
-  .emergency  = buck_emergency,
-  .set_ref    = buck_set_ref,
-  .apply_tune = buck_apply_tune,
-  .state      = buck_state,
+    .init = buck_init,
+    .tick = buck_tick,
+    .start = buck_start,
+    .stop = buck_stop,
+    .emergency = buck_emergency,
+    .set_ref = buck_set_ref,
+    .apply_tune = buck_apply_tune,
+    .state = buck_state,
 };
 
 // ======== 构造 ========
@@ -202,7 +222,12 @@ static const PowerStageOps buck_ops = {
 void mod_buck_init(ModBuck *me, const ModBuckCfg *cfg) {
   memset(me, 0, sizeof(*me));
 
-  me->base.ops = &buck_ops;   // 绑定虚表
+  // 五原语交接点初始化 (Latest 锁存 / Command 邮箱 / SPSC 事件环)
+  ring_init(&me->evt, me->evt_buf, sizeof(me->evt_buf));
+  latch_init(&me->telemetry);
+  mailbox_init(&me->cmd);
+
+  me->base.ops = &buck_ops;  // 绑定虚表
 
   if (cfg) {
     me->cfg = *cfg;
@@ -210,11 +235,11 @@ void mod_buck_init(ModBuck *me, const ModBuckCfg *cfg) {
 
   me->base.vref = me->cfg.vref;
   me->base.iref = me->cfg.iref;
-  me->base.ovp  = me->cfg.ovp;
-  me->base.ocp  = me->cfg.ocp;
-  me->base.st   = PST_INIT;
+  me->base.ovp = me->cfg.ovp;
+  me->base.ocp = me->cfg.ocp;
+  me->base.st = PST_INIT;
 
-  mod_buck_sync_cfg(me);   // 由 cfg 派生双环 PI 运行时参数
+  mod_buck_sync_cfg(me);  // 由 cfg 派生双环 PI 运行时参数
   pi_reg4_init(&me->pid_v.st);
   pi_reg4_init(&me->pid_i.st);
 }
@@ -222,29 +247,31 @@ void mod_buck_init(ModBuck *me, const ModBuckCfg *cfg) {
 // ======== 配置同步 ========
 
 void mod_buck_sync_cfg(ModBuck *me) {
+  // 双上下文可写: FAST (mailbox SET_VREF 分支) 与 MAIN (apply_tune/set_ref) 都会调本函数
+  // float 写原子 + 单一抢占源 → 瞬态混用最多一周期, 属调参容忍范围; 不做跨上下文并发同步
   // 同步 PowerStage 基类公共参数
   me->base.vref = me->cfg.vref;
   me->base.iref = me->cfg.iref;
-  me->base.ovp  = me->cfg.ovp;
-  me->base.ocp  = me->cfg.ocp;
+  me->base.ovp = me->cfg.ovp;
+  me->base.ocp = me->cfg.ocp;
 
   // 电压环 PI: 输出 = 电流指令, 限幅 [0, base.iref] (限流)
-  me->pid_v.cfg.kp      = me->cfg.pid_v.kp;
-  me->pid_v.cfg.ki      = me->cfg.pid_v.ki;
-  me->pid_v.cfg.kff     = 0.0f;
-  me->pid_v.cfg.dt      = MOD_BUCK_DT;
+  me->pid_v.cfg.kp = me->cfg.pid_v.kp;
+  me->pid_v.cfg.ki = me->cfg.pid_v.ki;
+  me->pid_v.cfg.kff = 0.0f;
+  me->pid_v.cfg.dt = MOD_BUCK_DT;
   me->pid_v.cfg.out_max = me->base.iref;
   me->pid_v.cfg.out_min = 0.0f;
-  me->pid_v.cfg.sp_fc   = 0.0f;
+  me->pid_v.cfg.sp_fc = 0.0f;
 
   // 电流环 PI: 输出 = 占空比分量, 限幅 [0, 1] (最终由 duty_min/max 钳)
-  me->pid_i.cfg.kp      = me->cfg.pid_i.kp;
-  me->pid_i.cfg.ki      = me->cfg.pid_i.ki;
-  me->pid_i.cfg.kff     = 0.0f;
-  me->pid_i.cfg.dt      = MOD_BUCK_DT;
+  me->pid_i.cfg.kp = me->cfg.pid_i.kp;
+  me->pid_i.cfg.ki = me->cfg.pid_i.ki;
+  me->pid_i.cfg.kff = 0.0f;
+  me->pid_i.cfg.dt = MOD_BUCK_DT;
   me->pid_i.cfg.out_max = 1.0f;
   me->pid_i.cfg.out_min = 0.0f;
-  me->pid_i.cfg.sp_fc   = 0.0f;
+  me->pid_i.cfg.sp_fc = 0.0f;
 }
 
 // ======== 公开 API (包装 ops) ========

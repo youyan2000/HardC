@@ -2,7 +2,7 @@
 #define MOD_POWERCTRL_H
 
 // 功率控制状态机模板 — PWM-OOP Module 层
-// 来源: LitteCar Module 层状态机模式 + WEILAI mod_powerctrl
+// Module 层状态机模式
 //
 // 状态: INIT → IDLE → RUN → FAULT_HOLD → FAULT → RECOVER
 //

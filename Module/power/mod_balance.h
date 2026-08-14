@@ -2,8 +2,7 @@
 #define MOD_BALANCE_H
 
 // 球板平衡模块 — ModBalance (Module 层)
-// 来源: 3507_2026_eugene mod_balance.c (3×PidStandard 球板平衡)
-//       + Car_Control_Study_Report §18 (步进电机驱动丝杆倾斜平板)
+// mod_balance.c (3×PidStandard 球板平衡)
 //
 // 核心原理:
 //   摄像头/触摸屏 → 球坐标 (x, y) → X/Y 轴 PID → 步进电机步数 → 丝杆倾斜

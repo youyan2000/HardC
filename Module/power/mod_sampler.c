@@ -1,5 +1,5 @@
 // 采样管理状态机实现 — ADC-OOP Module 层
-// 来源: LitteCar Module 层状态机模式 + WEILAI SampleManager
+// Module 层状态机模式
 //
 // 状态转换图:
 //   INIT ──(DMA配置OK)──→ CAL_ZERO (启动校准)

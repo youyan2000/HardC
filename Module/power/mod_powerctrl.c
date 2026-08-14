@@ -1,5 +1,5 @@
 // 功率控制状态机实现 — PWM-OOP Module 层
-// 来源: LitteCar Module 层状态机模式 + WEILAI mod_powerctrl
+// Module 层状态机模式
 //
 // 状态转换图:
 //   INIT ──(自检OK)──→ IDLE ──(start)──→ RUN ──(故障检测)──→ FAULT_HOLD

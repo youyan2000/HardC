@@ -1,6 +1,5 @@
 // 球板平衡模块 — ModBalance (Module 层实现)
-// 来源: 3507_2026_eugene mod_balance.c (3×PidStandard + StepMotor)
-//       + Car_Control_Study_Report §18 (步进电机驱动丝杆倾斜平板)
+// mod_balance.c (3×PidStandard + StepMotor)
 //
 // 控制架构:
 //   摄像头球坐标 (x,y) → X/Y 轴 PID → 步进电机步数 → 丝杆行程

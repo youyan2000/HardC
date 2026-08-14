@@ -20,5 +20,6 @@ depends:
   - components/pwm
   - components/adc
   - components/math
+  - components/dsp
   - devices/pwm
   - devices/adc
