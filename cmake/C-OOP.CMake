@@ -10,7 +10,7 @@
 #     include(${C_OOP_DIR}/cmake/C-OOP.CMake)
 #     target_link_libraries(${PROJECT_NAME} PRIVATE coop)
 #
-#  职责 (逐条对标 LibXR.CMake / 3507 CMakeLists):
+#  职责 (逐条对标 LibXR.CMake):
 #    1. 平台分发: C_OOP_DRIVER → 平台库链接 + BSP 后端选择
 #    2. SDK 路径校验: 不存在 → FATAL_ERROR
 #    3. SysConfig 产物发现: c2000 → RELEASE/syscfg/board.c + c2000ware_libraries.c
@@ -49,13 +49,17 @@ file(GLOB_RECURSE C_OOP_CORE_SOURCES
 # BSP 后端选择 (平台加速, 按 C_OOP_DRIVER 编译对应实现)
 set(C_OOP_BSP_SOURCES "")
 if(C_OOP_DRIVER STREQUAL "st")
-  foreach(_bsp_f bsp_delay.c bsp_hrtim.c bsp_adc_stm32.c)
+  # bsp_watchdog_stm32.c 内部以 HAL_IWDG_MODULE_ENABLED 自门控 (LibXR 同款):
+  # 未启用 IWDG 的工程编译为空体, 不引入依赖
+  foreach(_bsp_f bsp_delay.c bsp_hrtim.c bsp_adc_stm32.c bsp_watchdog_stm32.c)
     if(EXISTS "${C_OOP_DIR}/BSP/${_bsp_f}")
       list(APPEND C_OOP_BSP_SOURCES "${C_OOP_DIR}/BSP/${_bsp_f}")
     endif()
   endforeach()
 elseif(C_OOP_DRIVER STREQUAL "c2000")
-  foreach(_bsp_f bsp_c2000_epwm.c bsp_c2000_adc.c)
+  # bsp_watchdog_c2000.c 直接 include driverlib.h (F28004x 无 WdtRegs 全局),
+  # 由下方 c2000 include 目录 + --preinclude=driverlib.h 提供 — 与 epwm/adc 后端同约定
+  foreach(_bsp_f bsp_c2000_epwm.c bsp_c2000_adc.c bsp_watchdog_c2000.c)
     if(EXISTS "${C_OOP_DIR}/BSP/${_bsp_f}")
       list(APPEND C_OOP_BSP_SOURCES "${C_OOP_DIR}/BSP/${_bsp_f}")
     endif()
@@ -118,20 +122,26 @@ elseif(C_OOP_DRIVER STREQUAL "c2000")
     "${C2000_SDK_DIR}/driverlib/f28004x/driverlib"
     "${C2000_SDK_DIR}/device_support/f28004x/common/include"
     "${C2000_SDK_DIR}/device_support/f28004x/headers/include")
+  # 预编译库实际位置 (C2000Ware 26.x 布局):
+  #   driverlib: driverlib/f28004x/driverlib/ccs/Release/driverlib_eabi.lib
+  #   CLAmath/FPUfastRTS: libraries/math/<名>/c28/lib/*.lib
   foreach(_lib
-      "${C2000_DEVICE_DIR}/driverlib_eabi.lib"
-      "${C2000_SDK_DIR}/libraries/CLAmath/cla2_math_library_fpu32_eabi.lib"
-      "${C2000_SDK_DIR}/libraries/FPUfastRTS/rts2800_fpu32_fast_supplement_eabi.lib")
+      "${C2000_DEVICE_DIR}/ccs/Release/driverlib_eabi.lib"
+      "${C2000_SDK_DIR}/libraries/math/CLAmath/c28/lib/cla2_math_library_fpu32_eabi.lib"
+      "${C2000_SDK_DIR}/libraries/math/FPUfastRTS/c28/lib/rts2800_fpu32_fast_supplement_eabi.lib")
     if(EXISTS "${_lib}")
       target_link_libraries(coop PRIVATE "${_lib}")
     endif()
   endforeach()
 
   # cl2000 编译选项 (学自 CCS gmake: -v28 -ml -mt --abi=eabi --float_support=fpu32 ...)
+  # --preinclude=driverlib.h 为库 TU 注入 uint8_t (C28x 字寻址, CGT <stdint.h> 不定义 uint8_t,
+  #   仅 driverlib hw_types.h 提供 `typedef uint16_t uint8_t`; 库头不 include 平台库 → 构建期注入)
   target_compile_options(coop PRIVATE
     -v28 -ml -mt
     --abi=eabi
     --float_support=fpu32
+    --preinclude=driverlib.h
     --tmu_support=tmu0
     --vcu_support=vcu0
     --cla_support=cla2

@@ -28,6 +28,8 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 if(NOT DEFINED C2000_CGT_ROOT)
   if(DEFINED ENV{TI_CGT_C2000_ROOT})
     set(C2000_CGT_ROOT "$ENV{TI_CGT_C2000_ROOT}")
+  elseif(EXISTS "E:/TIIDE/CCS 21.0.0/ccs/tools/compiler/ti-cgt-c2000_25.11.1.LTS")
+    set(C2000_CGT_ROOT "E:/TIIDE/CCS 21.0.0/ccs/tools/compiler/ti-cgt-c2000_25.11.1.LTS")
   elseif(EXISTS "E:/TIIDE/CCS 20.0.1/ccs/tools/compiler/ti-cgt-c2000_22.6.1.LTS")
     set(C2000_CGT_ROOT "E:/TIIDE/CCS 20.0.1/ccs/tools/compiler/ti-cgt-c2000_22.6.1.LTS")
   else()
@@ -36,14 +38,25 @@ if(NOT DEFINED C2000_CGT_ROOT)
 endif()
 
 set(C2000_CGT_BIN "${C2000_CGT_ROOT}/bin")
-set(CMAKE_C_COMPILER   "${C2000_CGT_BIN}/cl2000")
-set(CMAKE_AR           "${C2000_CGT_BIN}/ar2000")
+# 显式带 .exe: CMake 的编译器存在性检查不做扩展名补全, 裸 cl2000 会被判不存在
+# (TI 也出 Linux 版, 需要时改回 cl2000; 本工具链面向 Windows CCS 环境)
+set(CMAKE_C_COMPILER   "${C2000_CGT_BIN}/cl2000.exe")
+set(CMAKE_AR           "${C2000_CGT_BIN}/ar2000.exe")
+
+# cl2000 在给了 -I 后不自带搜索自身 include 目录 (实测 driverlib adc.h 的
+# <stdbool.h> 找不到) → 显式加 CGT include/. 必须走 include_directories:
+# 路径含空格 (E:/TIIDE/CCS 21.0.0/...), 塞进 -I 旗标会被 Ninja 按空格拆开 → 编译器
+# 误当源文件. CMake 的 include 机制自带空格路径转义. (CCS gmake 由 makefile 隐式带)
+include_directories("${C2000_CGT_ROOT}/include")
 
 # cl2000 是"编译"驱动 (加 -z 才链接); 这里只做编译, 链接由 coop 目标/外部工程负责
 set(CMAKE_C_OUTPUT_EXTENSION .obj)
 
-# 统一架构标志 (C28x FPU32 + TMU0 + VCU0 + CLA2)
+# 统一架构标志 (C28x FPU32 + TMU0 + VCU0 + CLA2). --c99 为 cl2000 的 C99 开关
+# (CMake 的 C_STANDARD=99 对 TI 编译器不注入 -std=, 必须显式给 --c99)
+# CGT include/ 目录由上方 include_directories 提供 (空格路径不能塞进 -I 旗标)
 set(C2000_BASE_FLAGS
+  --c99
   -v28 -ml -mt
   --cla_support=cla2
   --float_support=fpu32
@@ -62,7 +75,7 @@ set(CMAKE_C_FLAGS_RELEASE_INIT "-O3 --opt_for_speed=5 --fp_mode=relaxed")
 set(CMAKE_C_STANDARD_DEFAULT 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# 编译行 (CMake 会追加 -c 与源文件)
+# 编译行 (自定义规则下 CMake 只替换 <SOURCE>, 不再追加 -c)
 set(CMAKE_C_COMPILE_OBJECT
   "<CMAKE_C_COMPILER> <FLAGS> <DEFINES> <INCLUDES> --compile_only <SOURCE>")
 
