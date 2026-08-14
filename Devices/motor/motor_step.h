@@ -2,15 +2,14 @@
 #define MOTOR_STEP_H
 
 // 步进电机驱动 — StepMotorBase 的子类 (Devices 层)
-// 来源: Car_Control_Study_Report §18~§21 (三版步进电机对比)
-//       + 3507_2026_eugene motor_step.h/c (OOP 版, BSP 函数指针注入)
-//       + MyFinal_Work user_step_motor.h/c (原始 4 相 A→C→B→D)
+//       + motor_step.h/c (OOP 版, BSP 函数指针注入)
+//       + user_step_motor.h/c (原始 4 相 A→C→B→D)
 //
 // 硬件: 4 相步进电机 (A/B/C/D) + DIR 方向引脚 + PUL 脉冲定时器
-// 驱动模式: 全步进 4 拍 (A→C→B→D, 匹配 MyFinal_Work 线束重映射)
+// 驱动模式: 全步进 4 拍 (A→C→B→D)
 //           半步进 8 拍可选 (phase_tbl 注入)
 //
-// Bug 规避 (报告 §22):
+// Bug 规避:
 //   - ✅ P0#1: 所有状态在结构体成员, 无 static 局部变量
 //   - ✅ P0#2: 速度控制 → bsp_step_pul_set_period → 定时器 LOAD 寄存器
 //   - ✅ P1#4: ctx 参数被实际使用, 不丢弃

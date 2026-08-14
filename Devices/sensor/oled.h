@@ -1,5 +1,4 @@
 // SSD1306 OLED BSP 硬件层头文件 —— 3 线 SPI bit-bang 接口声明
-// 源自: LitteCar 项目 (SmCar/LitteCar_STM32/c8t6_car_24H/User/BSP/oled.h)
 
 #ifndef BSP_OLED_H
 #define BSP_OLED_H

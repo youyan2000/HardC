@@ -6,7 +6,7 @@
 // ultrasonic_tick: TIM3 ISR 中每 10ms 调用, 管理触发+超时
 // ultrasonic_process: USART3 RX 回调中调用, 处理收到字节
 //
-// LitteCar 增强 (2026-07):
+// 增强 (2026-07):
 // - 校验和验证 (CHK = DataH + DataL), 拒绝坏帧
 // - 可配置超时 (timeout_ms), 替代硬编码 200 tick
 // - 诊断计数器: chk_err (校验错误), ot_cnt (超时次数)
@@ -34,7 +34,7 @@ void ultrasonic_deinit(Ultrasonic *me);
 void ultrasonic_tick(Ultrasonic *me);     // TIM3 ISR 中调用 (每 10ms)
 void ultrasonic_process(Ultrasonic *me);  // USART3 RX 回调中调用
 
-// LitteCar 增强 API
+// 增强 API
 uint16_t ultrasonic_get_distance       (const Ultrasonic *me);  // 返回最新有效距离
 bool     ultrasonic_is_valid           (const Ultrasonic *me);  // 最新读数是否有效
 uint16_t ultrasonic_get_checksum_errors(const Ultrasonic *me);  // 校验错误计数

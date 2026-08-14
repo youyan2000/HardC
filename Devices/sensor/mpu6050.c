@@ -234,7 +234,7 @@ uint8_t mpu6050_set_rate(uint16_t rate) {
  if (rate < 4)    rate = 4;
  data = 1000 / rate - 1;
  data = mpu6050_write_byte(REG_SMPLRT_DIV, data);
- // 按参考项目 eMPL 逻辑: LPF = 采样率/2, 按要求匹配到 DLPF_CFG
+ // 按 eMPL 逻辑: LPF = 采样率/2, 按要求匹配到 DLPF_CFG
  lpf = rate >> 1;
  if      (lpf >= 188) data = 1;   // DLPF_CFG=1: 184Hz
  else if (lpf >= 98)  data = 2;   // DLPF_CFG=2:  94Hz

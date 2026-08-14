@@ -24,5 +24,6 @@ files:
 depends:
   - components/comm
   - components/sensor
+  - components/codec
   - BSP/container_of.h
   - devices/sensor/oled.h

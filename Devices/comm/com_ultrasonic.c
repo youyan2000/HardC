@@ -3,13 +3,14 @@
 // ultrasonic_tick: 每 10ms 由 TIM3 ISR 调用, 触发测距/超时检测
 // ultrasonic_process: USART3 RX 回调中调用, 组装 3 字节回复帧
 //
-// LitteCar 增强 (2026-07):
+// 增强 (2026-07):
 // - 校验和验证 CHK = DataH + DataL, 坏帧丢弃并计数
 // - 可配置超时 (timeout_ms), 超时时标记 valid=false
 // - 诊断计数器暴露: chk_err, ot_cnt
 
 #include "com_ultrasonic.h"
 #include "container_of.h"
+#include "comp_checksum.h"
 
 // -------- ops 实现 --------
 
@@ -91,7 +92,7 @@ void ultrasonic_process(Ultrasonic *me) {
   me->data[me->index] = me->base.cur;
   if (me->index >= 3) {
     // 收满 3 字节 → data[1]=DataH, data[2]=DataL, data[3]=CHK
-    uint8_t chk = me->data[1] + me->data[2];  // 校验和: DataH + DataL (低 8 位)
+    uint8_t chk = math_sum_u8(&me->data[1], 2);  // 校验和: DataH + DataL (低 8 位)
     if (chk != me->data[3]) {
       // 校验失败 → 丢弃, 计数, 标记无效
       me->chk_err++;
@@ -114,7 +115,7 @@ void ultrasonic_process(Ultrasonic *me) {
   }
 }
 
-// -------- LitteCar 增强 API --------
+// -------- 增强 API --------
 
 // 返回最新有效距离 (mm), 调用前应先 ultrasonic_is_valid() 确认
 uint16_t ultrasonic_get_distance(const Ultrasonic *me) {

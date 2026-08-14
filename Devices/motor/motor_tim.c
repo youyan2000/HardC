@@ -3,7 +3,6 @@
 // inv 字段同时翻转 PWM 方向和编码器方向, 使应用层两电机完全对称
 // 编码器 4 倍频鉴相: AB 相每个边沿产生中断, 查 3-bit 状态表判断方向
 //
-// 来源: LitteCar 项目 (SmCar/LitteCar_STM32)
 // 适配: STM32_OOP 框架 (this → me, 统一 include 路径)
 
 #include "motor_tim.h"

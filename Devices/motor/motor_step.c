@@ -1,14 +1,13 @@
 // 步进电机驱动 — StepMotorBase 的子类 (Devices 层实现)
-// 来源: Car_Control_Study_Report §18~§21 (OOP 版 + MyFinal_Work 原始版)
-//       + 3507_2026_eugene motor_step.c (setspeed/setposition ops 绑定)
-//       + MyFinal_Work user_step_motor.c (A→C→B→D 4 相全步进)
+//       + motor_step.c (setspeed/setposition ops 绑定)
+//       + user_step_motor.c (A→C→B→D 4 相全步进)
 //
 // 架构:
 //   StepMotorBase (comp_step_motor.h)
 //     ↑ container_of
 //   StepMotor (本文件) — BSP 函数指针 + ctx + 4相引脚
 //
-// Bug 规避验证清单 (报告 §22):
+// Bug 规避验证清单:
 //   ✅ P0#1: 无 static 局部变量 — lock_cnt/last_dir 等都在 StepMotor 结构体
 //   ✅ P0#2: set_rate → bsp_step_pul_set_period(ctx, period) → timer->LOAD
 //   ✅ P1#4: set_dir(ctx, high) — ctx 被实际传给 BSP 函数, 不丢弃
@@ -119,7 +118,7 @@ static void stepmotor_set_steps_ops(StepMotorBase *base, int32_t steps) {
     me->base.steps_remaining = steps;
   } else {
     me->base.dir = -1;
-    // Bug 规避: setposition(-n) — 取绝对值 (3507_eugene 历史 bug)
+    // Bug 规避: setposition(-n) — 取绝对值
     me->base.steps_remaining = -steps;
   }
 
@@ -217,7 +216,7 @@ void stepmotor_isr_tick(StepMotor *me) {
   // 1. 无剩余步数 + 非锁止 → 锁止计时
   if (b->steps_remaining == 0 && !me->locked) {
     me->lock_cnt++;
-    // 100 tick 自动解锁, 关所有相 (MyFinal_Work 原始版功能)
+    // 100 tick 自动解锁, 关所有相
     // 防止电机静止时持续通电发热
     if (me->lock_cnt >= 100) {
       me->locked = true;

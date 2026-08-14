@@ -7,7 +7,7 @@
 // 各环节独立 — 改 Kp 不影响 I/D 贡献
 // 与 PidStandard (串行形式) 的区别: 串行结构 output = Kp * (err + Ki*∫err*dt + Kd*derr/dt)
 //
-// 来源: RM WEILAI_SuperCap 并行 PID 公式
+// 并行 PID 公式
 
 #include "comp_pid.h"
 #include <stdbool.h>

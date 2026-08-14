@@ -1,5 +1,4 @@
 // MPU6050 BSP 硬件层头文件 —— 软件 I2C bit-bang 接口声明
-// 源自: LitteCar 项目 (SmCar/LitteCar_STM32/c8t6_car_24H/User/BSP/mpu6050.h)
 
 #ifndef BSP_MPU6050_H
 #define BSP_MPU6050_H

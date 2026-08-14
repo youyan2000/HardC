@@ -2,7 +2,6 @@
 // PWM: TIM4 CH1-CH4, TB6612 驱动, d>0 正转 d<0 反转, 10kHz
 // 编码器: 一对 AB 相, 4 倍频鉴相
 //
-// 来源: LitteCar 项目 (SmCar/LitteCar_STM32)
 // 适配: STM32_OOP 框架 (this → me, 统一 include 路径)
 
 #ifndef MOTOR_TIM_H
