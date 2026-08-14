@@ -24,7 +24,7 @@ C-OOP/
 ├── YmaC/            # yaml_config_builder.py (GUI 配置注入) + scaffold.py (CLI 骨架生成)
 ├── docs/
 │   ├── learning/    # 学习总结资料（外部项目学习报告 + 架构原则）
-│   └── debug/       # 记录和计划（HISTORY/LESSONS/ROADMAP + 设计文档）
+│   └── debug/       # 记录和计划（history/ 每阶段一文件 + LESSONS/ROADMAP + 设计文档）
 └── cmake/           # 工具链文件
 ```
 > 目录分组表、MANIFEST schema、scaffold 工具规范见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第一节。
@@ -252,6 +252,7 @@ make -j$(nproc)
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
 | Codec | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` / `comp_ask.h` | 7 (CRC/Checksum/Endian/Viterbi/Interleaver/RS/ASK) | — |
 | Contract | `comp_io.h` (I/O 完成契约) + `comp_double_buffer.h` / `comp_latch.h` / `comp_ring.h` / `comp_mailbox.h` (五原语跨上下文交接) | — (独立) | — |
+| Math | `comp_math.h`（**全库唯一 π/2π float 常量源 M_PI/M_2PI + 硬件加速宏 MATH_SQRT/ISQRT/ABS，工程可覆盖**）+ `comp_iqmath.h/c` + `comp_error.h` + `comp_complex.h` | — (独立) | — |
 
 **独立 Component（无 Devices 层, 单头文件 static inline，位于 `Components/dsp/`、`power/`、`math/`、`codec/`、`motor/`、`pid/`、`contract/`）：**
 
@@ -262,6 +263,7 @@ make -j$(nproc)
 | `comp_vector.h` | 向量/矩阵批量运算 (add/sub/mul/dot/absmax/clamp + Vector3) |
 | `comp_pfc.h` | PFC 功率因数校正 — 电流指令 + 无桥 PFC (PfcBlIcmd) + RMS² 倒数 |
 | `comp_complex.h` | 复数运算 (Complex) — 加减乘除/共轭/模/幅角/极坐标转换 |
+| `comp_math.h` | 数学工具 — **全库唯一 π/2π float 常量源 (M_PI/M_2PI, `#undef` 防系统 `<math.h>` double 泄漏)** + 硬件加速宏 (MATH_SQRT/MATH_ISQRT/MATH_ABS, 默认走 bsp_sqrt_f32/bsp_isqrt_f32/fabsf, 工程可 `#define` 覆盖) + 限幅/绝对值/死区/线性映射 |
 | `comp_crc.h` | CRC 校验 — 8/16/32 位循环冗余校验, 查表法 + 比特流 |
 | `comp_checksum.h` | 校验和 — 8/16/32 位无符号累加 (自然溢出), static inline, ISR 安全 |
 | `comp_endian.h` | 大小端转换 — 16/32 位原地翻转 + 双缓冲拷贝, static inline |

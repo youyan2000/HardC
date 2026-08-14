@@ -9,7 +9,7 @@
 > 本文件同时是给 AI 助手的**行为手册**。以下规则是硬约束，与 CLAUDE.md 的共同约定互补：CLAUDE.md 面向人与 AI 双方，本节只约束 AI 的执行方式。
 
 1. **计划先行** — 任何非平凡改动（新功能 / 重构 / 重组 / 涉及 3+ 文件）必须先给出 plan 并获批准，再动手实现。禁止大范围"边做边改"的自由发挥。
-2. **每动作更新 HISTORY + LESSONS** — 每完成一个动作/阶段，同步更新 [docs/debug/HISTORY.md](docs/debug/HISTORY.md)（阶段、commit 归因、错误与修正）与 [docs/debug/LESSONS.md](docs/debug/LESSONS.md)（新教训按经验模板，禁止回退）。文档落后于代码 = 违约。
+2. **每动作更新 HISTORY + LESSONS** — 每完成一个动作/阶段，同步更新 [docs/debug/history/](docs/debug/history/README.md)（阶段、commit 归因、错误与修正）与 [docs/debug/LESSONS.md](docs/debug/LESSONS.md)（新教训按经验模板，禁止回退）。文档落后于代码 = 违约。
 3. **遵守代码风格** — 一律遵循 §6 代码风格约定（2 空格缩进、K&R 大括号、命名规范、include guard），提交前用 `.clang-format` / `.clang-tidy` 校验。
 4. **Git 纪律** — 不自动提交；用户允许后**及时**按子系统拆分 commit（见 CLAUDE.md 提交规范）；提交前 `git status` 核对范围。
 5. **写-审双 Agent** — 任何代码生成走强制 `code-review-workflow`（Writer → Reviewer），Reviewer 不可跳过（纯 .md / YAML 修改例外，commit 注明 `no-review: <原因>`）。
@@ -112,7 +112,7 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `BSP/bsp_watchdog_c2000.c` | 看门狗 C2000 后端 — WDCR/WDKEY 喂狗 (Phase 3 按数据手册核对) |
 | `BSP/bsp_delay.h/c` | 微秒延时抽象 |
 | **Components** | (前缀 = 父类域) |
-| `Components/math/comp_math.h` | 数学工具：限幅、绝对值、死区、线性映射、硬件加速 sqrt (math_sqrt_f32 / math_inv_sqrtf) |
+| `Components/math/comp_math.h` | **数学工具 — 全库唯一 π/2π float 常量源 (M_PI/M_2PI)** + 硬件加速宏 (MATH_SQRT/MATH_ISQRT/MATH_ABS, 工程可覆盖) + 限幅/绝对值/死区/线性映射 |
 | `Components/comp_error.h` | 统一错误码 bitmask 系统 (ERROR_SET/CLEAR/IS_SET 宏) |
 | `Components/comp_filter.h` | 数字滤波器：一阶低通 + 二阶巴特沃斯低通 (biquad DFI) |
 | `Components/comp_iir.h` | **IIR 数字补偿器库** — DF22/DF23/2P2Z float + Q15/Q31 定点, 控制环补偿 |
@@ -169,6 +169,14 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `BSP/bsp_dsp_fir.h` | 单级 FIR (BspFirInst) + Q15 定点 (BspFirQ15) | CMSIS-DSP arm_fir_f32 | CMSIS-DSP 软件库 | C2000 FPU | 纯C卷积 | 手动覆盖: BSP_DSP_ARCH_Q15 |
 | `BSP/bsp_pwm.h` | PWM 不透明句柄 + 物理参数API | bsp_hrtim.c (HRTIM) | — | bsp_c2000_epwm.c (ePWM) | — |
 | `BSP/bsp_adc.h` | ADC 校准 + DMA 启动 | bsp_adc_stm32.c | — | bsp_adc_c2000.c | — |
+
+**Components 侧硬件加速宏（`comp_math.h` 分发到 BSP，工程可 `#define` 覆盖后端）：**
+```c
+MATH_SQRT(x)  → bsp_sqrt_f32  // VSQRT / C2000 TMU __sqrt / 纯C牛顿
+MATH_ISQRT(x) → bsp_isqrt_f32 // C2000 CLA CLAisqrt / 纯C 1/sqrtf
+MATH_ABS(x)   → fabsf         // FPU VABS 单指令
+```
+同时 `comp_math.h` 是全库唯一 π/2π float 常量源（`M_PI`/`M_2PI`），定义前 `#undef` 防止系统 `<math.h>` 的 double M_PI 泄漏（软浮点 double 在 M4F/C2000 上是性能灾难）。
 
 **不透明句柄模式：**
 ```c
@@ -251,7 +259,7 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_pid_nl.h` | `NlPidCfg`, `NlPidState` | 非线性 PID — P/I/D 各通路独立幂律整形 (α/δ/γ), 强鲁棒控制 |
 | `comp_tcm.h` | `TcmCapture` | 自动调参 TCM — 触发式阶跃响应捕获 (预触发环) + IAE/ISE/ITAE 准则 |
 | `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
-| `comp_math.h` | — | 数学工具 — 限幅/绝对值/死区/线性映射/hw sqrt (math_sqrt_f32 / math_inv_sqrtf) |
+| `comp_math.h` | — | 数学工具 — 唯一 π/2π float 常量源 (M_PI/M_2PI) + 硬件加速宏 (MATH_SQRT/MATH_ISQRT/MATH_ABS) + 限幅/绝对值/死区/线性映射 |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
 
 > 文件按子系统归入子目录：`Components/<域>/`、`Devices/<域>/`、`Module/<域>/`。文件前缀仍是域标识，子目录与之一致（如 `Components/pid/comp_pid.h`、`Devices/pwm/pwm_svpwm.h`、`Module/motor/mod_motor.h`）。
