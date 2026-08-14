@@ -33,7 +33,7 @@ files:
   - comp_ring.h
   - comp_latch.h
   - comp_mailbox.h
-  - comp_io.h
+  - comp_double_buffer.h
 depends:
   - components/math
   - BSP/bsp_dsp.h

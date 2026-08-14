@@ -1,0 +1,6 @@
+id: components/contract
+layer: Components
+description: 运行时契约 — 三上下文执行契约的枚举词汇 (I/O 完成方式, 无实现)
+files:
+  - comp_io.h
+depends: []
