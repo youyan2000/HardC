@@ -27,3 +27,14 @@ void bsp_adc_stop_dma(void *hadc, void *hdma) {
   (void) hdma;
   HAL_ADC_Stop_DMA((ADC_HandleTypeDef *) hadc);
 }
+
+// DMA 完成 ISR 重装: 停 → 立即重启到备份块 (F3 HAL 在 DMA 完成回调内可安全 Stop+Start).
+// 注意: 依赖 CubeMX 配置 MemoryDataAlignment=16bit (buf 按 uint16_t 转 uint32_t 直传 HAL).
+// TODO: G4 DMA 回调内 Stop+Start 重触发行为有已知差异, 切换 G4 时需实测确认.
+void bsp_adc_restart_dma(void *hadc, void *hdma, uint16_t *buf, int num_ch) {
+  if (!hadc)
+    return;
+  (void) hdma;
+  HAL_ADC_Stop_DMA((ADC_HandleTypeDef *) hadc);
+  HAL_ADC_Start_DMA((ADC_HandleTypeDef *) hadc, (uint32_t *) buf, num_ch);
+}

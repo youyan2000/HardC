@@ -2,12 +2,10 @@
 #define BSP_STEP_MOTOR_H
 
 // BSP 层步进电机硬件抽象
-// 来源: Car_Control_Study_Report §21 (BSP 函数指针注入 + ctx 正确使用)
-//       + Car_Control_Study_Report §20 (速度控制 = 写定时器 LOAD 寄存器)
 //
 // 设计原则:
-//   - 引脚 + 定时器通过 ctx 结构体传入, 函数 CHECK ctx 后使用 (报告 §21 Bug #4)
-//   - 速度控制: 写定时器 LOAD 寄存器 (非固定 ISR, 报告 §20)
+//   - 引脚 + 定时器通过 ctx 结构体传入, 函数 CHECK ctx 后使用
+//   - 速度控制: 写定时器 LOAD 寄存器 (非固定 ISR)
 //   - 占空比 50%: period/2 → CMP 寄存器
 //   - 平台相关: STM32 TIM / TI GPTimer / MSPM0 TIMG 各自实现
 //
@@ -39,7 +37,7 @@ void bsp_step_dir_set(void *ctx, bool high);
 // 设置脉冲周期 (速度控制)
 // period = 定时器 ARR 值, 频率 = 定时器时钟 / (prescaler * period)
 // ctx 指向 BspStepPul {tim, cc_ch}, CHECK 后写入 tim->CCRx (50% 占空比)
-// 关键: 直接操作硬件寄存器 → Speed control works! (报告 §20)
+// 关键: 直接操作硬件寄存器 → Speed control works!
 void bsp_step_pul_set_period(void *ctx, uint16_t period);
 
 // 使能/禁用定时器输出 (启动/停止脉冲)

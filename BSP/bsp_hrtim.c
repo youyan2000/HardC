@@ -1,6 +1,6 @@
 // BSP PWM HRTIM 后端 — bsp_pwm.h 的 STM32 实现 (F334/F3/G4/H7 通用寄存器级)
 //
-// 移植自 WEILAI SuperCap bsp_pwm.c (旧 API) → 新 API (bsp_pwm.h):
+// bsp_pwm.c (旧 API) → 新 API (bsp_pwm.h):
 //   bsp_init / bsp_config_timer / bsp_start / bsp_stop
 //   bsp_update_duty / bsp_update_period / bsp_update_deadtime / bsp_emergency_stop
 //   + 上层 API: bsp_pwm_config_ch / bsp_pwm_set_duty_f / bsp_pwm_set_freq_hz ...
@@ -9,7 +9,7 @@
 // 本层只做 ISR 热路径操作: 直写 CMP1xR/CMP3xR/PERxR/DTxR + 启停输出 + 急停.
 //
 // 死区转换: F334 HCLK=72MHz, CubeMX DTG 分频 → f_DTG=9MHz, 1 tick≈111ns
-//   (旧代码 `dt_ns * 9 / 1000` 在 WEILAI 硬件验证有效)
+//   (旧代码 `dt_ns * 9 / 1000` 硬件验证有效)
 //
 // 注意: 寄存器级 API 的 deadtime 入参是"纳秒" (Device 层直接传 deadtime_ns),
 //       与本头文件注释 "BSP 内部 tick" 不同 — 本文件内做 ns→tick 换算.
@@ -77,7 +77,7 @@ void bsp_start(BspPwmHandle *h, uint32_t timer_mask, uint32_t output_mask) {
   HRTIM_HandleTypeDef *hh = (HRTIM_HandleTypeDef *) h;
   if (!hh)
     return;
-  // 先启计数器 → 等波形稳定 → 再开输出 (WEILAI 模式)
+  // 先启计数器 → 等波形稳定 → 再开输出
   HAL_HRTIM_WaveformCountStart(hh, timer_mask);
   for (volatile uint32_t i = 0; i < 100u; i++) { /* 等待 ≈1 个周期 */
   }
