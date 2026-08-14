@@ -1,7 +1,7 @@
 id: module/comm
 layer: Module
 ctx: main
-description: 通信业务模块 — Comm 帧协议 / CmdDispatch 命令分发 / SerialProto 串口协议 / PMBus 协议栈 (CTX_MAIN — 协议解析全部在主循环)
+description: 通信业务模块 — Comm 帧协议 / CmdDispatch 命令分发 / SerialProto 串口协议 / PMBus 协议栈 / CanProto 超级电容 CAN 协议(0x051/0x061) (CTX_MAIN — 协议解析全部在主循环)
 files:
   - mod_comm.h
   - mod_comm.c
@@ -11,5 +11,7 @@ files:
   - mod_serial_proto.c
   - mod_pmbus.h
   - mod_pmbus.c
+  - mod_can_proto.h
+  - mod_can_proto.c
 depends:
   - components/comm
