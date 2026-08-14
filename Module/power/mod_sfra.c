@@ -1,7 +1,7 @@
 // SFRA 软件频率响应分析仪 — 在线 Bode 图测量实现
 //
 // 来源: TI controlSUITE SFRA/v1.20/Float (SFRA_F_Include.h)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 算法细节:
 //   1. DDS 正弦注入: inject_out = A * sin(phase_dds), phase_dds += ω*dt
@@ -21,9 +21,10 @@
 #include "mod_sfra.h"
 #include <stddef.h>  // NULL
 #include <math.h>
+#include "comp_math.h"
 
-#define SFRA_PI 3.14159265f
-#define SFRA_2PI 6.28318531f
+#define SFRA_PI M_PI
+#define SFRA_2PI M_2PI
 #define SFRA_DB_MIN 1e-12f  // 最小幅值保护 (防止 log10(0) → -inf)
 
 // ======== 初始化 & 重置 ========
@@ -203,9 +204,9 @@ void mod_sfra_background(Sfra *me) {
     // === DFT 结算 ===
 
     // 注入通道幅值
-    float inj_mag = sqrtf(me->inj_re * me->inj_re + me->inj_im * me->inj_im);
+    float inj_mag = MATH_SQRT(me->inj_re * me->inj_re + me->inj_im * me->inj_im);
     // 响应通道幅值
-    float resp_mag = sqrtf(me->resp_re * me->resp_re + me->resp_im * me->resp_im);
+    float resp_mag = MATH_SQRT(me->resp_re * me->resp_re + me->resp_im * me->resp_im);
 
     // 增益: 20*log10(|H|) = 20*log10(mag_resp / mag_inj)
     if (inj_mag < SFRA_DB_MIN) {

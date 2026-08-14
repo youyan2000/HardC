@@ -1,7 +1,7 @@
 // 快速电流环 (Fast Current Loop) — dq 旋转坐标系高带宽电流控制实现
 //
 // 来源: TI controlSUITE motor_control/libs/FCL
-// 翻译为 C-OOP Module 层纯C float 版本
+// 翻译为 HardC Module 层纯C float 版本
 //
 // 算法细节:
 //   v_d_ref = PI(i_d_ref - i_d) - ω·Lq·i_q                      ← d 轴 PI + 解耦
@@ -16,6 +16,7 @@
 
 #include "mod_fcl_ctrl.h"
 #include <math.h>
+#include "comp_math.h"
 
 #define FCL_OVERCURRENT_DEBOUNCE 5   // 过流去抖次数
 
@@ -79,7 +80,7 @@ void fcl_run(FclCtrl *me, float i_d, float i_q,
   }
 
   // 2. 过流检测 (去抖)
-  if (fabsf(i_d) > me->cfg.i_max || fabsf(i_q) > me->cfg.i_max) {
+  if (MATH_ABS(i_d) > me->cfg.i_max || MATH_ABS(i_q) > me->cfg.i_max) {
     me->overcurrent_cnt++;
     if (me->overcurrent_cnt >= FCL_OVERCURRENT_DEBOUNCE) {
       me->mode        = FclMode_Fault;
@@ -137,7 +138,7 @@ void fcl_run(FclCtrl *me, float i_d, float i_q,
   float v_limit_sq = v_limit * v_limit;
 
   if (v_mag_sq > v_limit_sq) {
-    float scale = v_limit / sqrtf(v_mag_sq);
+    float scale = v_limit / MATH_SQRT(v_mag_sq);
     vd *= scale;
     vq *= scale;
   }
