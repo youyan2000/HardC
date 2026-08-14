@@ -33,7 +33,7 @@ HardC/
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (52 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (58 条 + 经验模板), git 版本管理, 禁止回退 |
 | [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
 | [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) | 目录分组、MANIFEST 自描述、scaffold 骨架生成工具设计 |
 

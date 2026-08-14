@@ -72,7 +72,7 @@ make -j$(nproc)
 |------|------|
 | [CLAUDE.md](CLAUDE.md) | 共同约定：Git 约定、代码生成规则、App 架构（人与 AI 共读） |
 | [agent.md](agent.md) | AI 行为准则 + OOP 方法论：虚函数表、继承/多态、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 52 条调参教训 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 58 条调参教训 |
 | [docs/debug/history/](docs/debug/history/README.md) | 项目完整历程 |
 | [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
 | [docs/learning/](docs/learning/) | 学习总结资料（外部项目学习报告 + 架构原则） |

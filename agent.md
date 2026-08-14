@@ -26,6 +26,8 @@
 > | **方式二：继承子类** | 写一个新 `.h/.c` → 父类结构体作为第一个成员 → 实现虚函数 → 绑定 ops → 注册到全局句柄 | 需要新类型的设备（如新增 I2C IO 扩展器、新拓扑的 PWM） |
 >
 > **任何其他"复用"方式都是错的。** 不要修改父类代码来适配子类。不要跨层调用。不要跳过 ops 表直接操作硬件。
+>
+> **HardC 是库不是可执行工程：** 未调用的组件/函数是**库存**（供未来拓扑按需选用），不是死代码。审查时**禁止**因"无调用者"删除或标注废弃库代码。详见 [LESSONS.md](docs/debug/LESSONS.md) #56。
 
 ---
 
@@ -157,7 +159,7 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | 路径 | 用途 |
 |------|------|
 | [agent.md](agent.md) | 本文件 — AI/人类共读的总纲，完整 OOP 方法论 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (52 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (58 条 + 经验模板), git 版本管理, 禁止回退 |
 
 ## 3.5 BSP 硬件加速抽象层 🔌
 
