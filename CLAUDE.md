@@ -12,7 +12,7 @@ C-OOP/
 ├── BSP/             # L1: 不透明句柄 → 平台抽象
 ├── Components/      # L2: comp_*.h/c → 父类 + ops 虚表
 │   ├── adc/ comm/ gpo/ pid/ pwm/          # 父类域
-│   ├── dsp/ motor/ power/ protection/ math/ codec/ sensor/
+│   ├── dsp/ motor/ power/ protection/ math/ codec/ sensor/ contract/
 │   └── (每子目录含 MANIFEST.yaml 自描述)
 ├── Devices/         # L3: <域>_<子类>.h/c → 具体硬件实现
 │   ├── adc/ comm/ gpo/ pid/ pwm/
@@ -250,9 +250,10 @@ make -j$(nproc)
 | PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 6 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM) | `pwms.h` |
 | Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) | 1 (TIM) | — |
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
-| VCU | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 6 (CRC/Checksum/Endian/Viterbi/Interleaver/RS) | — |
+| Codec | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` | 6 (CRC/Checksum/Endian/Viterbi/Interleaver/RS) | — |
+| Contract | `comp_io.h` (I/O 完成契约) + `comp_double_buffer.h` / `comp_latch.h` / `comp_ring.h` / `comp_mailbox.h` (五原语跨上下文交接) | — (独立) | — |
 
-**独立 Component（无 Devices 层, 单头文件 static inline，位于 `Components/dsp/`、`power/`、`math/`、`codec/`、`motor/`、`pid/`）：**
+**独立 Component（无 Devices 层, 单头文件 static inline，位于 `Components/dsp/`、`power/`、`math/`、`codec/`、`motor/`、`pid/`、`contract/`）：**
 
 | Component | 用途 |
 |-----------|------|

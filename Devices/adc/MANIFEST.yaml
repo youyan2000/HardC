@@ -11,6 +11,5 @@ files:
   - adcs.h
 depends:
   - components/adc
-  - components/contract  # comp_io.h — I/O 完成契约 (DMA/转换完成置标志 = IO_ASYNC_FLAG)
-  - components/dsp  # comp_double_buffer.h — PingPong 双缓冲 (adc_dc_sampler 采样快照)
+  - components/contract  # comp_io.h — I/O 完成契约 + comp_double_buffer.h — PingPong 双缓冲 (adc_dc_sampler 采样快照)
   - BSP/container_of.h
