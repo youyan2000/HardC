@@ -32,10 +32,6 @@
 #include <math.h>
 #include <string.h>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846f
-#endif
-
 // ======== 内部: 预计算单个谐振器的 biquad 系数 ========
 static void qpr_calc_coeffs(QPRResonator *r, float w, float wc, float ki, float dt) {
   float K   = 2.0f / dt;

@@ -6,6 +6,7 @@
 #include "comp_mpu.h"
 #include "container_of.h"
 #include <math.h>
+#include "comp_math.h"
 
 // 陀螺仪 ±2000dps → 灵敏度 16.4 LSB/(°/s)
 #define GYRO_SCALE  16.384f
@@ -99,7 +100,7 @@ void mpu6050_read_all(Mpu6050 *me) {
     mpu_read_temp(&me->temp);
     me->roll  = atan2f((float)me->ay, (float)me->az) * RAD_TO_DEG;
     me->pitch = atan2f((float)(-me->ax),
-      sqrtf((float)me->ay * me->ay + (float)me->az * me->az)) * RAD_TO_DEG;
+      MATH_SQRT((float)me->ay * me->ay + (float)me->az * me->az)) * RAD_TO_DEG;
     me->gyro_z_raw = ((float)me->gz - me->gyro_z_offset) / GYRO_SCALE;
     me->yaw = me->gyro_z_raw;
   }

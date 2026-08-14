@@ -12,4 +12,5 @@ files:
 depends:
   - components/adc
   - components/contract  # comp_io.h — I/O 完成契约 + comp_double_buffer.h — PingPong 双缓冲 (adc_dc_sampler 采样快照)
+  - components/math
   - BSP/container_of.h

@@ -1,7 +1,7 @@
 // 位置编码器驱动 — CommBase 子类实现
 //
 // 来源: TI controlSUITE position_manager
-// 翻译为 C-OOP 纯C 版本
+// 翻译为 HardC 纯C 版本
 //
 // 架构:
 //   CommBase (comp_comm.h)
@@ -19,6 +19,7 @@
 #include "container_of.h"
 #include <math.h>
 #include <string.h>
+#include "comp_math.h"
 
 // ======== CRC 计算 (协议通用) ========
 
@@ -331,12 +332,12 @@ static void sincos_interpolate(Encoder *me, float sin_adc, float cos_adc) {
   // atan2 → 角度 rad [0, 2π)
   me->angle_rad = atan2f(sn, cs);
   if (me->angle_rad < 0.0f) {
-    me->angle_rad += 2.0f * 3.14159265f;
+    me->angle_rad += M_2PI;
   }
 
   // 角度 → 单圈位置
   uint64_t max_pos = ((uint64_t)1 << me->cfg.bits_single) - 1;
-  me->single_turn = (uint32_t)(me->angle_rad / (2.0f * 3.14159265f) * (float)max_pos);
+  me->single_turn = (uint32_t)(me->angle_rad / M_2PI * (float)max_pos);
   me->raw_position = me->single_turn;
 }
 
@@ -651,7 +652,7 @@ int encoder_read_position(Encoder *me) {
 
   // 计算角度 (rad)
   me->angle_rad = (float)me->single_turn
-                * (2.0f * 3.14159265f)
+                * M_2PI
                 / (float)((uint64_t)1 << me->cfg.bits_single);
 
   return 0;  // 成功
@@ -676,7 +677,7 @@ void encoder_update(Encoder *me, float dt) {
 
   // 速度 = 位置差 / 时间, 转换为 rad/s
   float pos_per_rev = (float)((uint64_t)1 << me->cfg.bits_single);
-  me->velocity = (float)diff * (2.0f * 3.14159265f) / pos_per_rev / dt;
+  me->velocity = (float)diff * M_2PI / pos_per_rev / dt;
 
   // 保存当前位置供下次速度计算
   me->last_position = me->raw_position;

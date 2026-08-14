@@ -24,9 +24,10 @@
 #include "adc_ac_sampler.h"
 #include "container_of.h"
 #include "arm_math.h"   // arm_rms_f32
-#include <math.h>        // sqrtf
+#include <math.h>        // arm_math.h 传递依赖 (sqrt 已走 comp_math.h MATH_SQRT)
 #include <string.h>      // memset
 #include <assert.h>
+#include "comp_math.h"
 
 // ====== 校准常量 (static const — 类型安全) =====================================
 static const float adc_vref = 3.30f;     // ADC 参考电压 (V)
@@ -132,21 +133,21 @@ static void process_impl(AdcBase *base) {
   if (me->num_v >= 2) {
     float vab = me->v_val[0];
     float vbc = me->v_val[1];
-    float vline_peak = sqrtf(vab * vab + vbc * vbc) * 0.8165f; // ≈ sqrt(2/3)
+    float vline_peak = MATH_SQRT(vab * vab + vbc * vbc) * 0.8165f; // ≈ sqrt(2/3)
     // 一阶低通: alpha = 2*PI*fc*Ts = 2*PI*10Hz*25us ≈ 0.00157
     me->vdc += 0.00157f * (vline_peak * 1.414f - me->vdc);
   }
 
   // ---- 第5步: RMS 累加 (800 样本 = 20ms @ 40kHz) -------------------------
   if (me->num_v >= 2) {
-    float v_rms_inst = sqrtf((me->va * me->va + me->vb * me->vb +
-                              me->vc * me->vc) / 3.0f);
+    float v_rms_inst = MATH_SQRT((me->va * me->va + me->vb * me->vb +
+                                  me->vc * me->vc) / 3.0f);
     vrms_buf[rms_idx] = v_rms_inst;
   }
 
   if (me->num_i >= 2) {
-    float i_rms_inst = sqrtf((me->ia1 * me->ia1 + me->ib1 * me->ib1 +
-                              me->ic1 * me->ic1) / 3.0f);
+    float i_rms_inst = MATH_SQRT((me->ia1 * me->ia1 + me->ib1 * me->ib1 +
+                                  me->ic1 * me->ic1) / 3.0f);
     irms_buf[rms_idx] = i_rms_inst;
   }
 

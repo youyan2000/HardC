@@ -22,5 +22,6 @@ files:
 depends:
   - components/pwm
   - components/dsp
+  - components/math
   - BSP/bsp_pwm.h
   - BSP/container_of.h

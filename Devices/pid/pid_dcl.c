@@ -1,7 +1,7 @@
 // DCL 风格二自由度 PID 实现
 //
 // 来源: TI controlSUITE DCL_PID.asm (C2000 手写汇编)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 算法流程图:
 //   输入: rk(目标), yk(反馈), lk(外部抗饱和增益, 默认1.0)
@@ -30,10 +30,7 @@
 #include "pid_dcl.h"
 #include "container_of.h"
 #include <math.h>
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
+#include "comp_math.h"
 
 // ======== 内部辅助 ========
 

@@ -1,7 +1,7 @@
 // PID_GRANDO 全功能 PID 实现
 //
 // 来源: TI PID_GRANDO macro (motor_control/math_blocks/v4.3/pid_grando.h)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 算法阶段:
 //   1. 比例: up = Kr*Ref - Fbk
@@ -13,10 +13,7 @@
 #include "pid_grando.h"
 #include "container_of.h"
 #include <math.h>
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
+#include "comp_math.h"
 
 // ======== ops 实现 ========
 

@@ -23,7 +23,8 @@ files:
   - comms.h
 depends:
   - components/comm
-  - components/sensor
   - components/codec
+  - components/math
+  - components/sensor
   - BSP/container_of.h
   - devices/sensor/oled.h

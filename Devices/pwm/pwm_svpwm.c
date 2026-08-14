@@ -1,7 +1,7 @@
 // 六开关 SVPWM 实现 — 空间矢量调制核心算法
 //
 // 来源: TI controlSUITE SVGEN (motor_control/math_blocks/v4.3)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 算法:
 //   1. 三相参考电压投影 (Va, Vb, Vc)
@@ -16,6 +16,7 @@
 #include "comp_transform.h"   // SQRT3_OVER_2
 #include <stddef.h>
 #include <math.h>
+#include "comp_math.h"
 
 // ======== 内部辅助 ========
 
@@ -302,7 +303,7 @@ void svpwm_set_vector(PwmSvpwm *me, float v_alpha, float v_beta, float v_dc_bus)
 float svpwm_get_modulation_index(const PwmSvpwm *me) {
   // 调制比 = |V_ref| / (Vdc/√3) = sqrt(alpha²+beta²) * √3 / Vdc
   // 注: v_alpha/v_beta 已是标幺值 (相对 0.5*Vdc)
-  float mag = sqrtf(me->v_alpha * me->v_alpha + me->v_beta * me->v_beta);
+  float mag = MATH_SQRT(me->v_alpha * me->v_alpha + me->v_beta * me->v_beta);
   return mag * 2.0f;  // 标幺值 * 2 = 相对内切圆的调制比
 }
 

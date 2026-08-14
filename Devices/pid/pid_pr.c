@@ -30,10 +30,6 @@
 #include <math.h>
 #include <string.h>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846f
-#endif
-
 // ======== 内部: 预计算单个谐振器的 biquad 系数 ========
 // 基于 Tustin 变换, 在 init 和 update_config 时调用
 static void pr_calc_coeffs(PRResonator *r, float w, float ki, float dt) {
