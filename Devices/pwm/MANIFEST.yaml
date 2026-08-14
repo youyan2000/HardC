@@ -1,6 +1,6 @@
 id: devices/pwm
 layer: Devices
-description: PWM 设备实现 — 7 种拓扑 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SEPIC/SVPWM)
+description: PWM 设备实现 — 8 种拓扑 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SEPIC/SVPWM/WPT)
 files:
   - pwm_buckboost.h
   - pwm_buckboost.c
@@ -16,6 +16,8 @@ files:
   - pwm_sepic.c
   - pwm_svpwm.h
   - pwm_svpwm.c
+  - pwm_wpt.h
+  - pwm_wpt.c
   - pwms.h
 depends:
   - components/pwm
