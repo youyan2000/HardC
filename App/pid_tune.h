@@ -3,7 +3,7 @@
 
 // 串口 PID 调参协议 —— 独立模块, 不依赖任何 PID 类型
 //
-// 使用模式 (参考 SmCar 0xFB 协议):
+// 使用模式 (参考 0xFB 协议):
 //
 //   项目初始化:
 //     pid_tune_set_apply_cb(my_apply);   // 注册回调: 槽位 → 你的 PID 实例
@@ -29,7 +29,14 @@
 //   [6] kpp       [7] kp_p2pd   [8] kd_p2pd
 //   [9] 预留
 
-typedef struct __attribute__((packed)) {
+// C28x 字寻址 (char=16bit): TI CGT 不认 __attribute__((packed)) — 48B 字节布局为 STM32 专属
+#if defined(__TI_COMPILER_VERSION__)
+#define PID_TUNE_FRAME_PACKED
+#else
+#define PID_TUNE_FRAME_PACKED __attribute__((packed))
+#endif
+
+typedef struct PID_TUNE_FRAME_PACKED {
   uint8_t  HEAD;                          // [0]  预留 0x00
   uint8_t  Command;                       // [1]  预留 0x14
   float    Coef[PID_TUNE_COEF_COUNT];     // [2-41] PID 参数槽位

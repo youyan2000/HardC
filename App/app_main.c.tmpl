@@ -1,7 +1,7 @@
 // App 层模板 — 实现文件 (app_main.c)
 // ============================================================
-// 来源: LitteCar CMake (User/Application/app_main.c, 311行)
-//       + WEILAI_SuperCap (User/app/app_main.c, 263行)
+// CMake (User/Application/app_main.c, 311行)
+//       + User/app/app_main.c (263行)
 //
 // 本文件是项目的唯一 App 入口。所有 Module 通过 ISR 钩子和 BackgroundTask 被驱动。
 //
@@ -12,49 +12,81 @@
 //   4. BackgroundTask 完成所有耗时 I/O
 //   5. 配置与运行时分离: Config POD → apply_config() → 运行时 Instance
 //   6. 新增 Module 只需: (a) 嵌入 root (b) board_init 绑定 (c) ISR 中 tick
+//   7. 三上下文: App_OnControlTick (CTX_FAST) / App_OnSlowTick (CTX_SLOW) / BackgroundTask (CTX_MAIN)。
+//      见 agent.md §1.2 三上下文执行契约。
 
 #include "app_main.h"
-#include "pid_tune.h"       // 0xFB 串口调参 (槽位 → PowerCfg)
+#include "pid_tune.h"  // 0xFB 串口调参 (槽位 → PowerCfg)
 
 // 0xFB 调参回调 (定义见文件末尾, 槽位映射与 Config/topologies/buck.yaml 一致)
 static void on_pid_tune_received(const float coef[10]);
 
 // ======== 全局实例 ========
 ProjectConfig g_cfg;
-ProjectRoot    g_root;
+ProjectRoot g_root;
 
 // ======== 1. YAML 配置注入目标 ========
 // YmaC 工具扫描 conf/*.yaml → 渲染 C designated initializer → 注入到下方标记之间
 // 手写默认值, YmaC 覆盖。
 // 运行: cd <项目根> && python YmaC/yaml_config_builder.py
 ProjectConfig g_cfg = {
-                                                                /* CONFIG BEGIN */
-                                /* config: default */
-  .mot_a = {
-    .vel = { .kp = 80.0f, .ki = 5.0f, .kd = 0.0f, .kf = 0.0f,
-             .out_limit = 7200.0f, .d_on_measurement = true, .i_limit = 200.0f },
-    .pos = { .kp = 60.0f, .ki = 0.1f, .kd = 400.0f, .kf = 0.0f,
-             .out_limit = 4000.0f, .d_on_measurement = false, .i_limit = 0.0f },
-    .csc_vlimit = 20.0f,   // LESSONS.md #13: vlimit=20 刚好
-  },
-  .mot_b = {
-    .vel = { .kp = 80.0f, .ki = 5.0f, .kd = 0.0f, .kf = 0.0f,
-             .out_limit = 7200.0f, .d_on_measurement = true, .i_limit = 200.0f },
-    .pos = { .kp = 60.0f, .ki = 0.1f, .kd = 400.0f, .kf = 0.0f,
-             .out_limit = 4000.0f, .d_on_measurement = false, .i_limit = 0.0f },
-    .csc_vlimit = 20.0f,
-  },
-  .power = {   // Buck 降压 (PowerStage 演示) — 默认值与 Config/topologies/buck.yaml 一致
-    .vref = 12.0f,  .iref = 5.0f,
-    .pid_v = { .kp = 1.0f,  .ki = 10.0f },
-    .pid_i = { .kp = 0.2f,  .ki = 5.0f },
-    .ff_weight = 0.5f,
-    .ovp = 15.0f,   .ocp = 8.0f,
-    .soft_start_step = 0.01f,
-    .ch_drive = 0,  .duty_min = 0.0f, .duty_max = 0.95f,
-    .adc_ch_vout = 0, .adc_ch_iout = 1, .adc_ch_vin = 2,
-  },
-                                                                /* CONFIG END */
+    /* CONFIG BEGIN */
+    /* config: default */
+    .mot_a =
+        {
+            .vel = {.kp = 80.0f,
+                    .ki = 5.0f,
+                    .kd = 0.0f,
+                    .kf = 0.0f,
+                    .out_limit = 7200.0f,
+                    .d_on_measurement = true,
+                    .i_limit = 200.0f},
+            .pos = {.kp = 60.0f,
+                    .ki = 0.1f,
+                    .kd = 400.0f,
+                    .kf = 0.0f,
+                    .out_limit = 4000.0f,
+                    .d_on_measurement = false,
+                    .i_limit = 0.0f},
+            .csc_vlimit = 20.0f,  // LESSONS.md #13: vlimit=20 刚好
+        },
+    .mot_b =
+        {
+            .vel = {.kp = 80.0f,
+                    .ki = 5.0f,
+                    .kd = 0.0f,
+                    .kf = 0.0f,
+                    .out_limit = 7200.0f,
+                    .d_on_measurement = true,
+                    .i_limit = 200.0f},
+            .pos = {.kp = 60.0f,
+                    .ki = 0.1f,
+                    .kd = 400.0f,
+                    .kf = 0.0f,
+                    .out_limit = 4000.0f,
+                    .d_on_measurement = false,
+                    .i_limit = 0.0f},
+            .csc_vlimit = 20.0f,
+        },
+    .power =
+        {
+            // Buck 降压 (PowerStage 演示) — 默认值与 Config/topologies/buck.yaml 一致
+            .vref = 12.0f,
+            .iref = 5.0f,
+            .pid_v = {.kp = 1.0f, .ki = 10.0f},
+            .pid_i = {.kp = 0.2f, .ki = 5.0f},
+            .ff_weight = 0.5f,
+            .ovp = 15.0f,
+            .ocp = 8.0f,
+            .soft_start_step = 0.01f,
+            .ch_drive = 0,
+            .duty_min = 0.0f,
+            .duty_max = 0.95f,
+            .adc_ch_vout = 0,
+            .adc_ch_iout = 1,
+            .adc_ch_vin = 2,
+        },
+    /* CONFIG END */
 };
 
 // ======== 2. 配置 → 运行时同步 ========
@@ -88,88 +120,25 @@ void apply_config(void) {
 
 void board_init(void) {
   // --- 3a. Device 实例化 (每个子类调自己的 _init) ---
-
-  // 示例: UART 调试串口
-  // uart_init(&g_root.drv_uart, CommComputer, &huart1, &g_root.rx_buf);
-
-  // 示例: 电机驱动 (直接给 CCR 寄存器指针 + 编码器引脚)
-  // mt_init(&g_root.drv_mtr_a, MotA,
-  //         &(PwmCh){&TIM4->CCR1, &TIM4->CCR2},
-  //         &(AbEnc){Ex1_A_GPIO_Port, Ex1_A_Pin, Ex1_B_GPIO_Port, Ex1_B_Pin},
-  //         1);  // direction: 1=正向, -1=反向
-
-  // 示例: PID 控制器
-  // pid_std_init(&g_root.drv_vel_a, 0.01f,
-  //              -g_cfg.mot_a.vel.out_limit, g_cfg.mot_a.vel.out_limit,
-  //              &(PidStdConfig){.kp=g_cfg.mot_a.vel.kp, ...});
-
-  // 示例: 级联 PID — 内环指向速度环
-  // pid_cascade_init(&g_root.drv_csc_a, 0.01f,
-  //                  &g_root.drv_vel_a.base,   // 内环 = 速度环
-  //                  &(PidCascadeConfig){.vlimit=g_cfg.mot_a.csc_vlimit, ...});
-
-  // 示例: GPO LED (应用 LESSONS.md #7: 输出限幅)
-  // gpo_led_init_gpio(&g_root.drv_led, "status", LED_GPIO_Port, LED_Pin, LED_ACTIVE_HIGH);
+  // 电机/循迹/步进等示例见 app_main.h.tmpl 注释 (本模板聚焦电力电子 Buck).
+  // 通用模式: <dev>_init(&g_root.drv_xxx, <句柄/引脚>...) 绑定底层资源.
 
   // --- 3b. Module 实例化 (指针注入: 绑定 Devices 到 Modules) ---
-  // 每个 Module init 接收它需要的 Base* 指针, 存入 Module 内部
-
-  // 示例: 电机状态机 (持有 MotorBase* + PidBase* — mod_motor.h)
-  // motapp_init(&g_root.mtr_a,
-  //             &g_root.drv_mtr_a.base,    // MotorBase*
-  //             &g_root.drv_vel_a.base,    // 速度环 PidBase*
-  //             &g_root.drv_pos_a.base,    // 位置环 PidBase* (可选)
-  //             &g_root.drv_csc_a);         // 级联 PidCascade* (可选)
-  // motapp_init(&g_root.mtr_b, &g_root.drv_mtr_b.base,
-  //             &g_root.drv_vel_b.base, &g_root.drv_pos_b.base,
-  //             &g_root.drv_csc_b);
-
-  // 示例: 转弯控制器 (持有 2个 MotApp* — mod_turn.h)
-  // turnctrl_init(&g_root.turn, &g_root.mtr_a, &g_root.mtr_b);
-
-  // 示例: 循迹状态机 (持有 MotApp*+ADC*+P2PD*+TurnCtrl* — mod_follower.h)
-  // follower_init(&g_root.flw,
-  //               &g_root.mtr_a, &g_root.mtr_b,
-  //               &g_root.drv_follower.base,   // AdcBase* (红外传感器)
-  //               &g_root.drv_fpid.base,        // PidBase* (P2PD)
-  //               &g_root.turn);                // TurnCtrl*
-
-  // 示例: HMI 模块 (持有 CmdDispatcher* — mod_hmi.h)
-  // hmi_init(&g_root.hmi, &g_root.cmd_dispatch);
-  // hmi_add_key(&g_root.hmi, 0, 1);  // KEY1, 初始释放
-  // hmi_add_key(&g_root.hmi, 1, 1);  // KEY2
-  // hmi_add_key(&g_root.hmi, 2, 1);  // KEY3
-  // hmi_add_key(&g_root.hmi, 3, 1);  // KEY4
-
-  // 示例: 步进电机 (BSP 注入 — motor_step.h)
-  // static BspStepDir step_pins_x[4] = {
-  //   {Step_MA_PORT, Step_MA_PIN}, {Step_MB_PORT, Step_MB_PIN},
-  //   {Step_MC_PORT, Step_MC_PIN}, {Step_MD_PORT, Step_MD_PIN}};
-  // static BspStepDir  step_dir_x = {Step_DIR_PORT, Step_DIR_PIN};
-  // static BspStepPul  step_pul_x = {TIMER_STEP_INST, 0};
-  // StepMotorCfg sm_cfg_x = {
-  //   .name = StepMotX, .phase_pins = step_pins_x,
-  //   .set_dir = bsp_step_dir_set, .dir_ctx = &step_dir_x,
-  //   .set_period = bsp_step_pul_set_period, .pul_ctx = &step_pul_x,
-  //   .set_enable = bsp_step_pul_enable,
-  //   .phase_tbl = &(StepPhaseTable)STEP_PHASE_TABLE_FULL_4,
-  //   .limit_lo = -6000, .limit_hi = 6000,
-  // };
-  // stepmotor_init(&g_root.step_x, &sm_cfg_x);
-
-  // 示例: 球板平衡 (步进电机+PID — mod_balance.h)
-  // bal_init(&g_root.bal, &g_root.step_x.base, &g_root.step_y.base,
-  //          &g_root.drv_bal_pid_x.base, &g_root.drv_bal_pid_y.base,
-  //          -6000, 6000, -200, 200);
+  // 每个 Module init 接收它需要的 Base* 指针, 存入 Module 内部.
+  // 例: motapp_init(&g_root.mtr_a, &g_root.drv_mtr_a.base, &g_root.drv_vel_a.base, NULL, NULL);
 
   // --- 3b2. Power-OOP: 电源控制 (PowerStage 集成模块示例: Buck 降压) ---
 
-  // 设备实例化 (真实工程需绑定 BSP/ADC 句柄, 见 BSP/bsp_pwm.h / adc_dc_sampler.h):
-  // pwm_bb_init(&g_root.drv_buck_pwm, 100000u, BSP_PWM_TIMER_0, 0x3u,
-  //             PwmMode_Buck, /*sync_rect=*/true);
-  // g_root.drv_buck_pwm.bsp_cfg.handle = &hrpwm1;   // 绑定 BSP 句柄
-  // adc_dc_sampler_init(&g_root.drv_dc_adc, &hadc1, &hdma_adc1, 3,
-  //                     (float[]){0.0072f, 0.05f, 0.0072f}, NULL, NULL);
+  // 设备实例化 — 由 ymac_cfg 生成器注入 (拓扑 + .ioc/.syscfg 外设绑定):
+  //   pwm_bb_init(&g_root.drv_buck_pwm, 100000u, BSP_TIMER_A, BSP_OUT_TIMER_A_PAIR,
+  //               PwmMode_Buck, /*sync_rect=*/true);
+  //   g_root.drv_buck_pwm.bsp_cfg.handle = &hhrtim1;
+  //   g_root.drv_buck_pwm.bsp_cfg.clk_hz = 72000000u;
+  //   adc_dc_sampler_init(&g_root.drv_dc_adc, IO_ASYNC_FLAG, &hadc1, &hdma_adc1, 3,
+  //                       (float[]){0.0072f, 0.05f, 0.0072f}, NULL, NULL);
+  /* YMAC BSP BEGIN */
+  // === 此处由 ymac_cfg 注入 BSP/外设绑定 (HRTIM + ADC + 通道注释) ===
+  /* YMAC BSP END */
 
   // ModBuck 实例化: 绑定 ops + 存 cfg (来自 g_cfg.power) + 初始化双环 PI
   // (init 内部已 sync_cfg 派生 PI 限幅; 末尾 apply_config() 会再同步一次)
@@ -182,80 +151,82 @@ void board_init(void) {
 
   // --- 3c. 通用 Module (每个项目都需要) ---
 
-  // 帧协议解析器
-  mod_comm_init(&g_root.mod_comm, &g_root.drv_uart.base);
-
   // 命令分发器 (注册各子系统的命令处理函数)
   cmd_dispatch_init(&g_root.cmd_dispatch);
   // cmd_dispatch_register(&g_root.cmd_dispatch, CMD_SYS_START, sys_start_handler);
-  // cmd_dispatch_register(&g_root.cmd_dispatch, CMD_MOT_FORWARD, mot_forward_handler);
 
   // 串口协议 (ISR 喂入 → 主循环处理)
   serial_proto_init(&g_root.serial_proto);
   // serial_proto.on_pid_tune = on_pid_tune_received;
-  // serial_proto.on_sensor_cmd = on_sensor_query;
 
   // --- 3d. 启动硬件 ---
-
-  // 示例: 启动控制定时器 (TIM3, 10ms = 100Hz)
-  // HAL_TIM_Base_Start_IT(&htim3);
-
-  // 示例: 启动 PWM 输出
-  // HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  // HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
-
-  // 示例: 启动 UART 接收
-  // comm_bgn(&g_root.drv_uart.base);
-
-  // 示例: 启动 ADC DMA
-  // HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_SIZE);
+  // HAL_TIM_Base_Start_IT(&htim3);        // 控制定时器 (如 100Hz)
+  // comm_bgn(&g_root.drv_uart.base);      // UART 接收 (若接了调试串口)
 
   // --- 3e. 初始配置加载 ---
+  Heartbeat_Init(&g_root.heartbeat);  // 心跳看门狗清零 (全局零初始化本可, 模板显式化以防非零态根结构体)
   apply_config();
 }
 
 // ======== 4. ISR 钩子 ========
 
+// ADC DMA 完成 — 在 stm32f1xx_it.c 的 HAL_ADC_ConvCpltCallback 中转发 (PingPong 快照交接):
+//   void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+//     if (hadc == &hadc1) adc_dc_sampler_on_dma_complete(&g_root.drv_dc_adc);  // 标 pending + 重装备用块
+//   }
+// FAST 每控制周期 adc_dc_sampler_fetch(&g_root.drv_dc_adc) 消费快照 (fetch/process 分离, 撕裂读消除).
+
 // 控制定时器 ISR — 所有控制算法和状态机的驱动源
 // 调用顺序很重要: 先传感器 → 再决策 → 最后执行器
 void App_OnControlTick(void) {
-  g_root.heartbeat++;   // ISR 心跳 (供 Heartbeat 看门狗检测死锁)
+  Heartbeat_Tick(&g_root.heartbeat);  // 快通道心跳 (SLOW 判死锁 → 停止喂狗 → IWDG 复位)
 
   // === 第1层: 传感器采样 ===
-  // ADC 数据处理 (红外循迹 + 电压/电流)
-  // adc_process(&g_root.drv_follower.base);
-  // 陀螺仪角速度积分 (仅用于显示和盲跑, LESSONS #1)
-  // mpu6050_yaw_integrate(&g_root.drv_mpu);
+  // adc_dc_sampler_fetch(&g_root.drv_dc_adc);  // PingPong 切快照 + 只碰活动块 (DMA 完成 ISR 已标 pending)
 
   // === 第2层: HMI + 命令分发 ===
-  // 按键扫描 + 去抖 + 按键→CarCmd→dispatch
   // hmi_tick(&g_root.hmi);
 
   // === 第3层: 控制算法 (状态机 tick) ===
-  // 电机 tick: 读编码器 → PID 计算 → 写 PWM
-  // motapp_tick(&g_root.mtr_a);
-  // motapp_tick(&g_root.mtr_b);
-  // 转弯控制 (可能覆盖电机的速度目标)
-  // turnctrl_tick(&g_root.turn);
-  // 循迹控制 (P2PD 差速修正, 覆盖电机速度目标)
-  // follower_tick(&g_root.flw);
   // 电源控制: Buck 降压 (采样→双环→PWM, 内部状态机, 未 start 时为空转)
   mod_buck_tick(&g_root.buck);
-  // 步进电机脉冲 ISR (由定时器中断独立驱动, 不在此处)
-  // 球板平衡 (在主循环中由摄像头帧驱动, 不在此处)
+  // 电机 tick (按需): motapp_tick(&g_root.mtr_a);  follower_tick(&g_root.flw);
 
   // === 第4层: 执行器输出 ===
-  // PWM 输出已在 motapp_tick 内部写入, 此处无需额外操作
+  // PWM 输出已在 mod_buck_tick 内部写入, 此处无需额外操作
 
   // === 第5层: 延迟标记 (ISR 中不执行, 标记后由 BackgroundTask 处理) ===
   // if (需要打印传感器数据)  DeferredAction_Set(&g_root.deferred, DEFER_LOG_SENSOR);
-  // if (需要发送串口应答)    DeferredAction_Set(&g_root.deferred, DEFER_SEND_UART);
+}
+
+// 监控定时器 ISR — CTX_SLOW (软实时): 慢保护去抖 / 状态聚合 / 心跳喂狗 / 软关断判决
+// 与 FAST 分离: 这里允许轻微抖动, 但确认故障即置关断; 硬件封波 (PWM emergency_stop / HW FAULT 引脚) 负责及时
+void App_OnSlowTick(void) {
+  // === 1. 心跳 → 喂狗 (监控三件套: comp_protection.h Heartbeat + bsp_watchdog.h) ===
+  // FAST ISR 已调用: Heartbeat_Tick(&g_root.heartbeat);            // 快通道心跳++
+  // 死锁判定: 连续 N tick 心跳不变 → 停止喂狗 → IWDG 硬件复位
+  // if (!Heartbeat_Check(&g_root.heartbeat, 100))                  // 100 tick 不变 = 死锁
+  //   bsp_watchdog_feed();                                         // 健康才喂狗
+
+  // === 2. 慢保护去抖 → 软判决 (Latest latch, FAST 周期边界读) ===
+  // if (Debounce_Update(&g_root.ovp_dbn, (vout > cfg.ovp)))  // 示例: 用户自加 Debounce ovp_dbn 字段
+  //   g_root.fault.ovp = true;
+
+  // === 3. 状态聚合: 读 FAST 的 Latest latch (ModBuck telemetry), 供 HMI/日志 ===
+  // float vout = latch_peek(&g_root.buck.telemetry);  // vout 最新值 (FAST 每周期写, Latest 锁存)
+
+  // === 4. 软关断: 确认故障 → 置关断 + 通知 HMI ===
+  // if (g_root.fault.any) {
+  //   pwm_emergency_stop(&g_root.drv_buck_pwm.base);
+  //   g_root.deferred |= DEFER_SEND_FAULT;        // BackgroundTask 里上报
+  // }
 }
 
 // 串口接收 ISR — 逐字节喂入协议栈
 void App_OnUartRx(uint8_t byte) {
   // 路由顺序: PID调参 → 控制命令 → 传感器查询 → 校准 → 直控 → 电机数据
-  if (pid_tune_rx(byte))              return;  // 0xFB Buck 调参帧
+  if (pid_tune_rx(byte))
+    return;  // 0xFB Buck 调参帧
   // serial_proto_feed(&g_root.serial_proto, byte);  // 0xFA/0xFC/0xEE/0xEF 帧协议
   // comm_bgn(&g_root.drv_uart.base);              // 重启接收
 }
@@ -292,6 +263,12 @@ void BackgroundTask(void) {
   // --- OLED 刷新 (软件 SPI, 阻塞操作) ---
   // oled_flush();
 
+  // --- 命令下发 (Command 邮箱, MAIN→FAST 周期边界生效) ---
+  // mod_buck_set_vref(&g_root.buck, 13.0f);  // 运行期热调输出电压参考
+
+  // --- 事件日志输出: 排空 ModBuck 保护事件流 (SPSC 环, FAST 推 / MAIN 排空) ---
+  // uint8_t ev; while (mod_buck_evt_pop(&g_root.buck, &ev)) log_evt(ev);
+
   // --- 事件日志输出 ---
   // DeferredAction_Poll(&g_root.deferred, DEFER_LOG_SENSOR) → printf
   // DeferredAction_Poll(&g_root.deferred, DEFER_SEND_UART)  → uart_send
@@ -310,15 +287,15 @@ void BackgroundTask(void) {
 
 static void on_pid_tune_received(const float coef[10]) {
   // 槽位 0-9 → g_cfg.power (同步回配置, 下次 YAML 注入保持一致)
-  g_cfg.power.vref            = coef[0];
-  g_cfg.power.iref            = coef[1];
-  g_cfg.power.pid_v.kp        = coef[2];
-  g_cfg.power.pid_v.ki        = coef[3];
-  g_cfg.power.pid_i.kp        = coef[4];
-  g_cfg.power.pid_i.ki        = coef[5];
-  g_cfg.power.ff_weight       = coef[6];
-  g_cfg.power.ovp             = coef[7];
-  g_cfg.power.ocp             = coef[8];
+  g_cfg.power.vref = coef[0];
+  g_cfg.power.iref = coef[1];
+  g_cfg.power.pid_v.kp = coef[2];
+  g_cfg.power.pid_v.ki = coef[3];
+  g_cfg.power.pid_i.kp = coef[4];
+  g_cfg.power.pid_i.ki = coef[5];
+  g_cfg.power.ff_weight = coef[6];
+  g_cfg.power.ovp = coef[7];
+  g_cfg.power.ocp = coef[8];
   g_cfg.power.soft_start_step = coef[9];
 
   // 同步到运行时实例 (整体拷贝 + PI 限幅派生)

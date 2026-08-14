@@ -1,6 +1,6 @@
 // App 层模板 — 头文件 (app_main.h)
 // ============================================================
-// 来源: LitteCar CMake (User/Application/app_main.h) + WEILAI_SuperCap (User/app/app_main.h)
+// CMake (User/Application/app_main.h) + User/app/app_main.h
 //
 // 架构规则（不可违反）:
 //   1. 整个项目只有这一个 App 文件对。其他都是 Module (mod_*)。
@@ -8,6 +8,8 @@
 //   3. Module 之间通过指针引用 (指针注入), 由 board_init() 一次性绑定。
 //   4. 配置与运行时分离: Config (POD) 是 YAML 注入目标, Instance 持有运行时状态。
 //   5. ISR 只做控制计算和寄存器操作；printf/OLED/软件I2C 在主循环 BackgroundTask 中完成。
+//   6. 三上下文: App_OnControlTick (CTX_FAST) → App_OnSlowTick (CTX_SLOW) → BackgroundTask (CTX_MAIN)。
+//      每上下文能做什么/禁止做什么见 agent.md §1.2 三上下文执行契约。
 //
 // 集成步骤:
 //   1. 复制所需子项目目录到工程
@@ -33,37 +35,38 @@
 #include "comp_error.h"
 #include "comp_filter.h"
 #include "comp_protection.h"
+#include "bsp_watchdog.h"  // 监控三件套: 心跳喂狗 (bsp_watchdog_feed 供 App_OnSlowTick)
 
 // --- COM-OOP: 通信 ---
 #include "comp_comm.h"
-#include "com_uart.h"
-#include "com_key.h"
+// #include "com_uart.h"      // 按需 (Device 层含硬 HAL include, 见下文)
+// #include "com_key.h"       // 按需 (Device 层含硬 HAL include)
 // #include "com_oled.h"      // 按需取消注释
 // #include "com_mpu6050.h"
 // #include "com_ultrasonic.h"
-#include "mod_comm.h"           // 帧协议解析
-#include "mod_cmd_dispatch.h"   // 统一命令分发
-#include "mod_serial_proto.h"   // 调试串口协议
+#include "mod_comm.h"          // 帧协议解析
+#include "mod_cmd_dispatch.h"  // 统一命令分发
+#include "mod_serial_proto.h"  // 调试串口协议
 
 // --- Motor-OOP: 电机控制 Module ---
-#include "mod_motor.h"          // MotApp 电机状态机
-#include "mod_turn.h"           // TurnCtrl 转弯控制
-#include "mod_follower.h"       // Follower 循迹控制
-#include "mod_hmi.h"            // HMI 人机交互
+#include "mod_motor.h"     // MotApp 电机状态机
+#include "mod_turn.h"      // TurnCtrl 转弯控制
+#include "mod_follower.h"  // Follower 循迹控制
+#include "mod_hmi.h"       // HMI 人机交互
 
 // --- PID-OOP: 控制器 ---
 #include "comp_pid.h"
 #include "pid_standard.h"
 #include "pid_p2pd.h"
 #include "pid_cascade.h"
-#include "pid_parallel.h"       // 可选
+#include "pid_parallel.h"  // 可选
 
 // --- Power-OOP: 电源控制 (PowerStage 集成模块示例: Buck 降压) ---
-#include "comp_power_stage.h"   // PowerStage 父类接口 (ops 虚表 + 状态机)
-#include "comp_pi_reg4.h"       // PiReg4 四态 PI (双环值包含)
-#include "pwm_buckboost.h"      // PwmBuckBoost — 单路 Buck/Boost PWM
-#include "adc_dc_sampler.h"     // AdcDcSampler — 直流采样器
-#include "mod_buck.h"           // ModBuck — Buck 降压控制模块
+#include "comp_power_stage.h"  // PowerStage 父类接口 (ops 虚表 + 状态机)
+#include "comp_pi_reg4.h"      // PiReg4 四态 PI (双环值包含)
+#include "pwm_buckboost.h"     // PwmBuckBoost — 单路 Buck/Boost PWM
+#include "adc_dc_sampler.h"    // AdcDcSampler — 直流采样器
+#include "mod_buck.h"          // ModBuck — Buck 降压控制模块
 // #include "mod_powerctrl.h"   // 状态机模板 (按需)
 
 // --- ADC-OOP: 采样 ---
@@ -93,16 +96,16 @@
 // 示例: PID 参数组
 typedef struct {
   float kp, ki, kd, kf;
-  float out_limit;       // 输出限幅 (PWM 占空比最大值)
-  bool  d_on_measurement;
+  float out_limit;  // 输出限幅 (PWM 占空比最大值)
+  bool d_on_measurement;
   float i_limit;
 } PidCfg;
 
 // 示例: 电机参数组
 typedef struct {
-  PidCfg vel;            // 速度环
-  PidCfg pos;            // 位置环
-  float  csc_vlimit;     // 级联 PID 内环限幅 (vlimit=20 刚好, LESSONS.md #13)
+  PidCfg vel;        // 速度环
+  PidCfg pos;        // 位置环
+  float csc_vlimit;  // 级联 PID 内环限幅 (vlimit=20 刚好, LESSONS.md #13)
 } MotorCfg;
 
 // 示例: 电源参数组 (Buck 降压 — PowerStage 集成模块)
@@ -115,7 +118,7 @@ typedef struct {
   MotorCfg mot_a;
   MotorCfg mot_b;
   // FollowerCfg follower;    // 循迹参数 (按需)
-  PowerCfg   power;           // 电源: Buck 降压 (PowerStage 演示)
+  PowerCfg power;  // 电源: Buck 降压 (PowerStage 演示)
   // AdcCfg     adc;           // ADC 采样参数 (按需)
   // StepMotorCfg step;         // 步进电机参数 (按需)
   // BalCfg     bal;            // 球板平衡参数 (按需)
@@ -126,7 +129,7 @@ extern ProjectConfig g_cfg;
 
 // ======== 3. 根结构体 (App 拥有所有实例) ========
 //
-// 设计原则 (来自 WEILAI + LitteCar):
+// 设计原则:
 //   - 所有 Device 和 Module 实例嵌入此结构体 (值包含, 无 malloc)
 //   - Module 之间通过指针引用 (board_init 中一次性解析)
 //   - 指针图是封闭的: 所有指针指向此结构体内的其他成员
@@ -155,20 +158,20 @@ typedef struct {
   // StepMotor step_y;            // Y轴步进电机 (motor_step.h, 按需)
 
   // --- Module 实例 (通用, 每个项目都需要) ---
-  ModComm          mod_comm;         // 帧协议解析
-  CmdDispatcher    cmd_dispatch;     // 命令分发器
-  SerialProto      serial_proto;     // 串口协议
+  ModComm mod_comm;            // 帧协议解析
+  CmdDispatcher cmd_dispatch;  // 命令分发器
+  SerialProto serial_proto;    // 串口协议
 
   // --- Power-OOP: 电力电子设备 (Buck 演示) ---
-  PwmBuckBoost  drv_buck_pwm;   // Buck 降压 PWM 设备 (pwm_buckboost.h)
-  AdcDcSampler  drv_dc_adc;     // 直流采样器 (adc_dc_sampler.h, vout/iout/vin)
+  PwmBuckBoost drv_buck_pwm;  // Buck 降压 PWM 设备 (pwm_buckboost.h)
+  AdcDcSampler drv_dc_adc;    // 直流采样器 (adc_dc_sampler.h, vout/iout/vin)
 
   // --- Power-OOP: 电源控制 Module (PowerStage 集成模式示例) ---
-  ModBuck       buck;           // Buck 降压控制 (mod_buck.h)
+  ModBuck buck;  // Buck 降压控制 (mod_buck.h)
 
   // --- 诊断 ---
-  volatile uint32_t heartbeat;       // ISR 心跳计数 (快通道++)
-  uint32_t          idle_cnt;        // 主循环空闲计数 (负载率指标)
+  Heartbeat heartbeat;      // 心跳看门狗 (comp_protection.h): FAST 内 Heartbeat_Tick, SLOW 内 Heartbeat_Check
+  uint32_t idle_cnt;        // 主循环空闲计数 (负载率指标)
 
 } ProjectRoot;
 
@@ -194,6 +197,11 @@ void BackgroundTask(void);
 // HAL_TIM_PeriodElapsedCallback — 控制定时器 ISR (如 TIM3, 10ms/100Hz)
 // 调用顺序: ADC采样 → 传感器 → HMI/命令 → 控制算法 → 电机输出
 void App_OnControlTick(void);
+
+// 监控定时器 ISR — CTX_SLOW (软实时): 慢保护去抖 / 状态聚合 / 心跳喂狗 / 软关断判决
+// 与 App_OnControlTick 分离: FAST 只做确定的事; SLOW 允许轻微抖动, 但确认问题即关断
+// 由独立监控定时器驱动 (如 1ms/1kHz), 或在 FAST ISR 末尾降频调用
+void App_OnSlowTick(void);
 
 // HAL_UART_RxCpltCallback — 串口接收完成
 void App_OnUartRx(uint8_t byte);
