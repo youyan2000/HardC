@@ -1,9 +1,10 @@
 // IQmath 查表 + 三角函数实现
 //
 // 来源: TI controlSUITE IQmathLib (IQmathTables.c — 512 点 sin/cos 表)
-// 翻译为 C-OOP 独立 C 文件 (单份源码, 所有平台/后端共用)
+// 翻译为 HardC 独立 C 文件 (单份源码, 所有平台/后端共用)
 
 #include "comp_iqmath.h"
+#include "comp_math.h"
 #include <math.h>
 
 // ======================= Sin/Cos 查找表 (512 点, IQ30 格式) =======================
@@ -219,7 +220,7 @@ _iq _IQatan2PU(_iq y, _iq x) {
   float fy = _IQtoF(y);
   float fx = _IQtoF(x);
   float ang = atan2f(fy, fx);         // [-π, +π]
-  float pu = ang / (2.0f * 3.14159265358979f);
+  float pu = ang / M_2PI;
   if (pu < 0.0f) pu += 1.0f;          // 归算到 [0, 1)
   return _IQ(pu);
 }
@@ -254,7 +255,7 @@ _iq15 _IQ15sqrt(_iq x) {
   if (x <= 0) return 0;
   float f = _IQtoF(x);
   if (f < 0.0f) f = 0.0f;
-  float sf = sqrtf(f);
+  float sf = MATH_SQRT(f);
   return _IQ15(sf);
 }
 
@@ -262,6 +263,6 @@ _iq15 _IQ15sqrt(_iq x) {
 _iq15 _IQ15isqrt(_iq x) {
   if (x <= 0) return (_iq15)0x7FFF;   // 最大正值 (inf 近似)
   float f = _IQtoF(x);
-  float isf = 1.0f / sqrtf(f);
+  float isf = MATH_ISQRT(f);
   return _IQ15(isf);
 }

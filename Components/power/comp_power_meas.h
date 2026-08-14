@@ -5,7 +5,7 @@
 //   libraries/energy-metrology_library/energy_metrology_f28p55/
 //     (metrology_background.c 逐采样累加, metrology_calculations.c 读数计算,
 //      energyIntegrator 能量脉冲积分)
-// 翻译为 C-OOP 纯C float 版本 (合并两库的功率测量算法精华)
+// 翻译为 HardC 纯C float 版本 (合并两库的功率测量算法精华)
 //
 // 单相功率计量核心:
 //   1. 逐采样累加 (ISR 热路径): v²/ i²/ (v·i)/ (v_quad·i)
@@ -28,6 +28,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "comp_math.h"
 
 // 电压历史环形缓冲大小 (2 的幂, 掩码索引)
 #define POWER_MEAS_V_HISTORY_SIZE  1024u
@@ -186,8 +187,8 @@ static inline void power_meas_update(PowerMeas *me) {
 
   const float inv_n = 1.0f / (float)me->sample_count;
 
-  me->vrms = sqrtf(me->v_sq_sum * inv_n);
-  me->irms = sqrtf(me->i_sq_sum * inv_n);
+  me->vrms = MATH_SQRT(me->v_sq_sum * inv_n);
+  me->irms = MATH_SQRT(me->i_sq_sum * inv_n);
   me->active_power = me->p_sum * inv_n;
   me->reactive_power = me->q_sum * inv_n;
   me->apparent_power = hypotf(me->active_power, me->reactive_power);
@@ -250,7 +251,7 @@ static inline void energy_accu_init(EnergyAccu *me, float threshold_wh) {
 static inline uint32_t energy_accu_integrate(EnergyAccu *me, float power_w,
                                              float dt_s) {
   // 与 TI 一致: 先取绝对值再积分 (方向由导入/导出路由决定)
-  const float abs_power = fabsf(power_w);
+  const float abs_power = MATH_ABS(power_w);
 
   // 功率×时间 → 能量 (W·s = J), 折算 Wh (1 Wh = 3600 J), 加残余
   float energy_wh = abs_power * dt_s / 3600.0f + me->residual;
@@ -358,7 +359,7 @@ static inline void power_meas_3ph_sample(PowerMeas3Ph *me, float va, float ia,
 
 // 线电压 (相量差): Vll = hypot(V1 − V2·cos(θ), V2·sin(θ)), θ = pu·π
 static inline float power_meas_3ph_ll(float v1, float v2, float pu_angle) {
-  float th = pu_angle * 3.14159265359f;
+  float th = pu_angle * M_PI;
   float x = v1 - v2 * cosf(th);
   float y = v2 * sinf(th);
   return hypotf(x, y);
@@ -366,17 +367,16 @@ static inline float power_meas_3ph_ll(float v1, float v2, float pu_angle) {
 
 // 电流矢量和 (TI calculateVectorCurrentSum) — 三相电流 + 相位差 + 功率因数角
 static inline float power_meas_3ph_vector_sum(const PowerMeas3Ph *me) {
-  const float pi = 3.14159265359f;
   // 功率因数角 per-unit (1.0 = 180°): pf_angle/π
-  float pfa0 = me->phases[0].pf_angle / pi;
-  float pfa1 = me->phases[1].pf_angle / pi;
-  float pfa2 = me->phases[2].pf_angle / pi;
+  float pfa0 = me->phases[0].pf_angle / M_PI;
+  float pfa1 = me->phases[1].pf_angle / M_PI;
+  float pfa2 = me->phases[2].pf_angle / M_PI;
 
   // θ1/θ2 与 TI 一致: (相位差 + PFA 差)·0.5, 后乘 2π
   float t1 = (me->phase_pu[0] + pfa0 - pfa1) * 0.5f;
   float t2 = (me->phase_pu[1] + pfa1 - pfa2) * 0.5f;
-  float a1 = t1 * 2.0f * pi;
-  float a2 = (t2 + t1) * 2.0f * pi;
+  float a1 = t1 * 2.0f * M_PI;
+  float a2 = (t2 + t1) * 2.0f * M_PI;
 
   float i0 = me->phases[0].irms;
   float i1 = me->phases[1].irms;
@@ -400,16 +400,16 @@ static inline void power_meas_3ph_update(PowerMeas3Ph *me) {
     sum_q += me->phases[i].reactive_power;
     sum_s += me->phases[i].apparent_power;
   }
-  me->total_p = (fabsf(sum_p) < 0.5f) ? 0.0f : sum_p;
-  me->total_q = (fabsf(sum_q) < 0.5f) ? 0.0f : sum_q;
-  me->total_s = (fabsf(sum_s) < 0.5f) ? 0.0f : sum_s;
+  me->total_p = (MATH_ABS(sum_p) < 0.5f) ? 0.0f : sum_p;
+  me->total_q = (MATH_ABS(sum_q) < 0.5f) ? 0.0f : sum_q;
+  me->total_s = (MATH_ABS(sum_s) < 0.5f) ? 0.0f : sum_s;
 
   // 聚合功率因数: |总P|/总S, 总P<0 取反 (发电机惯例)
   if (me->total_s > 0.0f) {
     float pf = me->total_p / me->total_s;
     if (pf > 1.0f) pf = 1.0f;
     else if (pf < -1.0f) pf = -1.0f;
-    me->aggregate_pf = fabsf(pf);
+    me->aggregate_pf = MATH_ABS(pf);
   } else {
     me->aggregate_pf = 0.0f;
   }

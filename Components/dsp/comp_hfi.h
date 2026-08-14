@@ -1,7 +1,7 @@
 // 电机控制 — 高频注入 (High Frequency Injection for PMSM 低速/零速无感控制)
 //
 // 来源: TI controlSUITE motor_control/libs/HFI
-// 翻译为 C-OOP 纯C float static inline 版本
+// 翻译为 HardC 纯C float static inline 版本
 //
 // 原理:
 //   脉振高频正弦电压注入 (Pulsating HF Injection):
@@ -43,9 +43,10 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include "comp_math.h"
 
-#define HFI_PI  3.14159265f
-#define HFI_2PI 6.28318531f
+#define HFI_PI  M_PI
+#define HFI_2PI M_2PI
 
 // ======================= HfiCfg (HFI 配置参数) =======================
 // 不可变参数 — 编译期或 YAML 注入填充

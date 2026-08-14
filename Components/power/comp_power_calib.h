@@ -4,7 +4,7 @@
 //   libraries/energy-metrology_library/energy_metrology_f28p55
 //   (metrology_nv_structs.h calibrationData + metrology_calibration.h
 //    applyCalibrationPhase: deadband = mean·scale, <offset → 0, 否则 −offset)
-// 翻译为 C-OOP 纯C float 版本 (TI 的 q11/q31 定点分数缩放简化)
+// 翻译为 HardC 纯C float 版本 (TI 的 q11/q31 定点分数缩放简化)
 //
 // 校准在"结果"上做死区减法, 不是逐采样:
 //   result = mean·scale;  |result| < offset → 0;  否则朝零方向减 offset
@@ -26,6 +26,7 @@
 #define COMP_POWER_CALIB_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // ======================= PowerCalibPhase (每相校准数据) =======================
 
@@ -77,7 +78,7 @@ static inline void power_calib_init(PowerCalibPhase *me) {
 // 对称死区: |raw·scale| < offset → 0; 否则减 offset, 方向朝零 (保符号)
 static inline float power_calib_deadband(float raw, float scale, float offset) {
   float r = raw * scale;
-  if (fabsf(r) < offset) {
+  if (MATH_ABS(r) < offset) {
     return 0.0f;
   }
   return (r >= 0.0f) ? r - offset : r + offset;

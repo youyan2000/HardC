@@ -10,6 +10,7 @@
 #define COMP_COMPLEX_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // Complex32 — 直角坐标 32-bit 浮点复数 (值类型, ISR 友好)
 // 按值传递/返回, ARM EABI 硬浮点 ABI 走 VFP 寄存器, 零栈开销
@@ -62,7 +63,7 @@ static inline Complex32 complex_div(Complex32 a, Complex32 b) {
 
 // 模长: sqrt(re² + im²)
 static inline float complex_mag(Complex32 a) {
-  return sqrtf(a.re * a.re + a.im * a.im);
+  return MATH_SQRT(a.re * a.re + a.im * a.im);
 }
 
 // 模长平方: re² + im² (避免 sqrt, 用于比较)

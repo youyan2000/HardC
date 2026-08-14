@@ -1,6 +1,6 @@
 // 向量/矩阵批处理数学库 — 基本向量运算 + Vector3 三相便捷结构体
 //
-// 来源: TI controlSUITE dsp/FPU/v1_50 (fpu_vector.h) — C-OOP 纯C float 重实现
+// 来源: TI controlSUITE dsp/FPU/v1_50 (fpu_vector.h) — HardC 纯C float 重实现
 //
 // 三后端策略:
 //   默认 float — 直接 for 循环 (适用于 M4F/M7/FPU C2000)
@@ -14,6 +14,7 @@
 #define COMP_VECTOR_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // ======== 基本向量运算 ========
 
@@ -56,7 +57,7 @@ static inline float vec_mag_f32(const float *src, int len) {
   for (int i = 0; i < len; i++) {
     sum_sq += src[i] * src[i];
   }
-  return sqrtf(sum_sq);
+  return MATH_SQRT(sum_sq);
 }
 
 // 点积 = sum(a[i] * b[i])
@@ -74,7 +75,7 @@ static inline float vec_dot_f32(const float *a, const float *b, int len) {
 static inline float vec_absmax_f32(const float *src, int len) {
   float max_val = 0.0f;
   for (int i = 0; i < len; i++) {
-    float abs_val = fabsf(src[i]);
+    float abs_val = MATH_ABS(src[i]);
     if (abs_val > max_val) {
       max_val = abs_val;
     }
@@ -183,7 +184,7 @@ static inline float vec3_dot(Vector3 x, Vector3 y) {
 
 // Vector3 模长: sqrt(a*a + b*b + c*c)
 static inline float vec3_mag(Vector3 x) {
-  return sqrtf(x.a * x.a + x.b * x.b + x.c * x.c);
+  return MATH_SQRT(x.a * x.a + x.b * x.b + x.c * x.c);
 }
 
 // Vector3 叉积: x × y

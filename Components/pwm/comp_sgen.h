@@ -1,7 +1,7 @@
 // 信号发生器 — 正弦波/余弦波发生器 (纯C, 无硬件依赖)
 //
 // 来源: TI controlSUITE SGEN (FPUfastRTS sincos) + DCL SGEN
-// 翻译为 C-OOP 纯C float static inline 版本
+// 翻译为 HardC 纯C float static inline 版本
 //
 // 两种模式:
 //   SgenFixed  — 固定频率信号发生器 (给定幅值/频率/相位偏移)
@@ -17,10 +17,7 @@
 #define COMP_SGEN_H
 
 #include <math.h>
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
+#include "comp_math.h"
 
 // ======================= SgenFixed (固定频率信号发生器) =======================
 

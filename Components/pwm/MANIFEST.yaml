@@ -5,4 +5,5 @@ files:
   - comp_pwm.h
   - comp_pwm.c
   - comp_sgen.h
-depends: []
+depends:
+  - components/math

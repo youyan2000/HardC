@@ -9,6 +9,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include "comp_math.h"
 
 // ============================================================
 // 寄存器地址（用于 DMP 内存访问和 FIFO 操作）
@@ -611,7 +612,7 @@ static int accel_self_test(long *bias_regular, long *bias_st)
     st_shift_cust = labs(bias_regular[jj] - bias_st[jj]) / 65536.f;
     if (st_shift[jj]) {
       st_shift_var = st_shift_cust / st_shift[jj] - 1.f;
-      if (fabsf(st_shift_var) > test.max_accel_var)
+      if (MATH_ABS(st_shift_var) > test.max_accel_var)
         result |= 1 << jj;
     } else if ((st_shift_cust < test.min_g) ||
       (st_shift_cust > test.max_g))
@@ -640,7 +641,7 @@ static int gyro_self_test(long *bias_regular, long *bias_st)
       while (--tmp[jj])
         st_shift *= 1.046f;
       st_shift_var = st_shift_cust / st_shift - 1.f;
-      if (fabsf(st_shift_var) > test.max_gyro_var)
+      if (MATH_ABS(st_shift_var) > test.max_gyro_var)
         result |= 1 << jj;
     } else if ((st_shift_cust < test.min_dps) ||
       (st_shift_cust > test.max_dps))

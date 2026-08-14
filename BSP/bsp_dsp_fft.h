@@ -18,7 +18,7 @@
 #include <string.h>
 
 #ifndef M_2PI
-#define M_2PI 6.283185f
+#define M_2PI 6.28318530718f
 #endif
 
 // ======== RFFT (实数 FFT) 实例 ========

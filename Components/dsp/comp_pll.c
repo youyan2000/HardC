@@ -5,10 +5,11 @@
 //   SPLL_1ph_F       → 陷波型单相 PLL (轻量单相, 无正交发生器)
 //   SPLL_3ph_SRF_F   → 三相同步旋锁相环
 //   SPLL_3ph_DDSRF_F → 解耦双同步旋锁相环 (电网不平衡鲁棒)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 
 #include "comp_pll.h"
 #include <string.h>   // memset
+#include "comp_math.h"
 
 // ======================= SOGI-PLL =======================
 
@@ -308,7 +309,7 @@ float notch_pll_run(NotchPll *me, float v_grid) {
   float sin_new = me->sin_val[0] * cos_delta + me->cos_val[0] * sin_delta;
 
   // 正交归一化 (防止幅值漂移)
-  float mag = sqrtf(cos_new * cos_new + sin_new * sin_new);
+  float mag = MATH_SQRT(cos_new * cos_new + sin_new * sin_new);
   if (mag > 0.0f) {
     cos_new /= mag;
     sin_new /= mag;

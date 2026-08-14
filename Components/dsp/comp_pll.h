@@ -1,7 +1,7 @@
 // 软件锁相环库 — SOGI-PLL (单相) / SRF-PLL (三相)
 //
 // 来源: TI controlSUITE solar/v1.2/float (SPLL_1ph_SOGI_F, SPLL_3ph_SRF_F)
-// 翻译为 C-OOP 纯C float 版本 (去掉 TI 定点依赖, 保留算法核心)
+// 翻译为 HardC 纯C float 版本 (去掉 TI 定点依赖, 保留算法核心)
 //
 // 应用场景:
 //   SOGI-PLL — 单相并网逆变器, UPS, APF 的电网同步
@@ -16,14 +16,7 @@
 
 #include <math.h>
 #include <stdbool.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265f
-#endif
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
+#include "comp_math.h"
 
 // ======================= SOGI-PLL (单相正交积分器锁相环) =======================
 

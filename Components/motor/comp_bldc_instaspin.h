@@ -1,7 +1,7 @@
 // 电机控制 — InstaSPIN-BLDC 无传感器方波驱动 (6步换向 + 反电动势过零点检测)
 //
 // 来源: TI InstaSPIN-BLDC 算法概念 (SPRA590/SPRA695/SPRABQ7), 解绑自 ROM 实现
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 算法概述:
 //   BLDC 电机采用 6 步梯形换向 (方波驱动), 每 60° 电角度换向一次。
@@ -33,6 +33,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include "comp_math.h"
 
 // ======== 枚举: 电机运行状态 ========
 
@@ -334,8 +335,8 @@ static inline void bldc_instaspin_run(BldcInstaSpinState *st, const BldcInstaSpi
       // 滞环阈值: 要求信号幅度超过 Vbus 的 2% 才算有效穿越, 过滤小幅噪声
       float zc_threshold = v_bus * 0.02f;
       bool crossed = (st->zc_diff_prev * diff < 0.0f)
-                  && (fabsf(st->zc_diff_prev) > zc_threshold
-                      || fabsf(diff) > zc_threshold);
+                  && (MATH_ABS(st->zc_diff_prev) > zc_threshold
+                      || MATH_ABS(diff) > zc_threshold);
 
       if (st->zc_confirm_cnt > 0) {
         // 确认窗口内: 检查信号是否稳定在新的一侧

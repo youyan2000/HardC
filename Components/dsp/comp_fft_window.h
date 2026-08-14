@@ -2,7 +2,7 @@
 //
 // 来源: TI controlSUITE FPU library (fpu_fft_*.h, 18 个独立头文件)
 //        + FixedPointLib (fft_*_Q31.h, 定点 Q31 版本)
-// 翻译为 C-OOP: 统一 float 窗函数生成器, 单份实现覆盖所有窗口类型
+// 翻译为 HardC: 统一 float 窗函数生成器, 单份实现覆盖所有窗口类型
 //
 // 应用场景:
 //   - FFT 频谱泄漏抑制 (与 bsp_dsp_fft.h 配合)
@@ -19,10 +19,11 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "comp_math.h"
 
 // 用独立的 float 常量避免 double→float 隐式缩窄转换
-#define FFT_PI  3.1415927f
-#define FFT_2PI 6.2831855f
+#define FFT_PI  M_PI
+#define FFT_2PI M_2PI
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,7 +81,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
   // ---- Bartlett (三角窗): w[n] = 1 - |2n/(N-1) - 1| ----
   case FFT_WIN_BARTLETT:
     for (int n = 0; n < size;n++) {
-      win[n] = 1.0f - fabsf(2.0f * (float)n / m_f - 1.0f);
+      win[n] = 1.0f - MATH_ABS(2.0f * (float)n / m_f - 1.0f);
     }
     break;
 
@@ -162,7 +163,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
   case FFT_WIN_BOHMAN:
     for (int n = 0; n < size;n++) {
       float d = 2.0f * (float)n / m_f - 1.0f;   // d ∈ [-1, 1]
-      float ad = fabsf(d);
+      float ad = MATH_ABS(d);
       if (ad > 1.0f) { win[n] = 0.0f; }
       else {
         win[n] = (1.0f - ad) * cosf(FFT_PI * ad) + (1.0f / FFT_PI) * sinf(FFT_PI * ad);
@@ -195,7 +196,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
     }
     for (int n = 0; n < size;n++) {
       float t = 2.0f * (float)n / m_f - 1.0f;  // t ∈ [-1, 1]
-      float arg = beta * sqrtf(1.0f - t * t);
+      float arg = beta * MATH_SQRT(1.0f - t * t);
       // I₀(arg) 级数展开
       float i0_arg = 1.0f;
       { float term = 1.0f, half_a = arg * 0.5f;
@@ -226,7 +227,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
         w_val = coshf(m_f * acoshf(x));
       }
       // 取绝对值, 归一化
-      win[n] = fabsf(w_val);
+      win[n] = MATH_ABS(w_val);
     }
     // 归一化到峰值 = 1
     float peak = win[0];
@@ -262,7 +263,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
   case FFT_WIN_PARZEN:
     for (int n = 0; n < size;n++) {
       float d = 2.0f * (float)n / m_f - 1.0f;  // d ∈ [-1, 1]
-      float ad = fabsf(d);
+      float ad = MATH_ABS(d);
       if (ad <= 0.5f) {
         win[n] = 1.0f - 6.0f * ad * ad + 6.0f * ad * ad * ad;
       } else if (ad <= 1.0f) {
@@ -288,11 +289,11 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
         float fm = sig2 * (a_val * a_val + ((float)m - 0.5f) * ((float)m - 0.5f));
         float num = 1.0f - (x * x) / ((float)m * (float)m * FFT_PI * FFT_PI);
         float den = 1.0f - (x * x) / (fm * FFT_PI * FFT_PI);
-        if (fabsf(den) > 1e-9f) {
+        if (MATH_ABS(den) > 1e-9f) {
           w_val *= num / den;
         }
       }
-      win[n] = fabsf(w_val);
+      win[n] = MATH_ABS(w_val);
     }
     // 归一化
     float peak = win[0];
@@ -308,7 +309,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
   // 与 Bartlett 等价, 但使用绝对值定义
   case FFT_WIN_TRIANGULAR:
     for (int n = 0; n < size;n++) {
-      win[n] = 1.0f - fabsf((2.0f * (float)n - m_f) / m_f);
+      win[n] = 1.0f - MATH_ABS((2.0f * (float)n - m_f) / m_f);
     }
     break;
 
@@ -316,7 +317,7 @@ static inline void fft_win_generate(FftWinType type, float *win, int size) {
   // w[n] = a0 - a1|2n/(N-1)-1| - a2*cos(2πn/(N-1))
   case FFT_WIN_BARTHANN:
     for (int n = 0; n < size;n++) {
-      float t = fabsf(2.0f * (float)n / m_f - 1.0f);
+      float t = MATH_ABS(2.0f * (float)n / m_f - 1.0f);
       win[n] = 0.62f - 0.48f * t + 0.38f * cosf(2.0f * FFT_PI * (float)n / m_f);
     }
     break;

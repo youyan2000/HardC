@@ -2,7 +2,7 @@
 //
 // 来源: TI controlSUITE digital_power (PFC_ICMD_F, PFC_BL_ICMD_F,
 //   PFC_InvRmsSqr, PFC_INVSQR) (f28x7x_v1.0/C_macros)
-// 翻译为 C-OOP 纯C float static inline 版本
+// 翻译为 HardC 纯C float static inline 版本
 //
 // 块说明:
 //   PfcICmd     — PFC 电流指令生成 (Vcmd × VinvSqr × VacRect × VmaxOverVmin)
@@ -14,6 +14,7 @@
 #define COMP_PFC_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // ======================= PfcICmd (电流指令) =======================
 
@@ -192,7 +193,7 @@ static inline void pfc_bl_icmd_bridgeless_run(PfcBlIcmd *me, float vin,
   }
 
   // 电流指令 = Vloop × |Vin| / Vrms²
-  float icmd = vloop * fabsf(vin) * inv_vrms_sq;
+  float icmd = vloop * MATH_ABS(vin) * inv_vrms_sq;
 
   // 分配至正/负半周
   if (me->pos_active) {

@@ -1,7 +1,7 @@
 // 控制器自动调参 — 触发式阶跃响应捕获 + 性能准则 (DCL 库 TCM)
 //
 // 来源: TI C2000Ware Digital Power SDK c2000ware/libraries/control/DCL/c28/include/DCL_TCM.h
-// 翻译为 C-OOP 纯C float 版本 (FDLOG 环形日志 → 自包含环形缓冲)
+// 翻译为 HardC 纯C float 版本 (FDLOG 环形日志 → 自包含环形缓冲)
 //
 // TCM (Tuning Criteria Module) 工作流:
 //   1. 初始化: 捕获窗 size 样本, 其中 lead 个为触发前 (预触发) 样本
@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include <math.h>
+#include "comp_math.h"
 
 // 预触发环形缓冲大小上限 (用户可调, 须 ≥ lead)
 #define TCM_PRE_MAX  256u
@@ -137,7 +138,7 @@ static inline void tcm_run(TcmCapture *me, float e) {
 static inline float tcm_iae(const float *err, uint16_t n) {
   float s = 0.0f;
   for (uint16_t k = 0u; k < n; k++) {
-    s += fabsf(err[k]);
+    s += MATH_ABS(err[k]);
   }
   return s;
 }
@@ -157,7 +158,7 @@ static inline float tcm_itae(const float *err, uint16_t n, float dt) {
   float s = 0.0f;
   float t = 0.0f;
   for (uint16_t k = 0u; k < n; k++) {
-    s += fabsf(err[k]) * t;
+    s += MATH_ABS(err[k]) * t;
     t += dt;
   }
   return s;

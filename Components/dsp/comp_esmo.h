@@ -1,7 +1,7 @@
 // 电机控制 — 增强型滑模观测器 (Enhanced Sliding Mode Observer for PMSM/BLDC)
 //
 // 来源: TI controlSUITE motor_control/libs/eSMO/v100 (esmopos.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 相比基础 SMO (comp_smo.h) 的改进:
 //   - PLL 锁相环替代直接 arctan → 角度更平滑, 低转速更好
@@ -25,8 +25,9 @@
 #define COMP_ESMO_H
 
 #include <math.h>
+#include "comp_math.h"
 
-#define ESMO_PI 3.14159265f
+#define ESMO_PI M_PI
 
 // ======================= EsmoCfg (eSMO 配置参数) =======================
 

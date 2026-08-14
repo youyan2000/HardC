@@ -1,7 +1,7 @@
 // 电机控制 — 角度归算宏 (标幺 0~1 范围处理)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (angle_math.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 两种归算:
 //   angle_wrap — 角度归算到 [0.0, 1.0) (相位折叠)
@@ -11,6 +11,8 @@
 
 #ifndef COMP_ANGLE_H
 #define COMP_ANGLE_H
+
+#include "comp_math.h"
 
 // ======================= ANGLE_WRAP (角度归算 0~1) =======================
 
@@ -41,14 +43,6 @@ static inline float error_angle_wrap(float angle_error) {
 }
 
 // ======================= ANGLE_WRAP_2PI (弧度版 0~2π) =======================
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
-
-#ifndef M_PI
-#define M_PI 3.14159265f
-#endif
 
 // 将弧度角度折叠到 [0, 2π)
 static inline float angle_wrap_2pi(float angle_rad) {

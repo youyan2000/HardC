@@ -1,7 +1,7 @@
 // 电机控制 — 异步电机转差法转速估计器 (ACI Speed Estimator)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (aci_se.h, aci_se_const.h)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 与 comp_aci_fe (磁链估计器) 配对使用: aci_fe 估计转子磁链 → aci_se 从磁链和电流估计转速
 //
@@ -16,6 +16,8 @@
 
 #ifndef COMP_ACI_SE_H
 #define COMP_ACI_SE_H
+
+#include "comp_math.h"
 
 // ======================= 常数 (物理参数 → 算法系数) =======================
 
@@ -39,11 +41,9 @@ typedef struct {
 
 // 从电机参数和采样周期计算所有系数
 static inline void aci_se_const_calc(AciSeConst *c) {
-  const float two_pi = 6.28318530718f;
-
   c->tr = c->lr / c->rr;                      // 转子时间常数
-  c->tc = 1.0f / (two_pi * c->fc);            // 低通时间常数
-  c->wb = two_pi * c->fb;                     // 基波角速度
+  c->tc = 1.0f / (M_2PI * c->fc);            // 低通时间常数
+  c->wb = M_2PI * c->fb;                     // 基波角速度
   c->k1 = 1.0f / (c->wb * c->tr);
   c->k2 = 1.0f / (c->fb * c->ts);
   c->k3 = c->tc / (c->tc + c->ts);

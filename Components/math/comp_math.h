@@ -8,23 +8,44 @@
 #include <stdint.h>
 #include "bsp_dsp.h"    // 硬件加速 sqrt (CMSIS-DSP / C2000 TMU / 纯C回退)
 
-// 2π 常量 (其他模块也会定义, 用 #ifndef 防冲突)
+// π / 2π 常量 — 全库唯一 float 源头, 其他模块 #ifndef 卫哨自动让路
+// 系统 <math.h> 可能已定义 double 版 M_PI (如 newlib 无条件 #define M_PI 3.14159265358979323846)
+// 软浮点 double 在 M4F/C2000 上是性能灾难, 且与 float 的 M_2PI 类型不一致 → 先 #undef 再定义
+#undef M_PI
+#undef M_2PI
 #ifndef M_2PI
-#define M_2PI 6.283185f
+#define M_2PI 6.28318530718f  // 离 2π 最近的 float (6.2831855f)
+#endif
+#ifndef M_PI
+#define M_PI 3.14159265358979f  // 离 π 最近的 float (3.1415927f)
+#endif
+
+// 硬件加速数学宏 — 默认走 BSP 平台分发, 工程可用 #define 覆盖加速后端
+//   sqrt  → bsp_sqrt_f32  (VSQRT / C2000 TMU __sqrt / 纯C牛顿)
+//   isqrt → bsp_isqrt_f32 (C2000 CLA CLAisqrt / 纯C 1/sqrtf)
+//   abs   → fabsf         (FPU VABS 单指令)
+#ifndef MATH_SQRT
+#define MATH_SQRT(x)  bsp_sqrt_f32((x))
+#endif
+#ifndef MATH_ISQRT
+#define MATH_ISQRT(x) bsp_isqrt_f32((x))
+#endif
+#ifndef MATH_ABS
+#define MATH_ABS(x)   fabsf((x))
 #endif
 
 /* ================================ 宏定义 ================================ */
 
 // 计算时间戳相差秒数
-#define TIME_DIFF(_start, _end)    ((float)(_end - _start) / 1000000.0f)
-#define TIME_DIFF_US(_start, _end) ((float)(_end - _start) / 1000000.0f)
-#define TIME_DIFF_MS(_start, _end) ((float)(_end - _start) / 1000.0f)
+#define TIME_DIFF(_start, _end)    ((float)((_end) - (_start)) / 1000000.0f)
+#define TIME_DIFF_US(_start, _end) ((float)((_end) - (_start)) / 1000000.0f)
+#define TIME_DIFF_MS(_start, _end) ((float)((_end) - (_start)) / 1000.0f)
 
 // 角度 (度) → 弧度
-#define ANGLE2RADIAN(_angle) (_angle / 360.0f * M_2PI)
+#define ANGLE2RADIAN(_angle) ((_angle) / 360.0f * M_2PI)
 
 // 角速度 (度/秒) → 单位时间变化量 (弧度)
-#define SPEED2DELTA(_speed, _dt) (ANGLE2RADIAN(_speed * _dt))
+#define SPEED2DELTA(_speed, _dt) (ANGLE2RADIAN((_speed) * (_dt)))
 
 #ifndef MAX
 // 返回两个值中的最大值
@@ -65,9 +86,9 @@ static inline void math_constrain_f(float *x, float min, float max) {
   else if (*x > max) *x = max;
 }
 
-// 绝对值 (float / int16)
+// 绝对值 (float — 硬件 VABS / int16)
 static inline float math_abs_f(float x) {
-  return (x > 0) ? x : -x;
+  return MATH_ABS(x);
 }
 
 static inline int16_t math_abs_i16(int16_t x) {
@@ -120,12 +141,12 @@ static inline float math_inv_sqrtf(float x) {
   return x;
 }
 
-// 硬件加速平方根 (通过 BSP/bsp_dsp.h 分发)
+// 硬件加速平方根 (通过 MATH_SQRT 宏分发)
 //   STM32: CMSIS-DSP arm_sqrt_f32 → FPU VSQRT 单周期
-//   C2000: TMU __sqrt (后续实现)
+//   C2000: TMU __sqrt
 //   回退:  牛顿迭代法
 static inline float math_sqrt_f32(float x) {
-  return bsp_sqrt_f32(x);
+  return MATH_SQRT(x);
 }
 
 #endif

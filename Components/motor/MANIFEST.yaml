@@ -8,4 +8,5 @@ files:
   - comp_mod6.h
   - comp_step_motor.h
   - comp_step_motor.c
-depends: []
+depends:
+  - components/math

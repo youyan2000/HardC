@@ -3,7 +3,7 @@
 // 来源: TI C2000Ware Digital Power SDK
 //   libraries/energy-metrology_library/energy_metrology_f28p55
 //   (metrology_calculations.c checkSagSwellEvents + cyclePhaseDP 逐周期 RMS)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 逐周期 RMS 判据 (周期 = 电压两个正向过零之间):
 //   sag_start   = Vnom·sag_pct   (默认 0.80)   低于 → 暂降
@@ -36,6 +36,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "comp_math.h"
 
 // ======================= PowerEventState (状态枚举) =======================
 
@@ -272,7 +273,7 @@ static inline void power_event_sample(PowerEvent *me, float v) {
   me->sample_count++;
 
   // 突变毛刺过滤: |Δv| 超限本采样不判零过 (slew_limit = 0 关闭)
-  float dv = fabsf(v - me->last_v);
+  float dv = MATH_ABS(v - me->last_v);
   me->last_v = v;
 
   int sign = (v > me->threshold) ? 1 : 0;
@@ -287,7 +288,7 @@ static inline void power_event_sample(PowerEvent *me, float v) {
         // 首个周期建立基线, 不处理 (避免启动期不完整周期误判事件)
         me->last_cycle_count = me->sample_count;
       } else if (me->sample_count >= last / 2u) {
-        power_event_step(me, sqrtf(me->v2_sum / (float)me->sample_count));
+        power_event_step(me, MATH_SQRT(me->v2_sum / (float)me->sample_count));
         me->last_cycle_count = me->sample_count;
       }
       // 短于基线一半的周期视为毛刺, 直接丢弃 (slew 之外的兜底)

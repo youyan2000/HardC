@@ -1,7 +1,7 @@
 // 正弦波分析器 — 过零检测 + RMS/均值/频率计算
 //
 // 来源: TI controlSUITE SineAnalyzer (digital_power / solar)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 算法:
 //   每周期: 检测过零 (阈值比较) → 累加样本 → 半周期后计算:
@@ -20,6 +20,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "comp_math.h"
 
 // ======================= SineAnalyzer (单路电压分析) =======================
 
@@ -97,7 +98,7 @@ static inline void sine_analyzer_run(SineAnalyzer *me, float sample) {
       // 有效值 = sqrt( Σ(V²) / N )
       float mean_sq = me->vacc_rms * inv_n;
       if (mean_sq > 0.0f) {
-        me->vrms = sqrtf(mean_sq);
+        me->vrms = MATH_SQRT(mean_sq);
       } else {
         me->vrms = 0.0f;
       }
@@ -203,11 +204,11 @@ static inline void sine_analyzer2_run(SineAnalyzer2 *me, float v_sample,
 
       // Vrms
       float mean_vsq = me->vacc_rms * inv_n;
-      me->vrms = (mean_vsq > 0.0f) ? sqrtf(mean_vsq) : 0.0f;
+      me->vrms = (mean_vsq > 0.0f) ? MATH_SQRT(mean_vsq) : 0.0f;
 
       // Irms
       float mean_isq = me->iacc_rms * inv_n;
-      me->irms = (mean_isq > 0.0f) ? sqrtf(mean_isq) : 0.0f;
+      me->irms = (mean_isq > 0.0f) ? MATH_SQRT(mean_isq) : 0.0f;
 
       // 频率
       me->sig_freq = me->sample_freq * inv_n * 0.5f;

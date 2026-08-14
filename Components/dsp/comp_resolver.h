@@ -1,7 +1,7 @@
 // 电机控制 — 旋转变压器接口 (Resolver)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (resolver.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 旋变: 绝对位置传感器, 通过解码 sin/cos 励磁信号获取机械角度
 //   电角度 = 极对数 × 机械角度
@@ -15,10 +15,7 @@
 #include <math.h>
 #include <stdint.h>
 #include "comp_iqmath.h"
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
+#include "comp_math.h"
 
 // ======================= Resolver (旋转变压器解码) =======================
 
@@ -86,7 +83,7 @@ static inline void resolver_set_offset(Resolver *me, float offset) {
 // ======== IQmath 定点解调路径 (v1.1 扩展) ========
 //
 // 来源: TI controlSUITE motor_control/libs/resolver/v101/Resolver_Fixed.h
-// 移植为 C-OOP 纯C _iq 定点版本 (Q24)
+// 移植为 HardC 纯C _iq 定点版本 (Q24)
 //
 // 完整旋变信号链:
 //   1. DDS 生成励磁载波 (sin 参考信号) → 驱动 DAC/PWM
@@ -165,7 +162,7 @@ static inline ResolverFixedCfg resolver_fixed_cfg_default(float sample_freq_hz) 
   // 预计算系数 (Q24)
   //   lpf_k = 2π·fc/fs — 一阶 IIR 系数
   //   phase_step = f_exc/fs — DDS 每步相位增量
-  cfg.lpf_k      = _IQ(6.2831853f * cfg.lpf_bw_hz / sample_freq_hz);
+  cfg.lpf_k      = _IQ(M_2PI * cfg.lpf_bw_hz / sample_freq_hz);
   cfg.phase_step = _IQ(cfg.excitation_freq_hz / sample_freq_hz);
   return cfg;
 }

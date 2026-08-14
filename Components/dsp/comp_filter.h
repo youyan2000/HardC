@@ -25,11 +25,6 @@
 #include "bsp_dsp.h"   // 硬件加速 sqrt/biquad (CMSIS-DSP / C2000 / 纯C回退)
 #include "comp_iir.h"  // DF22 布局 — 设计套件系数可直接喂 iir_df22_run
 
-// π 常量 (comp_math.h 已定义 M_2PI, 这里补 M_PI)
-#ifndef M_PI
-#define M_PI 3.14159265f
-#endif
-
 /* ======================== 一阶数字低通滤波器 ======================== */
 
 typedef struct {
@@ -318,7 +313,7 @@ typedef struct {
 
 // asinh 可移植实现 — C2000 工具链可能缺 asinhf
 static inline float iir_asinh(float x) {
-  return logf(x + sqrtf(x * x + 1.0f));
+  return logf(x + MATH_SQRT(x * x + 1.0f));
 }
 
 // 统一设计器 — 从频率指标计算二阶 biquad 系数
@@ -394,7 +389,7 @@ static inline void iir_filter_design(IirBiquad *me, IirFilterKind kind, IirAppro
   // 切比雪夫 I 型 — 2 阶极点置于椭圆: s = -a ± jb, P = a² + b²
   if (ripple_db <= 0.0f)
     ripple_db = 0.5f;
-  const float eps = sqrtf(powf(10.0f, ripple_db / 10.0f) - 1.0f);  // 纹波因子
+  const float eps = MATH_SQRT(powf(10.0f, ripple_db / 10.0f) - 1.0f);  // 纹波因子
   const float v = 0.5f * iir_asinh(1.0f / eps);
   const float ev = expf(v);  // sinh/cosh 用 expf, 可移植
   const float sinh_v = 0.5f * (ev - 1.0f / ev);
@@ -405,7 +400,7 @@ static inline void iir_filter_design(IirBiquad *me, IirFilterKind kind, IirAppro
 
   if (kind == IIR_FILTER_LPF) {
     // 偶数阶 DC 增益 = 通带纹波下限 → 归一 K = P/√(1+ε²) (K=P 会在中频鼓包)
-    const float k = p / sqrtf(1.0f + eps * eps);
+    const float k = p / MATH_SQRT(1.0f + eps * eps);
     const float c = 1.0f + 2.0f * a * om + p * om * om;
     const float b0 = k * om * om / c;
     me->b0 = b0;
@@ -418,7 +413,7 @@ static inline void iir_filter_design(IirBiquad *me, IirFilterKind kind, IirAppro
     // 原型 H(s) = K'·s²/(s² + 2a'·s + P'),  a' = a/P, P' = 1/P, K' = 1/√(1+ε²)
     const float ap = a / p;
     const float pp = 1.0f / p;
-    const float kp = 1.0f / sqrtf(1.0f + eps * eps);
+    const float kp = MATH_ISQRT(1.0f + eps * eps);
     const float ch = 1.0f + 2.0f * ap * om + pp * om * om;
     const float b0 = kp / ch;
     me->b0 = b0;

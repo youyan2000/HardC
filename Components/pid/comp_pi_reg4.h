@@ -16,6 +16,7 @@
 #define COMP_PI_REG4_H
 
 #include <stdbool.h>
+#include "comp_math.h"
 
 // ======== 配置 POD — 只读参数, 可放入 Flash ========
 typedef struct {
@@ -105,7 +106,7 @@ static inline float pi_reg4_run(PiReg4State *me, const PiReg4Cfg *cfg,
   } else {
     // 一阶 IIR: y[k] = α·x[k] + (1-α)·y[k-1]
     // α = 2π·fc·dt / (1 + 2π·fc·dt)
-    float alpha = 6.283185307f * cfg->sp_fc * cfg->dt;   // 2π·fc·dt
+    float alpha = M_2PI * cfg->sp_fc * cfg->dt;   // 2π·fc·dt
     alpha = alpha / (1.0f + alpha);
     sp_f = alpha * setpoint + (1.0f - alpha) * me->sp_filtered;
     me->sp_filtered = sp_f;

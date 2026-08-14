@@ -1,7 +1,7 @@
 // 电机控制 — V/Hz 特性曲线生成器
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (vhzprof.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 三段式 V/f 曲线:
 //   区 1: |f| ≤ LowFreq  → 恒定升压电压 VoltMin (补偿定子电阻压降)
@@ -15,6 +15,7 @@
 #define COMP_VHZ_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // ======================= VhzProfile (V/Hz 曲线) =======================
 
@@ -61,7 +62,7 @@ static inline void vhz_profile_init(VhzProfile *me, float low_freq,
 // V/Hz 单步运行 — 输入频率指令, 输出电压幅值
 static inline float vhz_profile_run(VhzProfile *me, float freq_hz) {
   me->freq = freq_hz;
-  me->abs_freq = fabsf(freq_hz);
+  me->abs_freq = MATH_ABS(freq_hz);
 
   if (me->abs_freq <= me->low_freq) {
     // 区 1: 恒定升压 (补偿定子电阻压降, 保证低频转矩)

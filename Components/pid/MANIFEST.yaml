@@ -8,4 +8,5 @@ files:
   - comp_pid_reg3.h
   - comp_pid_nl.h
   - comp_tcm.h
-depends: []
+depends:
+  - components/math

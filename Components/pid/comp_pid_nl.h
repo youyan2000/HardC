@@ -1,7 +1,7 @@
 // 非线性 PID 控制器 — 各通路独立幂律整形 (DCL 库 NLPID)
 //
 // 来源: TI C2000Ware Digital Power SDK c2000ware/libraries/control/DCL/c28/include/DCL_NLPID.h
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 与 comp_pid 线性 PID 的区别: 三个通路 (P/I/D) 各自带非线性整形函数
 //   f(e) = sign(e)·|e|^α      (|e| > δ, 幂律区)
@@ -19,6 +19,7 @@
 #define COMP_PID_NL_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // ======================= 配置 POD — 只读参数 =======================
 
@@ -90,8 +91,7 @@ static inline float nl_pid_delta_from_gamma(float alpha, float gamma) {
 // 设置微分滤波器带宽 (双线性: c1/c2 由截止频率 fc 换算)
 //   τ = 1/(2π·fc) ; c1 = 2/(T+2τ) ; c2 = (T−2τ)/(T+2τ)
 static inline void nl_pid_set_filter_bw(NlPidCfg *cfg, float fc, float dt) {
-  const float two_pi = 6.28318530718f;
-  float tau = 1.0f / (two_pi * fc);
+  float tau = 1.0f / (M_2PI * fc);
 
   cfg->c1 = 2.0f / (dt + 2.0f * tau);
   cfg->c2 = (dt - 2.0f * tau) / (dt + 2.0f * tau);
@@ -139,7 +139,7 @@ static inline float nl_pid_run(NlPidState *me, const NlPidCfg *cfg,
   // ---- 预处理: 误差折半 (输入归一化 ±1 时保持整形有效域) ----
   float v1 = (ref - fdb) * 0.5f;
   float v2 = (v1 < 0.0f) ? -1.0f : 1.0f;   // 符号
-  float v3 = fabsf(v1);                    // 幅值
+  float v3 = MATH_ABS(v1);                    // 幅值
 
   // ---- 非线性整形: |e|>δ → 幂律 ; |e|≤δ → 线性 ----
   float v4 = (v3 > cfg->delta_p)

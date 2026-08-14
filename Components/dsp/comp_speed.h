@@ -1,7 +1,7 @@
 // 电机控制 — 速度估算 (从转角微分类)
 //
 // 来源: TI controlSUITE motor_control/math_blocks/v4.3 (speed_est.h, speed_pr.h)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 两种模式:
 //   SpeedEstFreq — 频率法: 转角微分 → LPF → 速度 (适合中高速)
@@ -13,14 +13,7 @@
 
 #include <math.h>
 #include <stdbool.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265f
-#endif
-
-#ifndef M_2PI
-#define M_2PI 6.283185f
-#endif
+#include "comp_math.h"
 
 // ======================= SpeedEstFreq (转角微分频率法) =======================
 

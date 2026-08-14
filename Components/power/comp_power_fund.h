@@ -4,7 +4,7 @@
 //   libraries/energy-metrology_library/energy_metrology_f28p55
 //   (metrology_background.c 正交相关累加 + metrology_calculations.c
 //    calculateFundamentalRMSVoltage/ActivePower/ReactivePower + THD)
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 与 comp_power_meas.h (宽频带能量累加) 的区别: 本组件在测得的电网频率上做
 // 窄带同步解调, 只提取基波分量 — 对谐波污染免疫. 两者配合得到:
@@ -36,6 +36,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "comp_math.h"
 
 // ======================= 基波分析器 =======================
 
@@ -100,8 +101,6 @@ static inline void power_fund_reset(PowerFund *me) {
 
 // 逐采样正交相关累加 — ISR 每采样调用
 static inline void power_fund_sample(PowerFund *me, float v, float i) {
-  const float two_pi = 6.28318530718f;
-
   // 用当前相位相关 (与信号 t=k·dt 处相位对齐), 再步进参考
   // 若先步进再相关, 首个样本错相 Δ, 使测得功率角偏移一个采样
   float s = sinf(me->phase);
@@ -113,9 +112,9 @@ static inline void power_fund_sample(PowerFund *me, float v, float i) {
   me->i_q += i * (-c);   // TI 无功符号约定: 滞后电流 → Q>0
 
   // 相位参考步进 (rad, 连续, 不随结算复位)
-  me->phase += two_pi * me->f_ref * me->dt;
-  if (me->phase >= two_pi) {
-    me->phase -= two_pi;
+  me->phase += M_2PI * me->f_ref * me->dt;
+  if (me->phase >= M_2PI) {
+    me->phase -= M_2PI;
   }
 
   me->count++;
@@ -136,8 +135,8 @@ static inline int power_fund_update(PowerFund *me, float rms_v, float rms_i) {
   float i_q = me->i_q / n;
 
   // 基波幅值一半 V_mag2 = sqrt(VI² + VQ²) (同相/正交相关合量)
-  float v_mag2 = sqrtf(v_in * v_in + v_q * v_q);
-  float i_mag2 = sqrtf(i_in * i_in + i_q * i_q);
+  float v_mag2 = MATH_SQRT(v_in * v_in + v_q * v_q);
+  float i_mag2 = MATH_SQRT(i_in * i_in + i_q * i_q);
 
   // 基波有效值: 峰值 = 2·mag2, RMS = 峰值/√2 → mag2·√2
   me->frms_v = v_mag2 * 1.41421356237f;
@@ -155,9 +154,9 @@ static inline int power_fund_update(PowerFund *me, float rms_v, float rms_i) {
   float v_diff = rms_v * rms_v - me->frms_v * me->frms_v;
   float i_diff = rms_i * rms_i - me->frms_i * me->frms_i;
   me->thd_v = (v_diff > 0.0f && me->frms_v > 0.0f)
-              ? (sqrtf(v_diff) / me->frms_v) * 100.0f : 0.0f;
+              ? (MATH_SQRT(v_diff) / me->frms_v) * 100.0f : 0.0f;
   me->thd_i = (i_diff > 0.0f && me->frms_i > 0.0f)
-              ? (sqrtf(i_diff) / me->frms_i) * 100.0f : 0.0f;
+              ? (MATH_SQRT(i_diff) / me->frms_i) * 100.0f : 0.0f;
 
   // 清累加器, 相位参考保持连续 (窗间不失步)
   me->v_sin = 0.0f;

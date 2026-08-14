@@ -3,7 +3,7 @@
 // 来源: TI C2000Ware Digital Power SDK
 //   libraries/energy-metrology_library/energy_metrology_f28p55
 //   (metrology_calculations.c goertzelMagnitude + USE_GOERTZEL_THD 分支)
-// 翻译为 C-OOP 纯C float 版本. TI 的 2048 点 FFT 分支 (fpu_rfft) 为 C2000
+// 翻译为 HardC 纯C float 版本. TI 的 2048 点 FFT 分支 (fpu_rfft) 为 C2000
 // 硬件绑定, 不移植 — Goertzel 逐谐波谐振在任意平台等效
 //
 // 算法 (goertzelMagnitude):
@@ -26,6 +26,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "comp_math.h"
 
 // ======================= PowerGoertzel (逐谐波分析器) =======================
 
@@ -91,7 +92,6 @@ static inline int power_goertzel_analyze(PowerGoertzel *me, float *mag,
     return 0;
   }
 
-  const float two_pi = 6.28318530718f;
   const float inv_n = 2.0f / (float)me->window_n;
   const uint16_t start = me->write_idx;   // 最早的样本
   uint16_t h, i;
@@ -101,7 +101,7 @@ static inline int power_goertzel_analyze(PowerGoertzel *me, float *mag,
 
   for (h = 1u; h <= max_h; h++) {
     // 谐波角频率与谐振器系数
-    float w = two_pi * (float)h * me->grid_freq / me->sample_rate;
+    float w = M_2PI * (float)h * me->grid_freq / me->sample_rate;
     float coeff = 2.0f * cosf(w);
     float q1 = 0.0f, q2 = 0.0f;
     uint16_t idx = start;
@@ -120,7 +120,7 @@ static inline int power_goertzel_analyze(PowerGoertzel *me, float *mag,
     // DFT bin: re = q1 − q2·cos(ω), im = q2·sin(ω), 幅值 = 2·|X_k|/N
     float re = q1 - q2 * cosf(w);
     float im = q2 * sinf(w);
-    float amp = inv_n * sqrtf(re * re + im * im);
+    float amp = inv_n * MATH_SQRT(re * re + im * im);
 
     mag[h] = amp;
     if (h > 1u) {
@@ -129,7 +129,7 @@ static inline int power_goertzel_analyze(PowerGoertzel *me, float *mag,
   }
 
   // THD = sqrt(Σ_{h≥2} A_h²)/A_1 × 100
-  me->thd = (mag[1] > 0.0f) ? (sqrtf(sum_harm) / mag[1]) * 100.0f : 0.0f;
+  me->thd = (mag[1] > 0.0f) ? (MATH_SQRT(sum_harm) / mag[1]) * 100.0f : 0.0f;
 
   return 1;
 }

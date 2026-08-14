@@ -2,7 +2,7 @@
 //
 // 来源: TI controlSUITE solar/v1.2/float (ABC_DQ0_POS_F, ABC_DQ0_NEG_F,
 //   DQ0_ABC_F — power_invariant 三相 abc ↔ dq0 变换, 含零序)
-// 翻译为 C-OOP 纯C float inline 版本
+// 翻译为 HardC 纯C float inline 版本
 //
 // 变换矩阵 (幅值不变形式):
 //   dq0(+) = T(θ) · abc,   其中 T(θ) = 2/3 *
@@ -20,6 +20,7 @@
 #define COMP_TRANSFORM_ABC_DQ0_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // 120° 弧度常数
 #ifndef RAD_120
@@ -84,7 +85,7 @@ typedef struct {
 // abc → dq0 负序变换
 // 用 -θ: cos(-θ)=cosθ, sin(-θ)=-sinθ, cos(-θ±120)=cos(θ∓120), sin(-θ±120)=-sin(θ∓120)
 static inline void abc_dq0_neg_run(AbcDq0Neg *me) {
-  float s120 = sqrtf(3.0f) * 0.5f;  // √3/2
+  float s120 = MATH_SQRT(3.0f) * 0.5f;  // √3/2
   float c120 = -0.5f;               // cos(120°)
 
   // θ-120° 的 sin/cos
@@ -122,7 +123,7 @@ typedef struct {
 // b = d*cos(θ-120°) - q*sin(θ-120°) + z
 // c = d*cos(θ+120°) - q*sin(θ+120°) + z
 static inline void dq0_abc_run(Dq0Abc *me) {
-  float s120 = sqrtf(3.0f) * 0.5f;
+  float s120 = MATH_SQRT(3.0f) * 0.5f;
   float c120 = -0.5f;
 
   float cos_m120 = me->cos * c120 + me->sin * s120;

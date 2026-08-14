@@ -5,4 +5,5 @@ files:
   - comp_mpu.h
   - comp_mpu_dmp.c
 depends:
+  - components/math
   - devices/sensor/mpu6050.h

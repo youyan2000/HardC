@@ -1,7 +1,7 @@
 // 单相锁相环 — SOGI-QSG + 频率锁定环 (FLL) 自动适应电网频率
 //
 // 来源: TI C2000Ware Digital Power SDK libraries/spll/include/spll_1ph_sogi_fll.h
-// 翻译为 C-OOP 纯C float 版本
+// 翻译为 HardC 纯C float 版本
 //
 // 与 comp_pll.h 的 SogiPll (SOGI-PLL) 区别:
 //   SogiPll   — 中心频率固定为标称值 (fn), 仅用环路滤波器微调相位
@@ -23,6 +23,7 @@
 #define COMP_SOGI_FLL_H
 
 #include <math.h>
+#include "comp_math.h"
 
 // ======================= SOGI-QSG 双线性系数 (随自适应频率每拍重算) =======================
 
@@ -115,11 +116,9 @@ static inline void sogi_fll_coeff_calc(SogiFll *me) {
 static inline void sogi_fll_init(SogiFll *me, float grid_freq_hz,
                                  float isr_freq_hz, float lpf_b0, float lpf_b1,
                                  float k, float gamma) {
-  const float two_pi = 6.28318530718f;
-
   me->fn = grid_freq_hz;
-  me->w_dash = two_pi * grid_freq_hz;
-  me->wc = two_pi * grid_freq_hz;
+  me->w_dash = M_2PI * grid_freq_hz;
+  me->wc = M_2PI * grid_freq_hz;
   me->delta_t = 1.0f / isr_freq_hz;
   me->k = k;
   me->gamma = gamma;
@@ -164,8 +163,6 @@ static inline void sogi_fll_reset(SogiFll *me) {
 // ======================= 单步运行 (ISR 每采样周期调用) =======================
 
 static inline void sogi_fll_run(SogiFll *me, float ac_value) {
-  const float two_pi = 6.28318530718f;
-
   me->u[0] = ac_value;
 
   // ---- SOGI-QSG: 同相输出 (α) ----
@@ -198,10 +195,10 @@ static inline void sogi_fll_run(SogiFll *me, float ac_value) {
 
   // ---- VCO: 频率 = 标称 + 滤波输出, 积分相位 ----
   me->fo = me->fn + me->ylf[0];
-  me->theta += me->fo * me->delta_t * two_pi;
+  me->theta += me->fo * me->delta_t * M_2PI;
 
-  if (me->theta > two_pi) {
-    me->theta -= two_pi;
+  if (me->theta > M_2PI) {
+    me->theta -= M_2PI;
   }
 
   me->sine = sinf(me->theta);
@@ -216,7 +213,7 @@ static inline void sogi_fll_run(SogiFll *me, float ac_value) {
   me->x3[1] = me->x3[0];
 
   me->w_dash = me->wc + me->x3[0];
-  me->fn = me->w_dash / two_pi;
+  me->fn = me->w_dash / M_2PI;
 
   // ---- 用自适应频率重算 SOGI 系数 (保持 90° 正交性, 不清零 FLL 积分器) ----
   sogi_fll_coeff_recalc(me);
