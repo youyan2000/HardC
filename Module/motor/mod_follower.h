@@ -1,6 +1,3 @@
-#ifndef MOD_FOLLOWER_H
-#define MOD_FOLLOWER_H
-
 // 循迹控制模块 — Follower (Module 层)
 // Follower (红外 → P2PD → 差速)
 //       + Follower (tp=cp 同步 + task 独立参数)
@@ -19,6 +16,9 @@
 //   1. follower_init(&me, mtr_a, mtr_b, adc, pid_p2pd, turn);
 //   2. follower_start(&me);
 //   3. ISR 每 tick: follower_tick(&me);
+
+#ifndef MOD_FOLLOWER_H
+#define MOD_FOLLOWER_H
 
 #include <stdint.h>
 #include <stdbool.h>

@@ -1,5 +1,5 @@
 // 球板平衡模块 — ModBalance (Module 层实现)
-// mod_balance.c (3×PidStandard + StepMotor)
+// mod_balance.c (2×PidLinear + StepMotor)
 //
 // 控制架构:
 //   摄像头球坐标 (x,y) → X/Y 轴 PID → 步进电机步数 → 丝杆行程
@@ -10,7 +10,6 @@
 
 #include "mod_balance.h"
 #include "comp_step_motor.h"
-#include "comp_pid.h"
 #include "comp_math.h"   // math_clamp_f, math_deadzone_f
 
 // ======== 初始化 ========

@@ -1,6 +1,3 @@
-#ifndef MOD_SUPERCAP_H
-#define MOD_SUPERCAP_H
-
 // 超级电容功率控制模块 — PowerStage 派生, 三相并联 (Module 层, ctx fast)
 //
 // 职责 (每 FAST tick, 28.3kHz):
@@ -36,6 +33,9 @@
 // 事件/命令 (五原语, 见 agent.md §1.2):
 //   evt (SPSC 环, 单生产者 = FAST 故障路径): 短路 0x08 / 失平衡 0x40 (值 = comp_error.h 位掩码)
 //   cmd (Command 邮箱, MAIN→FAST): referee_power 周期边界生效 (CAN 0x061 喂)
+
+#ifndef MOD_SUPERCAP_H
+#define MOD_SUPERCAP_H
 
 #include <stdint.h>
 #include <stdbool.h>

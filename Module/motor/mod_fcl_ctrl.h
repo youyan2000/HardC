@@ -18,6 +18,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "pid_parallel.h"  // dq 轴电流环 PI (PidParallel: 积分钳位走 i_limit, 输出不限幅)
 
 // FCL 运行模式
 typedef enum {
@@ -47,9 +48,10 @@ typedef struct {
   FclCfg  cfg;           // 配置副本 (apply_config 同步)
   FclMode mode;          // 当前模式
 
-  // PID 积分器 (dq 各一个)
-  float pi_d_integral;
-  float pi_q_integral;
+  // dq 轴电流环 PI (PidParallel) — 积分器钳位走 i_limit (= min(v_bus, v_dc_max), 每 tick 更新),
+  // 输出不限幅: 电压圆限制在 fcl_run 自身 (不是 PI 抗饱和, 见 .c 注释)
+  PidParallel pi_d;
+  PidParallel pi_q;
 
   // 输出电压 (dq 轴, V) — 调试可见
   float v_d_ref;

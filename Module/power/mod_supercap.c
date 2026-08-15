@@ -138,10 +138,10 @@ static void sc_run(ModSuperCap *me) {
   //    p_referee = LPF(va × i_chassis) — 实测母线功率 (正=负载消耗)
   me->p_referee = LowPassFilter_Update(&me->power_lpf, me->va * me->ichassis, MOD_SC_DT);
 
-  //    PI 输出限幅 = 功率边界 (抗积分饱和, 等价于外部 clamp — 不二次限幅)
-  me->pid_p_cfg.out_max = me->p_lim_hi;
-  me->pid_p_cfg.out_min = me->p_lim_lo;
-  me->p_setpoint = pi_reg4_run(&me->pid_p, &me->pid_p_cfg, me->referee_power, me->p_referee);
+  //    PI 输出限幅 = 功率边界 (PidReg4 base 限幅, 抗积分饱和, 等价于外部 clamp — 不二次限幅)
+  me->pid_p.base.out_max = me->p_lim_hi;
+  me->pid_p.base.out_min = me->p_lim_lo;
+  me->p_setpoint = pid_compute(&me->pid_p.base, me->referee_power, me->p_referee);
 
   //    i_side = p_setpoint / va (va 下限保护除零)
   float va = me->va > MOD_SC_VA_MIN ? me->va : MOD_SC_VA_MIN;
@@ -161,7 +161,7 @@ static void sc_run(ModSuperCap *me) {
 static void sc_init(PowerStage *base) {
   ModSuperCap *me = container_of(base, ModSuperCap, base);
   LowPassFilter_Init(&me->power_lpf, me->cfg.power_lpf_fc);
-  pi_reg4_init(&me->pid_p);
+  pid_reset(&me->pid_p.base);  // 清积分器, 保留已同步配置 (sync_cfg 派生)
   Debounce_Init(&me->short_deb, MOD_SC_FAULT_DEBOUNCE_N);
   Debounce_Init(&me->unbalance_deb, MOD_SC_FAULT_DEBOUNCE_N);
   // 迟滞派生 (与 cfg 槽位一致): charge_ok 进 28.0 / 出 28.6; discharge_ok 进 19 / 出 18
@@ -216,7 +216,7 @@ static void sc_start(PowerStage *base) {
     Debounce_Reset(&me->short_deb);
     Debounce_Reset(&me->unbalance_deb);
     LowPassFilter_Init(&me->power_lpf, me->cfg.power_lpf_fc);
-    pi_reg4_reset(&me->pid_p);
+    pid_reset(&me->pid_p.base);
     me->referee_power = 0.0f;
     if (me->share) {
       mod_share_release(me->share);
@@ -322,7 +322,9 @@ void mod_supercap_init(ModSuperCap *me, const ModSuperCapCfg *cfg) {
 
   // 控制元件初始化 (与 sc_init 同款 — 状态机不调用 ops->init, 构造时即完成)
   LowPassFilter_Init(&me->power_lpf, me->cfg.power_lpf_fc);
-  pi_reg4_init(&me->pid_p);
+  // 功率环 PI (PidReg4 = TI pi_reg4, 复刻原 PidLinear aw=CLAMP); 增益/限幅由下方 sync_cfg 派生
+  PidReg4Cfg r4 = { 0.0f, 0.0f, 0.0f, 0.0f };  // kp, ki, kff, sp_fc (sync_cfg 填)
+  pid_reg4_init(&me->pid_p, MOD_SC_DT, -1e6f, 1e6f, &r4);  // 初值宽限, sync_cfg 收窄
   Debounce_Init(&me->short_deb, MOD_SC_FAULT_DEBOUNCE_N);
   Debounce_Init(&me->unbalance_deb, MOD_SC_FAULT_DEBOUNCE_N);
 
@@ -335,14 +337,15 @@ void mod_supercap_init(ModSuperCap *me, const ModSuperCapCfg *cfg) {
 void mod_supercap_sync_cfg(ModSuperCap *me) {
   me->base.vref = me->cfg.charge_stop_v;  // 重解释: 充电目标电压
 
-  // 功率环 PI (输出限幅在 sc_run 内逐周期设为功率边界, 初始给宽限)
-  me->pid_p_cfg.kp = me->cfg.pid_p_kp;
-  me->pid_p_cfg.ki = me->cfg.pid_p_ki;
-  me->pid_p_cfg.kff = 0.0f;
-  me->pid_p_cfg.dt = MOD_SC_DT;
-  me->pid_p_cfg.out_max = 1e6f;
-  me->pid_p_cfg.out_min = -1e6f;
-  me->pid_p_cfg.sp_fc = 0.0f;
+  // 功率环 PI (PidReg4, TI pi_reg4 语义, 复刻原 PidLinear aw=CLAMP):
+  //   输出限幅在 sc_run 内逐周期设为功率边界, 初始给宽限
+  me->pid_p.cfg.kp  = me->cfg.pid_p_kp;
+  me->pid_p.cfg.ki  = me->cfg.pid_p_ki;
+  me->pid_p.cfg.kff = 0.0f;
+  me->pid_p.cfg.sp_fc = 0.0f;
+  me->pid_p.base.dt = MOD_SC_DT;
+  me->pid_p.base.out_max = 1e6f;
+  me->pid_p.base.out_min = -1e6f;
 
   // 保护迟滞派生
   Hysteresis_Init(&me->charge_ok, -1e6f, me->cfg.charge_resume_v, -1e6f, me->cfg.charge_stop_v);

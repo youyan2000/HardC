@@ -11,7 +11,6 @@
 #include "mod_motor.h"
 #include "mod_turn.h"
 #include "comp_adc.h"
-#include "comp_pid.h"
 #include "comp_math.h"   // math_clamp_f
 
 // ======== 初始化 ========

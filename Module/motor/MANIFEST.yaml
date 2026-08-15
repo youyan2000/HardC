@@ -14,6 +14,8 @@ files:
 depends:
   - components/motor
   - components/pid
+  - components/dsp
   - components/adc
   - components/math
+  - devices/pid/pid_parallel.h   # FCL dq 电流环 (PidParallel, i_limit 积分钳位)
   - devices/pid/pid_cascade.h

@@ -82,10 +82,10 @@ static void buck_run(ModBuck *me) {
   float vref = buck_soft_start(me, me->base.vref);
 
   // 4. 电压环: err = vref - vout → 电流指令 (输出限幅 [0, iref])
-  me->i_ref = pi_reg4_run(&me->pid_v.st, &me->pid_v.cfg, vref, me->vout);
+  me->i_ref = pid_compute(&me->pid_v.base, vref, me->vout);
 
   // 5. 电流环: err = 电流指令 - iout → 占空比分量 (输出限幅 [0, 1])
-  me->duty_pi = pi_reg4_run(&me->pid_i.st, &me->pid_i.cfg, me->i_ref, me->iout);
+  me->duty_pi = pid_compute(&me->pid_i.base, me->i_ref, me->iout);
 
   // 6. 前馈混合: D = duty_pi + ff_weight·(vref/vin), 钳到 [duty_min, duty_max]
   float ff = me->cfg.ff_weight * (vref / me->vin);
@@ -99,8 +99,8 @@ static void buck_run(ModBuck *me) {
 
 static void buck_init(PowerStage *base) {
   ModBuck *me = container_of(base, ModBuck, base);
-  pi_reg4_init(&me->pid_v.st);
-  pi_reg4_init(&me->pid_i.st);
+  pid_reset(&me->pid_v.base);
+  pid_reset(&me->pid_i.base);
   me->soft_start_ref = 0.0f;
   me->vout = me->iout = me->vin = 0.0f;
   me->i_ref = me->duty_pi = me->duty = 0.0f;
@@ -155,8 +155,8 @@ static void buck_start(PowerStage *base) {
     me->soft_start_ref = 0.0f;  // 重新软启动
     me->base.debounce_cnt = 0;
     // 清双环积分器 — FAULT 急停后残留的饱和积分会顶满电流指令, 破坏软启动
-    pi_reg4_reset(&me->pid_v.st);
-    pi_reg4_reset(&me->pid_i.st);
+    pid_reset(&me->pid_v.base);
+    pid_reset(&me->pid_i.base);
     me->base.st = PST_RUN;
     // 不进事件环: start/stop 常由 MAIN (HMI/命令) 调用, 事件环单生产者必须为 FAST
     if (me->base.pwm) {
@@ -239,9 +239,15 @@ void mod_buck_init(ModBuck *me, const ModBuckCfg *cfg) {
   me->base.ocp = me->cfg.ocp;
   me->base.st = PST_INIT;
 
+  // 双环 PI (每个都是 PidReg4 子类, TI pi_reg4 语义 = buck 原 PidLinear aw=CLAMP 位级):
+  //   初值由 pid_reg4_init 种默认, 增益/限幅由下方 sync_cfg 派生
+  PidReg4Cfg r4 = { 0.0f, 0.0f, 0.0f, 0.0f };   // kp, ki, kff, sp_fc (sync_cfg 填)
+  pid_reg4_init(&me->pid_v, MOD_BUCK_DT, 0.0f, me->base.iref, &r4);
+  pid_reg4_init(&me->pid_i, MOD_BUCK_DT, 0.0f, 1.0f, &r4);
+  // 挂到 PowerStage.loop 槽位 (PidBase*, 供框架访问)
+  me->base.loop[0] = &me->pid_v.base; // 外环: 电压 → 电流指令
+  me->base.loop[1] = &me->pid_i.base; // 内环: 电流 → 占空比
   mod_buck_sync_cfg(me);  // 由 cfg 派生双环 PI 运行时参数
-  pi_reg4_init(&me->pid_v.st);
-  pi_reg4_init(&me->pid_i.st);
 }
 
 // ======== 配置同步 ========
@@ -255,23 +261,23 @@ void mod_buck_sync_cfg(ModBuck *me) {
   me->base.ovp = me->cfg.ovp;
   me->base.ocp = me->cfg.ocp;
 
-  // 电压环 PI: 输出 = 电流指令, 限幅 [0, base.iref] (限流)
-  me->pid_v.cfg.kp = me->cfg.pid_v.kp;
-  me->pid_v.cfg.ki = me->cfg.pid_v.ki;
+  // 电压环 PI (PidReg4): 输出 = 电流指令, 限幅 [0, base.iref] (限流)
+  me->pid_v.cfg.kp  = me->cfg.pid_v.kp;
+  me->pid_v.cfg.ki  = me->cfg.pid_v.ki;
   me->pid_v.cfg.kff = 0.0f;
-  me->pid_v.cfg.dt = MOD_BUCK_DT;
-  me->pid_v.cfg.out_max = me->base.iref;
-  me->pid_v.cfg.out_min = 0.0f;
   me->pid_v.cfg.sp_fc = 0.0f;
+  me->pid_v.base.dt = MOD_BUCK_DT;
+  me->pid_v.base.out_max = me->base.iref;
+  me->pid_v.base.out_min = 0.0f;
 
-  // 电流环 PI: 输出 = 占空比分量, 限幅 [0, 1] (最终由 duty_min/max 钳)
-  me->pid_i.cfg.kp = me->cfg.pid_i.kp;
-  me->pid_i.cfg.ki = me->cfg.pid_i.ki;
+  // 电流环 PI (PidReg4): 输出 = 占空比分量, 限幅 [0, 1] (最终由 duty_min/max 钳)
+  me->pid_i.cfg.kp  = me->cfg.pid_i.kp;
+  me->pid_i.cfg.ki  = me->cfg.pid_i.ki;
   me->pid_i.cfg.kff = 0.0f;
-  me->pid_i.cfg.dt = MOD_BUCK_DT;
-  me->pid_i.cfg.out_max = 1.0f;
-  me->pid_i.cfg.out_min = 0.0f;
   me->pid_i.cfg.sp_fc = 0.0f;
+  me->pid_i.base.dt = MOD_BUCK_DT;
+  me->pid_i.base.out_max = 1.0f;
+  me->pid_i.base.out_min = 0.0f;
 }
 
 // ======== 公开 API (包装 ops) ========

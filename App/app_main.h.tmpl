@@ -54,12 +54,14 @@
 #include "mod_follower.h"  // Follower 循迹控制
 #include "mod_hmi.h"       // HMI 人机交互
 
-// --- PID-OOP: 控制器 ---
-#include "comp_pid.h"
-#include "pid_standard.h"
-#include "pid_p2pd.h"
-#include "pid_cascade.h"
-#include "pid_parallel.h"  // 可选
+// --- PID-OOP: 控制器 (父类 PidBase + 子类, 见 Devices/pid + Components/pid/comp_pid.h) ---
+#include "comp_pid.h"      // 父类 PidBase + PidOps — 上层统一持 PidBase*
+#include "pid_standard.h"  // 子类: 串行 PID (Kp 乘式子外)
+#include "pid_parallel.h"  // 子类: 并行 PID (Kp 只乘 P 项)
+#include "pid_dcl.h"       // 子类: 2-DOF + D 滤波 (dcl+grando 合并)
+#include "pid_reg4.h"      // 子类: 设定值滤波 + 前馈 + clamping (TI pi_reg4)
+#include "pid_p2pd.h"      // 子类: P2PD 非线性 PID (循迹差速)
+#include "pid_cascade.h"   // 组合: 双环级联 (编排 2×PidBase*)
 
 // --- Power-OOP: 电源控制 (PowerStage 集成模块示例: Buck 降压) ---
 #include "comp_power_stage.h"   // PowerStage 父类接口 (ops 虚表 + 状态机)

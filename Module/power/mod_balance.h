@@ -1,6 +1,3 @@
-#ifndef MOD_BALANCE_H
-#define MOD_BALANCE_H
-
 // 球板平衡模块 — ModBalance (Module 层)
 // mod_balance.c (3×PidStandard 球板平衡)
 //
@@ -14,6 +11,9 @@
 // 用法:
 //   1. bal_init(&me, motor_x, motor_y, pid_x, pid_y);
 //   2. ISR 中: bal_tick(&me, ball_x, ball_y);
+
+#ifndef MOD_BALANCE_H
+#define MOD_BALANCE_H
 
 #include <stdint.h>
 #include <stdbool.h>

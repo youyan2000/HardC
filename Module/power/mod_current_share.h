@@ -1,6 +1,3 @@
-#ifndef MOD_CURRENT_SHARE_H
-#define MOD_CURRENT_SHARE_H
-
 // 三相均流模块 — 并联相电流均衡 + Buck/Boost/BuckBoost 模式迟滞 (Module 层, ctx fast)
 //
 // 职责 (每 FAST tick, 与 mod_supercap 同源频率):
@@ -21,6 +18,9 @@
 // 与 mod_supercap 分工: supercap 做功率环 + 保护, 本模块做电流均衡 + 模式选择.
 // supercap 每个 FAST tick 先注入电压/电流/相电流指令, 再调本模块 tick 写 PWM.
 // 急停时 supercap 调 mod_share_emergency → 本模块置 fault, 后续 tick 不再写 PWM.
+
+#ifndef MOD_CURRENT_SHARE_H
+#define MOD_CURRENT_SHARE_H
 
 #include <stdint.h>
 #include <stdbool.h>

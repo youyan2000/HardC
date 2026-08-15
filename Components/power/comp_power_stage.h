@@ -1,7 +1,7 @@
 // PowerStage — 电源拓扑控制模块父类接口 (Components 层)
 //
 // "采样 + 环路控制 + PWM 输出" 集成模块的抽象:
-//   设备绑定: PwmBase* (输出) + AdcBase* (采样) + PidBase* loop[2] (外/内环, 可空)
+// 设备绑定: PwmBase* (输出) + AdcBase* (采样) + PidBase* loop[2] (外/内环, 可空)
 //   状态机:   INIT → IDLE → RUN ⇄ FAULT (FAULT_HOLD / RECOVER 供扩展)
 //   虚表:     init / tick / start / stop / emergency / set_ref / apply_tune / state
 //
@@ -19,7 +19,7 @@
 #include <stdbool.h>
 #include "comp_pwm.h"    // PwmBase + pwm_emergency_stop (默认辅助用)
 #include "comp_adc.h"    // AdcBase — 采样设备绑定
-#include "comp_pid.h"    // PidBase — 环路绑定 (外环/内环)
+#include "comp_pid.h"    // PidBase — 环路绑定 (外环/内环, 抽象契约)
 
 typedef struct PowerStage PowerStage;
 
@@ -60,7 +60,7 @@ struct PowerStage {
   const PowerStageOps *ops;       // 虚表指针 (子类 init 时绑定)
   PwmBase  *pwm;                  // PWM 输出设备
   AdcBase  *adc;                  // ADC 采样设备
-  PidBase  *loop[2];              // 环路控制器: [0]=外环, [1]=内环 (可空)
+  PidBase  *loop[2];             // 环路控制器: [0]=外环, [1]=内环 (可空)
   float     vref;                 // 电压参考 (V)
   float     iref;                 // 电流参考 (A)
   float     ovp;                  // 过压保护阈值 (V)

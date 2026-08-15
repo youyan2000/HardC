@@ -57,8 +57,12 @@ void mod_share_init(ModCurrentShare *me, const ModShareCfg *cfg) {
   me->last_written_mode = 0xFFu;  // 无效值, 首 tick 强制写模式
   me->fault = false;
 
+  // 每相电流 PI (PidReg4 = TI pi_reg4, 复刻原 PidLinear aw=CLAMP):
+  //   配置构造期一次性派生 (pid_kp/pid_ki 无运行时调参路径)
+  PidReg4Cfg pc = { me->cfg.pid_kp, me->cfg.pid_ki, 0.0f, 0.0f };  // kp, ki, kff, sp_fc
+
   for (uint8_t i = 0; i < MOD_SHARE_MAX_PHASES; i++) {
-    pi_reg4_init(&me->ph[i].pi);
+    pid_reg4_init(&me->ph[i].pi, MOD_SHARE_DT, -MOD_SHARE_ALPHA_DELTA_MAX, MOD_SHARE_ALPHA_DELTA_MAX, &pc);
     me->ph[i].alpha = 1.0f;
   }
 }
@@ -116,22 +120,13 @@ void mod_share_tick(ModCurrentShare *me) {
   me->iavg = sum / (float) n;
   me->ibase = me->paside / (float) n;
 
-  // 3. 每相均流修正 + 电流 PI → alpha (各相共用 PI 配置)
-  PiReg4Cfg pc;
-  pc.kp = me->cfg.pid_kp;
-  pc.ki = me->cfg.pid_ki;
-  pc.kff = 0.0f;
-  pc.dt = MOD_SHARE_DT;
-  pc.out_max = MOD_SHARE_ALPHA_DELTA_MAX;
-  pc.out_min = -MOD_SHARE_ALPHA_DELTA_MAX;
-  pc.sp_fc = 0.0f;
-
+  // 3. 每相均流修正 + 电流 PI → alpha (各相共用 PI 配置, 构造期已派生进实例)
   float alpha[MOD_SHARE_MAX_PHASES];
   for (uint8_t i = 0; i < n; i++) {
     float err = me->cfg.share_gain * (me->iavg - me->i_phase[i]);
     me->ph[i].share_error = math_clamp_f(err, -me->cfg.share_lim, me->cfg.share_lim);
     float sp = me->ibase + me->ph[i].share_error;
-    float u = pi_reg4_run(&me->ph[i].pi, &pc, sp, me->i_phase[i]);
+    float u = pid_compute(&me->ph[i].pi.base, sp, me->i_phase[i]);
     me->ph[i].alpha = 1.0f + u;
     alpha[i] = me->ph[i].alpha;
   }
@@ -168,7 +163,7 @@ void mod_share_emergency(ModCurrentShare *me) {
     n = 1u;
   }
   for (uint8_t i = 0; i < n; i++) {
-    pi_reg4_reset(&me->ph[i].pi);
+    pid_reset(&me->ph[i].pi.base);
     me->ph[i].alpha = 0.0f;
   }
 }
@@ -180,7 +175,7 @@ void mod_share_release(ModCurrentShare *me) {
     n = 1u;
   }
   for (uint8_t i = 0; i < n; i++) {
-    pi_reg4_reset(&me->ph[i].pi);
+    pid_reset(&me->ph[i].pi.base);
     me->ph[i].alpha = 1.0f;
   }
   me->last_written_mode = 0xFFu;  // 强制下次 tick 重写模式

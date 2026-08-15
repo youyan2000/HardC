@@ -2,7 +2,7 @@
 //
 // 集成模式示例: "采样 + 环路控制 + PWM 输出"
 //   采样: AdcDcSampler 读 vout/iout/vin (ADC 通道工程量, 校准 k/b 在采样器内)
-//   环路: 级联 电压环(PiReg4) → 电流环(PiReg4) + 前馈 D = ff_weight·Vref/Vin
+//   环路: 级联 电压环(PidReg4) → 电流环(PidReg4) + 前馈 D = ff_weight·Vref/Vin
 //   输出: PwmBuckBoost 写占空比 (ch_drive, [duty_min, duty_max])
 //   保护: vout>ovp 或 iout>ocp 去抖确认 → power_stage_emergency
 //
@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>  // NULL (mod_buck_bind)
 #include "comp_power_stage.h"
-#include "comp_pi_reg4.h"
+#include "pid_reg4.h"        // buck 功率环 = TI pi_reg4 语义 (aw=CLAMP 位级)
 #include "comp_ring.h"     // SPSC 事件流 (FAST→MAIN)
 #include "comp_latch.h"    // Latest 锁存 (FAST→SLOW)
 #include "comp_mailbox.h"  // Command 邮箱 (MAIN→FAST)
@@ -52,12 +52,6 @@ typedef struct {
   uint8_t adc_ch_vin;   // 输入电压 ADC 通道
 } ModBuckCfg;
 
-// ======== 环路 PI 封装 (只读配置 + 运行时状态, 均值包含) ========
-typedef struct {
-  PiReg4Cfg cfg;   // PI 配置
-  PiReg4State st;  // PI 状态
-} BuckPi;
-
 // ======== 跨上下文事件/命令 (五原语, 见 agent.md §1.2) ========
 // 事件流单生产者 = FAST 故障路径 (SPSC 契约); START/STOP 状态变化由调用方直接读
 // mod_buck_state 观察, 不进事件环 (避免 MAIN 调用 start/stop 引入第二生产者竞态)
@@ -76,9 +70,9 @@ typedef struct {
   PwmBuckBoost *pwm_buck;  // PWM 设备具体实例
   AdcDcSampler *adc;       // ADC 设备具体实例
 
-  // --- 环路 (值包含) ---
-  BuckPi pid_v;  // 电压环 (外环): 输出 = 电流指令
-  BuckPi pid_i;  // 电流环 (内环): 输出 = 占空比
+  // --- 环路 (值包含, PidReg4 内嵌配置; 经 .base 挂到 PowerStage.loop[]) ---
+  PidReg4 pid_v;  // 电压环 (外环): 输出 = 电流指令 — TI pi_reg4 语义
+  PidReg4 pid_i;  // 电流环 (内环): 输出 = 占空比 — TI pi_reg4 语义
 
   // --- 运行配置 (可热替换, 0xFB 调参目标) ---
   ModBuckCfg cfg;
@@ -101,7 +95,7 @@ typedef struct {
 
 // ======== API ========
 
-// 构造: 绑定 ops + 存 cfg + 初始化双环 PiReg4 (设备绑定由 mod_buck_bind 完成)
+// 构造: 绑定 ops + 存 cfg + 初始化双环 PidReg4 (设备绑定由 mod_buck_bind 完成)
 void mod_buck_init(ModBuck *me, const ModBuckCfg *cfg);
 
 // 绑定设备: 同时填充 PowerStage 基类 pwm/adc 指针 (board_init 中调用)
