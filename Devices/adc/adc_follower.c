@@ -11,7 +11,8 @@
 
 static void dma_impl(AdcBase *base) {
   AdcFollower *me = container_of(base, AdcFollower, base);
-  HAL_ADC_Start_DMA(me->hadc, (uint32_t *)base->raw, 8);
+  // 统一走 BSP 抽象 (STM32: HAL_ADC_Start_DMA; C2000: 触发源 + 缓冲注册) — 跨平台
+  bsp_adc_start_dma(me->hadc, me->hdma, (uint16_t *)base->raw, 8);
 }
 
 // 读取通道 i 原始 ADC 值 (用于串口查询, FC 01 协议)
@@ -97,14 +98,15 @@ static const AdcOps follower_ops = {
 
 // -------- 构造 / 析构 --------
 
-void adc_follower_init(AdcFollower *me, ADC_HandleTypeDef *hadc,
-                        const int16_t *threshold) {
+void adc_follower_init(AdcFollower *me, BspAdcHandle *hadc, BspAdcHandle *hdma,
+                       const int16_t *threshold) {
   adc_base_init(&me->base);
   me->base.name    = AdcFollowerSensor;
   me->base.ops     = &follower_ops;
   me->base.raw     = me->raw_buf;  // 绑定子类 DMA 缓冲区
   me->base.raw_cap = 8;              // 8 通道红外
   me->hadc         = hadc;
+  me->hdma         = hdma;
   for (int i = 0; i < 8; i++) {
     me->threshold[i] = threshold[i];
     me->ch_bin[i]    = 0;
@@ -122,10 +124,14 @@ void adc_follower_init(AdcFollower *me, ADC_HandleTypeDef *hadc,
   me->sns_send    = 0;
 }
 
-// 反初始化: 清除 ops 和 HAL 句柄
+// 反初始化: 停止 DMA、清空 BSP 句柄、清空 ops 和基类字段 (对齐 DC/AC deinit)
 void adc_follower_deinit(AdcFollower *me) {
-  me->base.ops = NULL;
-  me->hadc     = NULL;
+  if (me->hadc != NULL) {
+    bsp_adc_stop_dma(me->hadc, me->hdma);
+  }
+  me->hadc = NULL;
+  me->hdma = NULL;
+  adc_base_deinit(&me->base);
 }
 
 // -------- 校准 (三步协议: EE 01 / EE 02 / EE 03) --------

@@ -16,28 +16,26 @@
 //   - 电压: Vab, Vbc → Va, Vb, Vc
 //   - 电流: Ia, Ic  → Ia, Ib, Ic  (KCL: Ib = -(Ia+Ic))
 //
-// ISR 安全: fast_fetch 仅标量浮点运算 (无 arm_rms_f32 / sqrtf)
+// 滑动窗块 RMS (adc_ac_rms_sample / adc_ac_rms_commit):
+//   替代原 static 全局 vrms_buf/irms_buf + arm_rms_f32:
+//     - 缓冲移入 AdcAcSampler 实例 (多实例/ISR 安全)
+//     - 数学 = sqrt(Σ(最新 N 个样本²) / N), 与 arm_rms_f32 等价
+//     - 纯 C (MATH_SQRT), 去 arm_math.h, 跨平台
+//
+// ISR 安全: fast_fetch 仅标量浮点运算 (无 RMS 聚合 / 长循环)
 // 参考: RM0440 §21.4.6 差分模式 DIFSEL 寄存器
 
 #include "adc_ac_sampler.h"
 #include "container_of.h"
-#include "arm_math.h"   // arm_rms_f32
-#include <math.h>        // arm_math.h 传递依赖 (sqrt 已走 comp_math.h MATH_SQRT)
 #include <string.h>      // memset
 #include <assert.h>
-#include "comp_math.h"
+#include "comp_math.h"   // MATH_SQRT — 平方/开方 (替代 arm_math.h)
 
 // ====== 校准常量 (static const — 类型安全) =====================================
 static const float adc_vref = 3.30f;     // ADC 参考电压 (V)
 static const float adc_res  = 4096.0f;   // 12-bit 分辨率
 static const float vsensor_gain_default  = 15.15f;  // 电压传感器分压比
 static const float isensor_gain_default  = 9.60f;   // 电流传感器增益 (A/V)
-
-// RMS 缓冲
-enum { RMS_BUF_SIZE = 800 };  // 50Hz 一个周期 = 20ms @ 40kHz
-static float vrms_buf[RMS_BUF_SIZE];
-static float irms_buf[RMS_BUF_SIZE];
-static uint32_t rms_idx = 0;
 
 // ====== 工具函数 =============================================================
 
@@ -53,12 +51,37 @@ static float se_to_voltage(int16_t raw) {
   return (float)((uint16_t)raw) * adc_vref / adc_res;
 }
 
+// ====== 滑动窗块 RMS (纯 C, per-ring window; 替代 arm_rms_f32 + static 缓冲) ======
+// 每调 sample 一次喂入一个新样本 (瞬时 RMS)。window 由调用方传入 (指向 me->v_rms 或 me->i_rms)，
+// 电压/电流各自独立窗口 — 互不污染。等价原实现 arm_rms_f32 = sqrt(Σx²/N)。
+
+// 喂入一个瞬时值 (样本平方), 维护窗口内 Σ平方 与环形缓冲, 返回当前窗口 RMS
+static float adc_ac_rms_sample(RmsWindow *w, float inst, uint16_t win) {
+  float sq = inst * inst;
+  // 覆盖最旧: 若窗口已满, 减去最旧平方; w->ring[w->idx] 存 (写入前) 的最旧平方
+  if (w->count >= win) {
+    w->sum_sq -= w->ring[w->idx];
+  }
+  w->ring[w->idx] = sq;
+  w->sum_sq      += sq;
+  w->idx = (w->idx + 1u) % win;
+  if (w->count < win) {
+    w->count++;
+  }
+  // RMS = sqrt(Σx² / N)
+  if (w->count > 0u) {
+    return MATH_SQRT(w->sum_sq / (float)w->count);
+  }
+  return 0.0f;
+}
+
 // ====== ops 实现 (static — 封装) =============================================
 
 // 启动 ADC DMA 循环扫描
 static void start_dma_impl(AdcBase *base) {
   AdcAcSampler *me = container_of(base, AdcAcSampler, base);
-  HAL_ADC_Start_DMA(me->hadc, (uint32_t *)base->raw, me->num_ch);
+  // 统一走 BSP 抽象 (STM32: HAL_ADC_Start_DMA; C2000: 触发源 + 缓冲注册) — 跨平台
+  bsp_adc_start_dma(me->hadc, me->hdma, (uint16_t *)base->raw, me->num_ch);
 }
 
 // 读取通道 i 的原始 ADC 值
@@ -91,7 +114,7 @@ void adc_ac_sampler_reconstruct_i(AdcAcSampler *me,
   *ib = -(*ia + *ic);
 }
 
-// === 传感器数据处理 (主循环调用, 含重型 DSP) ================================
+// === 传感器数据处理 (主循环调用, 含 RMS 聚合) ================================
 
 static void process_impl(AdcBase *base) {
   AdcAcSampler *me = container_of(base, AdcAcSampler, base);
@@ -136,29 +159,20 @@ static void process_impl(AdcBase *base) {
     me->vdc += 0.00157f * (vline_peak * 1.414f - me->vdc);
   }
 
-  // ---- 第5步: RMS 累加 (800 样本 = 20ms @ 40kHz) -------------------------
+  // ---- 第5步: 滑动窗 RMS (window = ADC_AC_RMS_WIN) -----------------------
+  // 线电压 RMS (逐点喂入 → 窗口 RMS); 相→线 sqrt(3); V/I 各用独立 RmsWindow
   if (me->num_v >= 2) {
     float v_rms_inst = MATH_SQRT((me->va * me->va + me->vb * me->vb +
                                   me->vc * me->vc) / 3.0f);
-    vrms_buf[rms_idx] = v_rms_inst;
+    me->vrms = adc_ac_rms_sample(&me->v_rms, v_rms_inst, ADC_AC_RMS_WIN) * 1.732f;
   }
 
+  // 逆变侧线电流 RMS (窗口)
   if (me->num_i >= 2) {
     float i_rms_inst = MATH_SQRT((me->ia1 * me->ia1 + me->ib1 * me->ib1 +
                                   me->ic1 * me->ic1) / 3.0f);
-    irms_buf[rms_idx] = i_rms_inst;
+    me->irms1 = adc_ac_rms_sample(&me->i_rms, i_rms_inst, ADC_AC_RMS_WIN);
   }
-
-  rms_idx = (rms_idx + 1) % RMS_BUF_SIZE;
-
-  // CMSIS-DSP 计算 800 点 RMS
-  float rms;
-  arm_rms_f32(vrms_buf, RMS_BUF_SIZE, &rms);
-  // 相电压 RMS → 线电压 RMS = sqrt(3) * 相电压 RMS
-  me->vrms = rms * 1.732f;
-
-  arm_rms_f32(irms_buf, RMS_BUF_SIZE, &rms);
-  me->irms1 = rms;
 
   me->data_ready = true;
 }
@@ -175,8 +189,8 @@ static const AdcOps sampler_ops = {
 
 // ====== 构造器 ===============================================================
 
-void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, ADC_HandleTypeDef *hadc,
-                         DMA_HandleTypeDef *hdma,
+void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle *hadc,
+                         BspAdcHandle *hdma,
                          uint8_t num_ch, uint8_t num_v, uint8_t num_i,
                          const uint8_t *i_ch, const uint8_t *v_ch,
                          uint8_t vref_ch) {
@@ -192,7 +206,7 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, ADC_HandleTy
   me->base.raw_cap = ADC_AC_MAX_CH;
   me->base.ops     = &sampler_ops;
 
-  // 绑定 HAL 句柄
+  // 绑定 BSP 句柄
   me->hadc   = hadc;
   me->hdma   = hdma;
   me->num_ch = num_ch;
@@ -218,7 +232,7 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, ADC_HandleTy
 
   me->vref_ch = vref_ch;
 
-  // 默认校准参数 (init 后可手动覆盖各通道)
+  // 默认校准参数 (init 后可手动覆盖各通道; 工程可用 YmaC 注入覆盖 v_gain/i_gain)
   for (uint8_t i = 0; i < num_v; i++) {
     me->v_gain[i]   = vsensor_gain_default;
     me->v_offset[i] = 0.0f;
@@ -250,6 +264,16 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, ADC_HandleTy
   me->irms1 = 0;
   me->vref_measured = 0.0f;
   me->data_ready = false;
+
+  // 初始化滑动窗 RMS 状态 (per-ring: V/I 各自独立, 零初始化)
+  me->v_rms.sum_sq = 0.0f;
+  me->v_rms.idx    = 0u;
+  me->v_rms.count  = 0u;
+  me->i_rms.sum_sq = 0.0f;
+  me->i_rms.idx    = 0u;
+  me->i_rms.count  = 0u;
+  memset(me->v_rms.ring, 0, sizeof(me->v_rms.ring));
+  memset(me->i_rms.ring, 0, sizeof(me->i_rms.ring));
 }
 
 // ====== 数据获取 =============================================================
@@ -261,7 +285,7 @@ void adc_ac_sampler_fetch(AdcAcSampler *me) {
   adc_process(&me->base);
 }
 
-// ISR 安全瞬时读取 — 仅标量浮点, 无 arm_rms_f32/sqrtf
+// ISR 安全瞬时读取 — 仅标量浮点, 无 RMS 聚合/长循环
 void adc_ac_sampler_fast_fetch(AdcAcSampler *me) {
   AdcBase *base = &me->base;
 
@@ -303,10 +327,10 @@ void adc_ac_sampler_fast_fetch(AdcAcSampler *me) {
 
 // ====== 查询接口 =============================================================
 
-// 反初始化: 停止 DMA、清空 HAL 句柄、清空 ops
+// 反初始化: 停止 DMA、清空 BSP 句柄、清空 ops
 void adc_ac_sampler_deinit(AdcAcSampler *me) {
   if (me->hadc != NULL) {
-    HAL_ADC_Stop_DMA(me->hadc);
+    bsp_adc_stop_dma(me->hadc, me->hdma);
   }
   me->hadc = NULL;
   me->hdma = NULL;

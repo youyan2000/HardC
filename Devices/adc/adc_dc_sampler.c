@@ -31,28 +31,20 @@ static void start_dma_impl(AdcBase *base) {
 
 // 读取通道 i 的原始 ADC 值
 static uint16_t read_ch_impl(AdcBase *base, int i) {
-  if (i < 0 || i >= 8)
+  if (i < 0 || i >= ADC_DC_MAX_CH)
     return 0;
   return base->raw[i];
 }
 
-// 直流采样处理: EMA 滤波 + 线性校准
-// 在 ADC 转换完成 ISR 回调之后调用 (或定时器中调用)
+// 直流采样处理: 共享信号处理 (comp_adc_sig) — EMA 滤波 + 线性校准
+// 每通道 adc_sig_process(sig[i], raw): filt = EMA(alpha, raw), value = k·filt + b
+// 与原手写 process (alpha>0: raw_f=α·raw+(1−α)·raw_f; 否则 raw_f=raw; value=k·raw_f+b) 数值等价
 static void process_impl(AdcBase *base) {
   AdcDcSampler *me = container_of(base, AdcDcSampler, base);
 
   for (int i = 0; i < me->num_ch; i++) {
     float raw = (float) base->raw[i];
-
-    // EMA 一阶低通滤波 (等同 LowPassFilter_Apply)
-    if (me->alpha[i] > 0.0f) {
-      me->raw_f[i] = me->alpha[i] * raw + (1.0f - me->alpha[i]) * me->raw_f[i];
-    } else {
-      me->raw_f[i] = raw;
-    }
-
-    // 线性校准: value = k * raw_f + b
-    me->value[i] = me->k[i] * me->raw_f[i] + me->b[i];
+    me->value[i] = adc_sig_process(&me->sig[i], raw);  // 过滤 + 校准 → 工程量
   }
 }
 
@@ -92,22 +84,19 @@ void adc_dc_sampler_init(AdcDcSampler *me, IoCompletion completion, BspAdcHandle
   me->completion = completion;
   assert(me->completion == IO_ASYNC_FLAG);
 
-  // 初始化每通道参数 (k/b/alpha 数组允许为 NULL, 表示使用默认值)
+  // 初始化每通道共享信号处理流水线 (k/b/alpha 数组允许为 NULL, 表示默认值)
   for (int i = 0; i < num_ch; i++) {
-    me->k[i] = k ? k[i] : 1.0f;              // 默认: 直接输出 ADC 原始值
-    me->b[i] = b ? b[i] : 0.0f;              // 默认: 无偏置
-    me->alpha[i] = alpha ? alpha[i] : 0.0f;  // 默认: 无滤波
+    float kk = k ? k[i] : 1.0f;              // 默认: 直接输出 ADC 原始值
+    float bb = b ? b[i] : 0.0f;              // 默认: 无偏置
+    float aa = alpha ? alpha[i] : 0.0f;      // 默认: 无滤波
+    adc_sig_channel_init(&me->sig[i], kk, bb, aa);
     me->value[i] = 0.0f;
-    me->raw_f[i] = 0.0f;
   }
 
-  // 未使用通道清零
+  // 未使用通道清零 (禁流水线直通)
   for (int i = num_ch; i < 8; i++) {
-    me->k[i] = 1.0f;
-    me->b[i] = 0.0f;
-    me->alpha[i] = 0.0f;
+    adc_sig_channel_init(&me->sig[i], 1.0f, 0.0f, -1.0f);  // en=0, 直通不校准
     me->value[i] = 0.0f;
-    me->raw_f[i] = 0.0f;
   }
 }
 
@@ -161,5 +150,5 @@ float adc_dc_sampler_get_value(const AdcDcSampler *me, int ch) {
 float adc_dc_sampler_get_raw(const AdcDcSampler *me, int ch) {
   if (ch < 0 || ch >= me->num_ch)
     return 0.0f;
-  return me->raw_f[ch];
+  return adc_sig_filt(&me->sig[ch]);
 }

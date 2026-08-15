@@ -25,6 +25,7 @@
 #define ADC_DC_SAMPLER_H
 
 #include "comp_adc.h"
+#include "comp_adc_sig.h"        // 共享信号处理: 校准(k,b)+EMA滤波(alpha) 每通道流水线
 #include "bsp_adc.h"             // BspAdcHandle 不透明句柄 — 跨平台 (STM32/C2000)
 #include "comp_double_buffer.h"  // 五原语之 PingPong: DMA→FAST 采样快照 (撕裂读消除)
 #include "comp_io.h"             // 运行时契约: I/O 完成方式 (DMA 完成 = IO_ASYNC_FLAG)
@@ -40,16 +41,13 @@ typedef struct {
   BspAdcHandle *hdma;                   // BSP DMA 句柄 (STM32: &hdma_adc1, C2000: 触发源)
   IoCompletion completion;              // 完成契约: 发起时声明完成方式 (本设备固定 IO_ASYNC_FLAG)
 
-  // 每通道校准参数
-  // value[i] = k[i] * raw_f[i] + b[i]
-  float k[ADC_DC_MAX_CH];      // 线性增益 (V/ADC 或 A/ADC)
-  float b[ADC_DC_MAX_CH];      // 线性偏置 (V 或 A)
-  float alpha[ADC_DC_MAX_CH];  // EMA 滤波系数 [0,1], 0=无滤波
-  // alpha ≈ 2*PI*fc*Ts, 例: fc=10Hz, Ts=1ms → alpha≈0.063
+  // 每通道共享信号处理流水线 (comp_adc_sig): 校准(k,b) + EMA滤波(alpha) + 状态
+  //   value = k·filt + b;  filt 为滤波后值; 见 comp_adc_sig.h
+  //   alpha ≈ 2*PI*fc*Ts, 例: fc=10Hz, Ts=1ms → alpha≈0.063
+  AdcSigChannel sig[ADC_DC_MAX_CH];  // 每通道信号处理上下文 (k/b/alpha + filt 状态)
 
-  // 输出
+  // 输出工程量 (adc_dc_sampler_get_value 回读; process 每周期由 adc_sig_process 填充)
   float value[ADC_DC_MAX_CH];  // 工程量 (V 或 A)
-  float raw_f[ADC_DC_MAX_CH];  // 滤波后 ADC 值 (诊断用)
 
   uint8_t num_ch;  // 实际通道数 (1 ~ ADC_DC_MAX_CH)
 } AdcDcSampler;

@@ -6,12 +6,13 @@
 #define ADC_FOLLOWER_H
 
 #include "comp_adc.h"
-#include "stm32f1xx_hal.h"
+#include "bsp_adc.h"  // BspAdcHandle 不透明句柄 — 跨平台 (STM32/C2000), 去除 HAL 硬依赖
 
 typedef struct {
   AdcBase            base;        // 基类
   uint16_t           raw_buf[8];  // [基类绑定] DMA 缓冲区 (8 通道)
-  ADC_HandleTypeDef *hadc;        // HAL ADC 句柄
+  BspAdcHandle      *hadc;        // BSP ADC 句柄 (STM32: &hadc1; C2000: ADC 基址)
+  BspAdcHandle      *hdma;        // BSP DMA/触发句柄 (STM32: &hdma_adc1; C2000: 触发源)
   int16_t            threshold[8]; // 各通道门限值
   int16_t            ch_bin[8];   // 二值化结果 (0/1)
   int16_t            ch_val[8];   // 独热码值 (0 或 1<<i)
@@ -27,8 +28,8 @@ typedef struct {
   uint8_t            sns_send;    // ISR→主循环: 传感器查询发送 (1=ADC,2=超声,3=MPU)
 } AdcFollower;
 
-void adc_follower_init(AdcFollower *me, ADC_HandleTypeDef *hadc,
-                        const int16_t *threshold);
+void adc_follower_init(AdcFollower *me, BspAdcHandle *hadc, BspAdcHandle *hdma,
+                       const int16_t *threshold);
 void adc_follower_deinit(AdcFollower *me);
 
 // 校准三步协议 (前缀 EE, 与电机 EF 隔离):
