@@ -1,6 +1,3 @@
-#ifndef COMP_ERROR_H
-#define COMP_ERROR_H
-
 // 嵌入式 OOP 统一错误码系统 —— bitmask 模式
 //
 // 使用方式:
@@ -13,6 +10,9 @@
 //   - 每个模块定义自己的错误位 (不冲突)
 //   - bitmask 支持同时多个错误
 //   - 去抖动计数在 Module 层实现 (不在 Components 层)
+
+#ifndef COMP_ERROR_H
+#define COMP_ERROR_H
 
 #include <stdint.h>
 
