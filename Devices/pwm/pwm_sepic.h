@@ -1,8 +1,5 @@
 // 单开关变频 PWM —— PwmBase 子类, SEPIC / 反激 / 单管正激
 //
-// 来源: TI controlSUITE DPLib PWMDRV_1ch / PWMDRV_1ch_UpDnCnt (digital_power)
-// 翻译为 HardC 风格
-//
 // 拓扑: 单开关管 + 二极管 + LC 耦合电容
 // 应用: SEPIC DC/DC (升降压, 输入输出同极性), 反激, 单管正激
 //
