@@ -3,6 +3,7 @@ layer: Components
 description: 运行时契约 — 三上下文执行契约 (I/O 完成方式词汇 + 五原语跨上下文交接机制)
 files:
   - comp_io.h
+  - comp_error_code.h      # 错误码枚举: LibXR ErrorCode 纯 C 平替 (I/O 调用返回值/API 结果)
   - comp_double_buffer.h  # PingPong: DMA→FAST 采样快照
   - comp_latch.h          # Latest 锁存: FAST→SLOW/MAIN 遥测
   - comp_ring.h           # SPSC 环形缓冲: 单生产者→单消费者
