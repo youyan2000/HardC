@@ -1,5 +1,4 @@
 // 校验和计算库 — 8/16/32 位无符号累加 (自然溢出), ISR 安全
-// 来源: 原 Components/math/comp_math.h 拆分
 
 #ifndef COMP_CHECKSUM_H
 #define COMP_CHECKSUM_H
