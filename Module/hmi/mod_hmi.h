@@ -22,12 +22,12 @@
 typedef struct CmdDispatcher CmdDispatcher;
 typedef struct CommBase      CommBase;
 
-// 按键事件类型
+// 按键事件类型 (HMI_KEY_EVENT_* 前缀防与外部工程旧枚举重名)
 typedef enum {
-  KEY_EVENT_CLICK  = 0,  // 单击
-  KEY_EVENT_DOUBLE = 1,  // 双击
-  KEY_EVENT_LONG   = 2,  // 长按
-} KeyEvent;
+  HMI_KEY_EVENT_CLICK  = 0,  // 单击
+  HMI_KEY_EVENT_DOUBLE = 1,  // 双击
+  HMI_KEY_EVENT_LONG   = 2,  // 长按
+} HmiKeyEvent;
 
 // 单按键状态 (去抖状态机)
 typedef struct {
@@ -37,7 +37,7 @@ typedef struct {
   uint16_t release_ticks;  // 释放后 tick 数 (双击检测)
   uint8_t click_count;     // 本次按下序列的单击计数
   bool    event_pending;   // 有待处理的事件
-  KeyEvent pending_event;  // 待处理的事件类型
+  HmiKeyEvent pending_event;  // 待处理的事件类型
 } KeyDebounce;
 
 // 最大按键数
@@ -46,6 +46,28 @@ typedef struct {
 #define HMI_LONG_TICKS     80   // 0.8 秒
 // 双击间隔阈值 (tick 数)
 #define HMI_DOUBLE_TICKS   30   // 0.3 秒
+
+// ======== 输出端口 (路由决策点) ========
+// HMI 是唯一路由决策点: 按键事件按路由策略经这些端口发出 (用 CAN 发 / UART 发 / LED 指示 / 同时多路)
+// 外部独立 (CAN 帧/字节流/电平各有语义), 内部统一 (事件回调), 路由只在 HMI 决定
+
+// 端口事件回调 — App 在 board_init 写适配函数: can→mod_can_send_fn 包装, uart→proto_send_fn 包装, led→output_on/off
+// 回调经 hmi_report 在 hmi_tick 调用者上下文 (控制 ISR/CTX_FAST) 执行, 必须非阻塞:
+//   只做入队/置标志 (comp_ring/comp_latch), 真实 I/O 由 CTX_MAIN (BackgroundTask) 完成
+typedef void (*HmiPortFn)(void *ctx, HmiKeyEvent evt);
+
+// 单端口绑定 (on_event=NULL = 未绑定, 路由跳过该路)
+typedef struct {
+  HmiPortFn on_event;  // 事件回调
+  void *ctx;           // 回调上下文 (协议实例 / 设备实例)
+} HmiPort;
+
+// 输出端口表 — hmi_report 按绑定 fan-out
+typedef struct {
+  HmiPort can;   // CAN 协议端口 (mod_can_proto)
+  HmiPort uart;  // UART 协议端口 (mod_serial_proto)
+  HmiPort led;   // LED 指示端口 (peripheral OutputBase)
+} HmiPorts;
 
 // HMI 实例结构体
 typedef struct {
@@ -57,6 +79,8 @@ typedef struct {
 
   uint8_t       oled_page;        // OLED 当前页面 (0=状态, 1=传感器, 2=PID, 3=设置)
   bool          oled_dirty;       // OLED 需要刷新标志
+
+  HmiPorts      out;              // 输出端口表 (路由决策点, hmi_report fan-out)
 
   uint32_t      tick;             // 运行 tick 计数 (调试用)
 } Hmi;
@@ -70,11 +94,19 @@ void hmi_init(Hmi *me, CmdDispatcher *disp);
 void hmi_add_key(Hmi *me, uint8_t key_index, uint8_t initial_state);
 
 // 每控制周期调用一次 (ISR 中)
-// 内部: 扫描所有按键 → 去抖 → 产生 KeyEvent → CarCmd → dispatch
+// 内部: 扫描所有按键 → 去抖 → 产生 HmiKeyEvent → CarCmd → dispatch → hmi_report fan-out
+// ISR 约束: 端口回调 (HmiPortFn) 在调用者上下文执行, 必须非阻塞; 真实 I/O 归 CTX_MAIN
 void hmi_tick(Hmi *me);
 
 // OLED 页面控制
 void hmi_oled_next_page(Hmi *me);
 void hmi_oled_set_dirty(Hmi *me);
+
+// 绑定输出端口 — App 在 board_init 调用 (port=&me->out.can / &me->out.uart / &me->out.led)
+void hmi_port_bind(HmiPort *port, void *ctx, HmiPortFn cb);
+
+// 报告事件 — 唯一路由决策点: 按端口绑定 fan-out (三路各可空, 全绑=同时多路)
+// 调用上下文 = hmi_tick 调用者 (控制 ISR/CTX_FAST): 回调必须非阻塞, 只入队/置标志
+void hmi_report(Hmi *me, HmiKeyEvent evt);
 
 #endif

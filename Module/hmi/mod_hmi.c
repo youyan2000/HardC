@@ -18,6 +18,13 @@ void hmi_init(Hmi *me, CmdDispatcher *disp) {
   me->oled_dirty = false;
   me->tick      = 0;
 
+  me->out.can.on_event = NULL;
+  me->out.can.ctx = NULL;
+  me->out.uart.on_event = NULL;
+  me->out.uart.ctx = NULL;
+  me->out.led.on_event = NULL;
+  me->out.led.ctx = NULL;
+
   for (int i = 0; i < HMI_MAX_KEYS; i++) {
     me->keys[i].pin_state     = 1;  // 默认释放
     me->keys[i].prev_state    = 1;
@@ -25,7 +32,7 @@ void hmi_init(Hmi *me, CmdDispatcher *disp) {
     me->keys[i].release_ticks = 0;
     me->keys[i].click_count   = 0;
     me->keys[i].event_pending = false;
-    me->keys[i].pending_event = KEY_EVENT_CLICK;
+    me->keys[i].pending_event = HMI_KEY_EVENT_CLICK;
     me->key_pin_states[i]     = 1;
   }
 }
@@ -69,7 +76,7 @@ static void key_debounce_tick(KeyDebounce *kd) {
     // 长按检测: 达到阈值时触发
     if (kd->press_ticks == HMI_LONG_TICKS) {
       kd->event_pending = true;
-      kd->pending_event = KEY_EVENT_LONG;
+      kd->pending_event = HMI_KEY_EVENT_LONG;
     }
   }
 
@@ -80,9 +87,9 @@ static void key_debounce_tick(KeyDebounce *kd) {
     if (!kd->event_pending) {
       kd->event_pending = true;
       if (kd->click_count >= 2) {
-        kd->pending_event = KEY_EVENT_DOUBLE;
+        kd->pending_event = HMI_KEY_EVENT_DOUBLE;
       } else {
-        kd->pending_event = KEY_EVENT_CLICK;
+        kd->pending_event = HMI_KEY_EVENT_CLICK;
       }
     }
     kd->press_ticks = 0;  // 复位按下计时
@@ -109,12 +116,15 @@ void hmi_tick(Hmi *me) {
     // 消费待处理事件 → CarCmd → dispatch
     if (me->keys[i].event_pending) {
       me->keys[i].event_pending = false;
-      KeyEvent evt = me->keys[i].pending_event;
+      HmiKeyEvent evt = me->keys[i].pending_event;
 
       CarCmd cmd = cmd_from_button(i, (uint8_t)evt);
       if (cmd != CMD_NONE && me->disp) {
         cmd_dispatch_execute(me->disp, cmd, NULL, 0);
       }
+
+      // 外部路径: 事件 → 输出端口表 fan-out (CAN/UART/LED, 按绑定)
+      hmi_report(me, evt);
     }
   }
 }
@@ -129,4 +139,23 @@ void hmi_oled_next_page(Hmi *me) {
 
 void hmi_oled_set_dirty(Hmi *me) {
   me->oled_dirty = true;
+}
+
+// ======== 输出端口 ========
+
+void hmi_port_bind(HmiPort *port, void *ctx, HmiPortFn cb) {
+  port->ctx = ctx;
+  port->on_event = cb;
+}
+
+void hmi_report(Hmi *me, HmiKeyEvent evt) {
+  if (me->out.can.on_event != NULL) {
+    me->out.can.on_event(me->out.can.ctx, evt);
+  }
+  if (me->out.uart.on_event != NULL) {
+    me->out.uart.on_event(me->out.uart.ctx, evt);
+  }
+  if (me->out.led.on_event != NULL) {
+    me->out.led.on_event(me->out.led.ctx, evt);
+  }
 }
