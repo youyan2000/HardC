@@ -124,8 +124,8 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `Components/protection/comp_protection.h` | 保护框架：阈值检测、去抖、分级响应 |
 | `Components/comp_adc.h/c` | ADC 父类：AdcBase + AdcOps 虚表 |
 | `Components/comp_pwm.h/c` | PWM 父类：PwmBase + PwmOps 虚表 |
-| `Components/comp_pid.h/c` | PID 父类：PidBase + PidOps 虚表 |
-| `Components/comp_pi_reg4.h` | **4 状态 PI 调节器** — 设定值滤波 + P + I + 前馈, 双抗积分饱和 |
+| `Components/pid/comp_pid.h/c` | **PID 父类契约** — PidBase + PidOps 虚表 (compute/reset/on_saturation) + 执行器物理契约 (dt/out_min/out_max/anti_windup), 统一入口 pid_compute(). 各控制律子类在 Devices/pid |
+| `Components/pid/comp_tcm.h` | 自动调参工具 (参数计算, 非控制器) |
 | `Components/peripheral/comp_output.h/c` | 输出基类：OutputBase + OutputOps 虚表 (on/off/set/toggle) |
 | `Components/comm/comp_comm.h/c` | 通信契约基类：CommBase + 诊断 ops (self_check/reset, 可空), 数据面不虚化 |
 | `Components/comp_motor.h/c` | 电机父类：MotorBase + MotorOps 虚表 |
@@ -223,8 +223,9 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | **ADC** | `comp_adc.h/c` | `adc_follower`, `adc_dc_sampler`, `adc_ac_sampler` | `mod_sampler` | `adcs.h` |
 | **COM** | `comp_comm.h/c` | `com_uart`, `com_spi`, `com_i2c`, `com_can`, `com_gpio` | `mod_comm`, `mod_cmd_dispatch`, `mod_serial_proto`, `mod_can_proto`, `mod_pmbus` | — |
 | **Peripheral** | `comp_output.h/c`, `comp_sensor.h/c`, `comp_mpu.h` + `comp_mpu_dmp.c` | `per_led`, `per_laser`, `per_beep`, `per_buzzer`, `per_fan`, `per_oled`, `per_mpu6050`, `per_ultrasonic` | `mod_hmi` | `pers.h` |
-| **PID** | `comp_pid.h/c` | `pid_standard`, `pid_cascade`, `pid_p2pd`, `pid_parallel`, `pid_pr`, `pid_qpr` | — | `pids.h` |
-| **PWM** | `comp_pwm.h/c` | `pwm_buckboost`, `pwm_half_bridge`, `pwm_full_bridge`, `pwm_interleaved`, `pwm_resonant`, `pwm_svpwm` | `mod_powerctrl` | `pwms.h` |
+| **PID** | `comp_pid.h/c` (父类 PidBase + PidOps) | `pid_standard`, `pid_parallel`, `pid_dcl` (dcl+grando 合并), `pid_pi`, `pid_reg4`, `pid_reg3`, `pid_pr`, `pid_qpr`, `pid_p2pd`, `pid_nl`, `pid_cascade` | — | `pids.h` |
+| **PLL** | `comp_pll_base.h/c` (父类 PllBase + PllOps) | `pll_sogi`, `pll_srf`, `pll_notch`, `pll_ddsrf`, `pll_sogi_fll` | — | `plls.h` |
+| **PWM** | `comp_pwm.h/c` | `pwm_buckboost`, `pwm_half_bridge`, `pwm_full_bridge`, `pwm_interleaved`, `pwm_resonant`, `pwm_sepic`, `pwm_spwm`, `pwm_svpwm`, `pwm_wpt` | `mod_powerctrl` | `pwms.h` |
 | **Motor** | `comp_motor.h/c` | `motor_tim`, `motor_step`, `motor_encoder` | `mod_motor`, `mod_turn`, `mod_follower`, `mod_fcl_ctrl` | — |
 
 **独立 Component（无 Devices 层, 单头文件 static inline）：**
@@ -235,8 +236,6 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_iir.h` | `IirDf22`, `IirDf23`, `Iir2p2z`, `Iir16Cfg/State`, `Iir32Cfg/State` | IIR 数字补偿器 — DF22/DF23/2P2Z float + Q15/Q31 定点 |
 | `comp_sgen.h` | `SgenFixed`, `SgenSweep`, `SgenHp1`, `SgenHp2`, `SgenT3D`, `SgenProfile`, `SgenDeadzone` | 7 种信号发生器 — DDS/扫频/探测/Profile/死区测试 |
 | `comp_fft_window.h` | (FftWinType 枚举) | 18 种 FFT 窗函数 float + Q31 (fill_q31/apply_q31), 相干增益/ENBW |
-| `comp_pi_reg4.h` | `PiReg4Cfg`, `PiReg4State` | 4 状态 PI 调节器 — 设定值滤波 + P + I + 前馈, 双抗积分饱和 |
-| `comp_pid_reg3.h` | `PidReg3Cfg`, `PidReg3State` | 3 状态 PID — 反计算抗饱和 + 位置回绕变体, 微分作用在比例输出 |
 | `comp_protection.h` | — | 保护框架 — 阈值检测、去抖、分级响应 (Components/protection/ 域) |
 | `comp_protection_3lvl.h` | `Prot3LvlDelay` | 三电平逆变器延迟保护 — 主开关立即关断 + 内开关故障消隐延迟关断 (ride-through, 非锁存自重新布防) |
 | `comp_pfc.h` | `PfcICmd`, `PfcBLICmd`, `PfcBlIcmd`, `PfcInvRmsSqr`, `PfcInvSqr` | PFC 电流指令, 含无桥桥臂选择 |
@@ -253,14 +252,12 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_mod6.h` | `Mod6Cnt` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
 | `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
 | `comp_impulse.h` | `Impulse` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
-| `comp_sogi_fll.h` | `SogiFll`, `SogiFllOsgCoeff`, `SogiFllLpfCoeff` | SOGI 锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移 |
 | `comp_power_meas.h` | `PowerMeas`, `EnergyAccu`, `PowerMeas3Ph` | 电力测量 — Vrms/Irms/P/Q/S/PF/相位角 + 能量脉冲积分 (残余结转) + 三相聚合 (总功率/线电压/电流矢量和) |
 | `comp_power_fund.h` | `PowerFund` | 基波电力分析 — 同步正交相关解调, 基波 Vrms/Irms/P/Q/THD (IEC 62053) |
 | `comp_power_goertzel.h` | `PowerGoertzel` | Goertzel 逐谐波频谱 (H1..H50) + THD — 整数周期窗口谐振器, 无需窗函数 |
 | `comp_power_calib.h` | `PowerCalibPhase` | 结果级校准 POD — 死区减法 (保符号对称死区), 即 TI NV 持久化结构体 |
 | `comp_power_event.h` | `PowerEvent` | 电压事件检测 — 暂降/暂升/中断状态机 + 事件计数/时长 (滞回 + 交叉检测) |
 | `comp_arc_detect.h` | `ArcDetect` | 光伏电弧检测 — FFT 频带能量 2 子带加权 + 单频干扰滤除 + dB 阈值判定 |
-| `comp_pid_nl.h` | `NlPidCfg`, `NlPidState` | 非线性 PID — P/I/D 各通路独立幂律整形 (α/δ/γ), 强鲁棒控制 |
 | `comp_tcm.h` | `TcmCapture` | 自动调参 TCM — 触发式阶跃响应捕获 (预触发环) + IAE/ISE/ITAE 准则 |
 | `comp_math.h` | — | 数学工具 — 唯一 π/2π float 常量源 (M_PI/M_2PI) + 硬件加速宏 (MATH_SQRT/MATH_ISQRT/MATH_ABS) + 限幅/绝对值/死区/线性映射 |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
@@ -481,7 +478,7 @@ App/app_main.c                — #include "xxxs.h", 使用句柄
 1. 复制需要的 `Component + Device + Module` 文件到目标工程
 2. 确保 `BSP/container_of.h` 和 `Components/comp_math.h` 加入 include path
 3. 修改 Device 文件中的硬件句柄以适配你的硬件
-4. 应用层通过全局句柄头文件（`pers.h` / `pwms.h` / `adcs.h` / `pids.h`）操作，不感知子类（comm 无句柄头 — 传输类由 App 直接持有实例，见 §8.2）
+4. 应用层通过全局句柄头文件（`pers.h` / `pwms.h` / `adcs.h` / `pids.h` / `plls.h`）操作，不感知子类（comm 无句柄头 — 传输类由 App 直接持有实例，见 §8.2）
 
 ### 方式二：基于父类继承新子类 — 需要新类型的设备
 
@@ -554,7 +551,7 @@ CommBase (契约身份: 名称 + 诊断 ops; 数据面不虚化)
 
 **依赖：** `BSP/container_of.h`, `Components/contract/comp_io.h`, `Components/contract/comp_error_code.h`, `Components/math/comp_math.h`；Gpio 全 HAL-free（走 BSP/bsp_gpio.h），其余类经 BSP/bsp_stm32_hal.h
 
-**位置编码器已迁 motor 域**（非 ADC 采样, 服务 CTX_FAST 闭环, 独立 Encoder 结构体持 Uart/Gpio/ADC 总线指针）→ 见 §8.6 Motor。
+**位置编码器已迁 motor 域**（非 ADC 采样, 服务 CTX_FAST 闭环, 独立 Encoder 结构体持 Uart/Gpio/ADC 总线指针）→ 见 §8.7 Motor。
 
 ### 8.3 Peripheral 子系统 — 非总线外设
 
@@ -583,31 +580,76 @@ OutputBase (ops + 名称)
 
 ### 8.4 PID 子系统 — 控制器
 
-**继承树：**
+**架构: 父类 `PidBase` + 子类 (继承方式二)。** 每个控制律是一个独立子类 (Devices/pid/`pid_<律>.{h,c}`)，`PidBase` 为第一成员 + 绑定各自 static ops，通过 `container_of` 下溯。上层统一持 `PidBase*`，`pid_compute()` 自动多态分派到子类并做限幅 + 抗饱和调度。执行器物理契约 (dt/out_min/out_max/anti_windup) 收在父类，子类只写自己的算法核心。
+
+**子类表:**
+| 子类 | 文件 | 控制律语义 | 独立依据 |
+|------|------|-----------|---------|
+| `PidStandard` | `pid_standard.{h,c}` | 串行 PID `Kp·(err+Ki·∫+Kd·d)` (Kp 乘式子外) | Kp 作用整个式子 |
+| `PidParallel` | `pid_parallel.{h,c}` | 并行 PID `K·(Kp·err+Ki·∫+Kd·d)` (Kp 只乘 P) | Kp 只乘 P 项 |
+| `PidDcl` | `pid_dcl.{h,c}` | 2-DOF(kr) + D 滤波 + 抗饱和 (DCL/grando 合并) | 同源 TI DCL |
+| `PidPi` | `pid_pi.{h,c}` | 纯 PI + 条件积分抗饱和 (原名 pid_solar, TI 太阳能来源) | 独立控制律 |
+| `PidReg4` | `pid_reg4.{h,c}` | 设定值滤波 + kff 前馈 + clamping 抗饱和 | TI pi_reg4 (buck/supercap/current_share 依赖) |
+| `PidReg3` | `pid_reg3.{h,c}` | 反计算抗饱和 + 位置回绕变体 | TI pid_reg3 |
+| `PidPR` | `pid_pr.{h,c}` | 理想比例谐振 (极点单位圆) | 独立控制律 |
+| `PidQPR` | `pid_qpr.{h,c}` | 准谐振 (极点左移有带宽) | 独立控制律 |
+| `PidP2PD` | `pid_p2pd.{h,c}` | 非线性平方增益调度 (循迹) | 独立非线性 |
+| `PidP` | `pid_p.{h,c}` | 纯比例 `Out=Kp·err` (MATLAB PID 只用 P 项) | 独立控制律 |
+| `PidI` | `pid_i.{h,c}` | 纯积分 `Out+=Ki·dt·err` (MATLAB PID 只用 I 项) | 独立控制律 |
+| `PidPd` | `pid_pd.{h,c}` | 比例+微分 `Kp·err+Kd·d(err)/dt` (MATLAB 只用 PD 项) | 独立控制律 |
+| `PidNL` | `pid_nl.{h,c}` | 非线性幂律整形 NL (DCL NLPID) | 独立非线性 |
+| `PidCascade` | `pid_cascade.{h,c}` | 组合: 编排 2×`PidBase*` 双环级联 | 编排器, 非控制律 |
+
+**句柄软总线:** `Devices/pid/pids.h` — App 层唯一入口，声明全局 `PidBase*` 句柄 (g_pid_vel/g_pid_ang/g_pid_current…)，由 `board_init` 绑定到具体子类。App 只 include `comp_pid.h` + `pids.h`。
+
+**合并说明 (2026-08-15):** dcl + grando → `pid_dcl`（同源 TI DCL, aw_mode 区分乘法冻结/回算）。standard 与 parallel / pr 与 qpr 保持独立（控制律真实差异）。回归父类+子类架构，撤销 stage-23 的扁平 `PidLinear` 与删 vtable 决策——多态与可注入性恢复，每个控制律独立可读。
+
+**依赖:** `Components/pid/comp_pid.h`（父类）+ `Components/math/comp_math.h`, `Components/dsp/comp_filter.h`, `BSP/container_of.h`。
+
+### 8.5 PLL 子系统 — 锁相环
+
+**架构: 父类 `PllBase` + 子类 (继承方式二)。** 父类契约承诺 **PD(鉴相) → LF(环路滤波) → VCO(压控振荡器)** 三环节，**一个输入帧 `PllInput` + 一个反馈输出 (锁相角 θ + 频率 fo)**。由于 LF（纯 PI, Tustin 离散化）与 VCO（角度积分 + 相位折叠）对 5 个子类完全一致，收进父类字段 + `pll_base_lf_vco()` 统一实现下沉复用；子类只实现 **PD（鉴相）**——把输入电压帧投影为锁相误差 `v_q`，再调基类 LF+VCO。
+
+```c
+PllBase (ops 虚表 + 配置 fn/delta_t/kp/ki/freq_lim + LF[PI] 状态 + VCO[θ/sin/cos/fo] 输出)
+├── PllSogi     — SOGI-QSG 正交 + Park 乘法投影鉴相 (单相高性能, 亦为 SSRF-SPLL 变体)
+├── PllSrf      — Park 旋转坐标乘法投影鉴相 (三相标准 SRF)
+├── PllNotch    — 纯乘积累积型检测器 v×cos + 陷波 2f0 (轻量单相)
+├── PllDdsrf    — 正负序双 dq 解耦 + Park 乘法投影 (三相不平衡鲁棒)
+└── PllSogiFll  — SOGI-QSG 正交 + Park 乘法投影 + FLL 频率自适 (弱电网/频率漂移)
 ```
-PidBase (虚表 + dt + out_min/out_max + anti_windup)
-├── PidStandard  — 标准位置式 PID + 变速积分 + 微分先行 + 钳位抗饱和
-├── PidCascade   — 级联 PID (外环 + 内环, 组合模式非继承)
-├── PidP2PD      — 点到点微分 PID (循迹专用)
-├── PidParallel  — 并联 PID (独立 P/I/D 通道)
-├── PidPR        — 比例谐振 (PR) 控制器
-└── PidQPR       — 准比例谐振 (QPR) 控制器
-```
 
-**PidOps 虚表（2 必须 + 1 可选）：** compute(必须) / reset(必须) / on_saturation(可选)
+**统一输入帧 `PllInput`:** 字段 `v`(单相) / `v_alpha`+`v_beta`(SRF 三相 Clarke 后) / `d_p/d_n/q_p/q_n`(DDSRF 正负序 dq)。统一入口 `pll_run(base, &in)` 返回 `fo`(Hz)，反馈输出经 `pll_get_theta/get_sin/get_cos/get_freq` 取用。
 
-**依赖：** `BSP/container_of.h`, `Components/comp_math.h`, `<math.h>`
+**归一接口 (inline 零开销):** `pll_run()` / `pll_reset()` / `pll_get_theta()` / `pll_get_sin()` / `pll_get_cos()` / `pll_get_freq()`；运行时调 PI `pll_base_set_pi()`。
 
-### 8.5 PWM 子系统 — 电力电子拓扑
+**句柄软总线:** `Devices/pll/plls.h` — App 层唯一入口，声明全局 `PllBase*` 句柄 (g_pll_grid/g_pll_single/g_pll_unbal…)，由 `board_init` 绑定到具体子类。
+
+**子类表:**
+| 子类 | 文件 (Devices/pll/) | 鉴相方式 (PD) | 输入帧字段 | 适用 |
+|------|--------------------|--------------|-----------|------|
+| `PllSogi` | `pll_sogi.{h,c}` | SOGI-QSG 正交 + Park 乘法投影 | `v` | 单相并网/UPS/APF (SSRF-SPLL 同构) |
+| `PllSrf` | `pll_srf.{h,c}` | Park 旋转坐标乘法投影 | `v_alpha`,`v_beta` | 三相并网/dq 定向 |
+| `PllNotch` | `pll_notch.{h,c}` | 纯乘积累积型 v×cos + 陷波 2f0 | `v` | 轻量单相 |
+| `PllDdsrf` | `pll_ddsrf.{h,c}` | 正负序双 dq 解耦 + Park 投影 | `d_p/d_n/q_p/q_n` | 三相不平衡鲁棒锁相 |
+| `PllSogiFll` | `pll_sogi_fll.{h,c}` | SOGI-QSG 正交 + Park 投影 + FLL | `v` (pu) | 弱电网/频率漂移 |
+
+**与旧算法关系 (已迁移):** 旧 `Components/dsp/comp_pll.h/c` (SogiPll/SrfPll/NotchPll/DdsrfPll) 与 `comp_sogi_fll.h` (SogiFll) 已删除，算法统一收进本域 5 子类 (PllSogi/PllSrf/PllNotch/PllDdsrf/PllSogiFll)。`PllNotch` 开启基类 `PllVcoPrecise` 精确离散振荡器，完整保留旧 Notch 精度优势。重构验证：新/旧 SOGI、Notch 在相同 fs/增益下行为一致（含其固有的边际稳定性特性）；SRF 精确锁定，SOGI-FLL 正确跟踪频率漂移。
+
+**依赖:** `Components/pll/comp_pll_base.h`（父类）+ `Components/math/comp_math.h`, `BSP/container_of.h`。
+
+### 8.6 PWM 子系统 — 电力电子拓扑
 
 **继承树：**
 ```
 PwmBase (虚表 + 模式 + 通道数 + 频率 + 占空比限幅 + 运行状态)
 ├── PwmBuckBoost   — 单路/多相 Buck/Boost (相位参数化 N=1..3, BUCK/BOOST/BUCKBOOST duty law 入 Device, 可选同步整流)
-├── PwmHalfBridge  — 半桥互补 PWM (中心对齐 + 死区)
 ├── PwmFullBridge  — 全桥移相 PWM (A/B 两腿 + 移相角控制功率)
+├── PwmHalfBridge  — 半桥互补 PWM (中心对齐 + 死区)
 ├── PwmInterleaved — 多相交错并联 PWM (N 相均匀错相 360°/N)
 ├── PwmResonant    — 谐振变频 PWM (50% 固定占空比 + 变频控制)
+├── PwmSepic       — 单开关变频 PWM (SEPIC/反激/正激, CCM/DCM/BCM 边界检测)
+├── PwmSpwm        — 正弦脉宽调制 PWM (单相N=2/三相N=3 逆变, 正弦调制波×三角载波, 可选三次谐波注入)
 ├── PwmSvpwm       — 六开关 SVPWM (三相逆变桥, 7段对称 + 5段 DPWM 断续调制)
 └── PwmWpt         — 无线充电线圈驱动 (单相半桥, 占空比下限 + VB_LIMIT_BY_DUTY + 频率分频)
 ```
@@ -618,7 +660,7 @@ PwmBase (虚表 + 模式 + 通道数 + 频率 + 占空比限幅 + 运行状态)
 
 **依赖：** `BSP/container_of.h`, `BSP/bsp_pwm.h`, `BSP/bsp_dsp.h`, `<math.h>`
 
-### 8.6 Motor 子系统 — 直流电机
+### 8.7 Motor 子系统 — 直流电机
 
 **继承树：**
 ```
@@ -745,7 +787,7 @@ float speed = esmo_get_speed(&obs);  // 电角速度 rad/s
 
 **依赖:** `<math.h>`, `<stdint.h>`, `comp_iqmath.h`
 
-### 8.7 StepMotor 子系统 — 步进电机
+### 8.8 StepMotor 子系统 — 步进电机
 
 > **来源:** 既有项目经验（三版步进电机对比 + Bug 清单）
 > **新增日期:** 2026-08-12
@@ -773,7 +815,7 @@ set_rate(必须) / set_steps(必须) / get_steps(必须) / set_ramp(必须) / se
 
 **依赖：** `Components/comp_step_motor.h/c`, `BSP/bsp_step_motor.h`, `BSP/container_of.h`, `Components/comp_math.h`
 
-### 8.8 独立 Component（无 Devices 层）
+### 8.9 独立 Component（无 Devices 层）
 
 > **来源:** controlSUITE 算法移植（Phase B/C, 2026-08-12）
 > 这些是纯算法 Component，没有对应 Devices 子类。全部 static inline，零 malloc。
@@ -891,47 +933,6 @@ int n = viterbi_traceback(&vt, decoded, sizeof(decoded));
 
 **依赖：** `<stdint.h>`, `<string.h>` (memset)
 
-#### comp_pi_reg4.h — 4 状态 PI 调节器
-
-> **来源:** TI controlSUITE motor_control/math_blocks/v4.3/pi_reg4.h, 扩展前馈 + 设定值滤波
-> **新增日期:** 2026-08-12
-
-**四路径算法:**
-1. **设定值滤波** — 一阶低通 (可选, sp_fc > 0 生效), 首帧直通防延迟; alpha = 2π·fc·dt / (1 + 2π·fc·dt)
-2. **P 路径** — Kp × (sp_filtered - fbk), 即时偏差响应
-3. **I 路径** — Σ Ki × dt × error, 含双抗积分饱和: 边界检测 (上一拍输出在限幅边界且误差方向朝外 → 冻结) + clamping 回退 (输出达限幅且积分项同向 → 回退积分)
-4. **FF 路径** — Kff × sp_raw (不经滤波器), 大范围跟踪加速
-
-**核心结构体:** `PiReg4Cfg` (配置: kp/ki/kff/dt/out_max/out_min/sp_fc) + `PiReg4State` (状态: integral/sp_filtered/last_output/initialized)
-
-**关键 API (全部 static inline):**
-- `pi_reg4_cfg_default()` → 返回安全默认配置 (Kp=1, Ki=0, Kff=0, sp_fc=0 直通)
-- `pi_reg4_init/reset(me)` — 初始化/重置积分器 (保留滤波状态)
-- `pi_reg4_run(me, cfg, setpoint, feedback)` — ISR 热路径, 返回限幅后输出
-
-**依赖:** `<stdbool.h>`
-
-#### comp_pid_reg3.h — 3 状态 PID 调节器 (反计算抗饱和)
-
-> **来源:** TI controlSUITE motor_control/math_blocks/v4.3/pid_reg3.h
-> **新增日期:** 2026-08-12
-
-**与 comp_pi_reg4 的区别:** reg3 用反计算 (back-calculation) 抗饱和 — 输出被限幅时把饱和差 `SatErr = Out - OutPreSat` 反馈回积分器, 从根上抑制 windup (pi_reg4 用冻结 + clamping)
-
-**两种变体:**
-1. **标准** `pid_reg3_run` (对应 TI `PID_REG3_MACRO`) — `Err = Ref-Fdb`; `Up = Kp×Err`; `Ui += Ki×Up + Kc×SatErr`; `Out = sat(Up+Ui)`; `SatErr = Out-OutPreSat`. 注意积分作用在**比例输出**而非误差
-2. **位置** `pid_reg3_run_pos` (对应 TI `PID_REG3_POS_MACRO`) — 误差在 ±0.5 处回绕 (角度归一化 [0,1] 跨越边界时取短路径), 增加微分 `Ud = Kd×(Up-Up1)`
-
-**核心结构体:** `PidReg3Cfg` (kp/ki/kc/kd/out_max/out_min) + `PidReg3State` (ref/fdb/err/up/ui/ud/up1/out_pre_sat/out/sat_err)
-
-**关键 API (全部 static inline):**
-- `pid_reg3_cfg_default()` — TI 默认值 Kp=1.3 / Ki=0.02 / Kc=0.5 / Kd=1.05 / ±1.0
-- `pid_reg3_init/reset(me)` — 初始化/重置积分器 (保留比例/微分状态)
-- `pid_reg3_run(me, cfg, ref, fdb)` — 标准变体
-- `pid_reg3_run_pos(me, cfg, ref, fdb)` — 位置变体
-
-**依赖:** 无 (纯 float)
-
 #### comp_impulse.h — 脉冲发生器
 
 > **来源:** TI controlSUITE motor_control/math_blocks/v4.3/impulse.h
@@ -958,20 +959,19 @@ BLDC 六步换相: 触发有效时换相步 0→1→...→5→0 循环 (电角�
 
 **依赖:** `<stdint.h>`
 
-#### comp_sogi_fll.h — SOGI 锁相环 FLL 变体 (频率锁定环)
+#### SOGI-FLL (已迁至 PllSogiFll) — SOGI 锁相环 FLL 变体 (频率锁定环)
 
-> **来源:** TI C2000Ware Digital Power SDK libraries/spll/include/spll_1ph_sogi_fll.h
-> **新增日期:** 2026-08-12
+> **起源:** TI C2000Ware Digital Power SDK libraries/spll/include/spll_1ph_sogi_fll.h
+> **迁移:** 旧 `comp_sogi_fll.h` 已删除, 算法收进 `Devices/pll/pll_sogi_fll.{h,c}` (`PllSogiFll`, PllBase 子类), 沿用旧 FLL 内核.
 
-与 comp_pll.h 的 SogiPll (SOGI-PLL, 固定标称频率) 的区别: 增加频率锁定环 (FLL), 用正交输出误差 `ef2 = −(u−u_α)·u_β·γ·dt` 驱动频率积分器 `x3`, `w_dash = wc + x3` 实时跟踪电网频率漂移, 并每拍用自适应频率重算 SOGI 双线性系数. 适用于弱电网/频率漂移场景 (柴油发电机、微电网、变速发电机接口).
+与 SOGI-PLL (固定标称频率) 的区别: 增加频率锁定环 (FLL), 用正交输出误差 `ef2 = −(u−u_α)·u_β·γ·dt` 驱动频率积分器 `x3`, `w_dash = wc + x3` 实时跟踪电网频率漂移, 并每拍用自适应频率重算 SOGI 双线性系数. 适用于弱电网/频率漂移场景 (柴油发电机、微电网、变速发电机接口).
 
-**关键 API (static inline):**
-- `sogi_fll_init(me, grid_freq_hz, isr_freq_hz, lpf_b0, lpf_b1, k, gamma)` — 配置 (k=SOGI 阻尼典型 √2, γ=FLL 收敛增益)
-- `sogi_fll_run(me, ac_value)` — 每采样周期调用, 输出 theta/cosine/sine/fo (锁相角/正交量/估计频率 Hz)
-- `sogi_fll_reset(me)` — 复位状态, 保留自适应频率 w_dash
-- `sogi_fll_coeff_calc(me)` — 初始化用系数计算 (清零 FLL 积分器); run() 内部走 `coeff_recalc` 不清零
+**关键入口 (新域):**
+- `pll_sogi_fll_init(me, grid_freq_hz, isr_freq_hz, lpf_b0, lpf_b1, k_damp, gamma)` — 配置 (k 阻尼典型 √2, γ FLL 收敛增益)
+- `pll_run(&me->base, &in)` — 每采样周期调用, 输出 theta/sin/cos/fo (锁相角/正交量/估计频率 Hz)
+- `pll_reset(&me->base)` — 复位状态, 保留自适应频率 w_dash
 
-**依赖:** `<math.h>`
+**依赖:** `Components/pll/comp_pll_base.h`
 
 #### comp_power_meas.h — 电力测量 (真有效值/功率/能量积分)
 
@@ -1083,21 +1083,6 @@ BLDC 六步换相: 触发有效时换相步 0→1→...→5→0 循环 (电角�
 
 **依赖:** `<math.h>`, `<stdint.h>`
 
-#### comp_pid_nl.h — 非线性 PID (各通路幂律整形)
-
-> **来源:** TI C2000Ware Digital Power SDK libraries/control/DCL/c28/include/DCL_NLPID.h
-> **新增日期:** 2026-08-12
-
-并行式非线性 PID: P/I/D 三通路各自经整形函数 `f(e) = sign(e)·|e|^α` (|e|>δ) 或 `e·γ` (|e|≤δ). α<1 小误差放大 (响应快), α>1 小误差衰减 (抗噪), γ 为线性区增益 — 用 `nl_pid_gamma_from_delta(α,δ) = δ^(α−1)` 保证两区边界连续. 积分带抗饱和 (i16 标志), 微分带二阶滤波 (c1/c2). 输入/输出归一化 ±1 (pu), 误差在 run 内折半预处理 (与 DCL 一致). 用途: 电源启动、负载突变等强鲁棒场景.
-
-**关键 API (static inline):**
-- `nl_pid_cfg_default()` / `nl_pid_init(me)` — 默认配置 (线性等价 kp=1) + 状态清零
-- `nl_pid_gamma_from_delta(α, δ)` — γ = δ^(α−1), 边界连续辅助
-- `nl_pid_set_filter_bw(cfg, fc, dt)` — 微分滤波器带宽双线性换算 c1/c2
-- `nl_pid_run(me, cfg, ref, fdb, clamp_flag)` — 单步, 返回限幅后输出
-
-**依赖:** `<math.h>`
-
 #### comp_tcm.h — 控制器自动调参 (触发式阶跃捕获 + 性能准则)
 
 > **来源:** TI C2000Ware Digital Power SDK libraries/control/DCL/c28/include/DCL_TCM.h
@@ -1187,7 +1172,7 @@ TCM (Tuning Criteria Module): armed 状态持续把误差写入预触发环形�
 
 **依赖:** `<stdint.h>`
 
-### 8.9 Module — 频响分析仪 (SFRA)
+### 8.10 Module — 频响分析仪 (SFRA)
 
 > **来源:** TI controlSUITE SFRA/v1.20/Float, 翻译为 HardC 纯C float 版本
 > **新增日期:** 2026-08-12
@@ -1218,7 +1203,7 @@ mod_sfra_collect(&sfra, output);
 
 **依赖：** `<math.h>` (sinf/cosf/sqrtf/atan2f/log10f/powf)
 
-### 8.10 Module — 快速电流环 (FCL)
+### 8.11 Module — 快速电流环 (FCL)
 
 > **来源:** TI controlSUITE motor_control/libs/FCL, 翻译为 HardC Module 层纯C float 版本
 > **新增日期:** 2026-08-12
@@ -1262,7 +1247,7 @@ fcl_run(&fcl, i_d, i_q, i_d_ref, i_q_ref, omega_e, v_bus);
 
 **依赖：** `<stdbool.h>`, `<stdint.h>`, `<math.h>`
 
-### 8.11 Module — PMBus 协议栈
+### 8.12 Module — PMBus 协议栈
 
 > **来源:** TI controlSUITE comms/PMBus, 翻译为 HardC 纯C 版本
 > **新增日期:** 2026-08-12
@@ -1325,7 +1310,7 @@ pmbus_init(&pmbus, pmbus_cmds, ARRAY_SIZE(pmbus_cmds), &power_ctrl);
 
 **依赖：** `<stdint.h>`, `<stdbool.h>`
 
-### 8.12 VCU 信道编码组件
+### 8.13 VCU 信道编码组件
 
 > **来源:** TI controlSUITE VCU 库 (v2_00/v2_10), 翻译为 HardC 纯C inline 版本
 > **新增日期:** 2026-08-12
@@ -1430,7 +1415,7 @@ pmbus_init(&pmbus, pmbus_cmds, ARRAY_SIZE(pmbus_cmds), &power_ctrl);
 
 **依赖:** `<stdint.h>`, `<stdbool.h>`
 
-### 8.13 Module — 超级电容功率管理 (SuperCap)
+### 8.14 Module — 超级电容功率管理 (SuperCap)
 
 > **来源:** WEILAI 三相并联超级电容 + HKUST 2024 F3 / 2025 PCM 历史版 (2026-08-14)
 > 对照 [docs/learning/SuperCap_Projects_Study_Report.md](docs/learning/SuperCap_Projects_Study_Report.md). 拓扑 `supercap_3ph.yaml`, `phases: 1..3`.
@@ -1455,7 +1440,7 @@ taper 近满压 → i_side = p_setpoint / va
 
 **关键 API:** mod_supercap_init/bind/sync_cfg/tick/start/stop/emergency/apply_tune; MAIN 侧 mod_supercap_set_referee_power (命令邮箱周期边界生效), mod_supercap_evt_pop (事件环排空)
 
-**依赖:** comp_power_stage/pi_reg4/filter/protection/math/error/ring/latch/mailbox + adc_dc_sampler + mod_current_share
+**依赖:** comp_power_stage/pid_reg4/filter/protection/math/error/ring/latch/mailbox + adc_dc_sampler + mod_current_share
 
 #### mod_current_share.h/c — 三相均流 (普通结构, ctx fast)
 
@@ -1465,7 +1450,7 @@ taper 近满压 → i_side = p_setpoint / va
 
 **关键 API:** mod_share_init/bind/tick/emergency/release; FAST 注入 set_voltages/set_paside/set_currents
 
-**依赖:** comp_pi_reg4/protection/math + pwm_buckboost
+**依赖:** pid_reg4/protection/math + pwm_buckboost
 
 #### mod_can_proto.h/c — 精简 CAN 协议 (ctx main, 新文件)
 

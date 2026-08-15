@@ -39,7 +39,7 @@ HardC/
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (64 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (70 条 + 经验模板), git 版本管理, 禁止回退 |
 | [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
 | [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) | 目录分组、MANIFEST 自描述、scaffold 骨架生成工具设计 |
 
@@ -141,6 +141,7 @@ find . -name '*.h' -o -name '*.c' | xargs clang-format -i
 
 # 静态分析
 clang-tidy Components/pid/comp_pid.h -- -I BSP -I Components -I Devices
+# (子类示例) clang-tidy Devices/pid/pid_standard.h -- -I BSP -I Components -I Devices
 ```
 
 ### 人类协作者的 Git 工作流
@@ -219,10 +220,13 @@ python YmaC/scaffold.py gen Config/projects/<project>.yaml
 ## 构建
 
 ```bash
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/starm-clang.cmake  # ARM Clang
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/gcc-arm-none-eabi.cmake  # GCC
-make -j$(nproc)
+# 拓扑级自检: scaffold gen 产出 build/gen/<project>/CMakeLists.txt（闭包全部 .c + include 路径）
+python YmaC/scaffold.py gen Config/projects/<project>.yaml
+cmake -S build/gen/<project> -B build/out/<project> -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake  # GCC
+# ARM Clang: -DCMAKE_TOOLCHAIN_FILE=cmake/starm-clang.cmake
+cmake --build build/out/<project> -j$(nproc)
+
+# 外部工程集成: include(${HARDC_DIR}/cmake/HardC.CMake)（YmaC cmake_integrate 注入外部工程 CMakeLists）
 ```
 
 ## BSP 硬件加速抽象层
@@ -252,8 +256,9 @@ make -j$(nproc)
 | ADC | `comp_adc.h/c` | 3 (Follower/DC/AC Sampler) | `adcs.h` |
 | COM | `comp_comm.h/c`（契约基类: 名称 + 诊断 ops self_check/reset, 数据面不虚化, 复用 comp_io.h IoCompletion + ErrorCode） | 5 (Uart/Spi/I2c/Can/Gpio) + 协议模块 (mod_comm/mod_cmd_dispatch/mod_serial_proto/mod_can_proto/mod_pmbus, 全跑 CTX_MAIN) | — |
 | Peripheral | `comp_output.h/c` (OutputBase 开关类) + `comp_sensor.h/c` (SensorBase 测量类) + `comp_mpu.h` (+ `comp_mpu_dmp.c`) | 8 (Led/Laser/Beep/Buzzer/Fan/Oled/Mpu6050/Ultrasonic; OLED 无基类, 设备=域基类+Gpio/PWM/UART 总线组合, 全 HAL-free) | `pers.h` |
-| PID | `comp_pid.h/c` + `comp_pi_reg4.h` (四态PI) + `comp_pid_reg3.h` (三态PID) | 9 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar) | `pids.h` |
-| PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 7 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM/WPT) | `pwms.h` |
+| PID | `comp_pid.h/c` (父类 PidBase + PidOps, 纯契约) + `comp_tcm.h` (自动调参) | 14 (Standard 串行 / Parallel 并行 / DCL 2-DOF+D滤波(含grando) / Pi 条件PI(原名 Solar) / Reg4 设定值滤波+前馈 / Reg3 反计算+位置wrap / PR 理想谐振 / QPR 准谐振 / P2PD 非线性 / P 纯比例 / I 纯积分 / PD 比例+微分 / NL 幂律整形 / Cascade 级联) | `pids.h` |
+| PLL | `comp_pll_base.h/c` (父类 PllBase + PllOps, PD→LF→VCO 三环节, 一个输入帧+一个反馈输出, LF(PI)+VCO 下沉基类) | 5 (Sogi SOGI正交+Park投影(含SSRF-SPLL) / Srf Park旋转投影 / Notch 纯乘法+陷波 / Ddsrf 正负序解耦 / SogiFll SOGI+FLL频率自适) | `plls.h` |
+| PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 9 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SEPIC/SPWM/SVPWM/WPT) | `pwms.h` |
 | Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) + 无感观测器家族 (SMO/eSMO/HFI/ACI/Resolver/SVGEN/CURMOD/VHz/速度角度/电压) | 2 (TIM + Encoder 位置编码器, 非 MotorBase 子类 — 独立结构体组合 Uart/Gpio/ADC 总线) | — |
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
 | Codec | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` / `comp_ask.h` | 7 (CRC/Checksum/Endian/Viterbi/Interleaver/RS/ASK) | — |
@@ -276,12 +281,9 @@ make -j$(nproc)
 | `comp_interleaver.h` | 交织器 — 块交织/解交织 (行列交织器), 地址生成 |
 | `comp_rs.h` | RS 编解码 — Reed-Solomon 纠错码, Berlekamp-Massey + Forney 算法 |
 | `comp_ask.h` | ASK/OOK 无线充电信令 — 12-bit 包 (req+功率+偶校验) 编解码 + 2000Hz 包络解码状态机 |
-| `comp_pi_reg4.h` | 四态 PI 调节器 — 带抗饱和的 PI 控制 (正常/上限/下限/跟踪) |
 | `comp_bldc_instaspin.h` | BLDC InstaSPIN — 无传感器 FOC, FAST 观测器 + 磁链/转矩估计 |
-| `comp_pid_reg3.h` | 三态 PID 调节器 — 反计算抗饱和 + 位置回绕变体 (微分作用在比例输出) |
 | `comp_impulse.h` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_mod6.h` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
-| `comp_sogi_fll.h` | 单相锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移跟踪 |
 | `comp_power_meas.h` | 电力测量 — 真有效值/有功/无功/视在功率/功率因数/相位角 + 能量脉冲积分 (残余结转) + 三相聚合 (总功率/线电压/电流矢量和) |
 | `comp_power_goertzel.h` | Goertzel 逐谐波频谱 (H1..H50) + THD — 整数周期窗口谐振器, 无需窗函数 |
 | `comp_power_calib.h` | 结果级校准 POD — 死区减法 (保符号对称死区), 即 TI NV 持久化结构体 |
@@ -310,4 +312,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-15 — comm 子系统重构 (阶段 0-4 完成): comm 瘦身为通信传输 (CommBase 契约身份 + 5 传输类 Uart/Spi/I2c/Can/Gpio, ComKey 删 "Key 就是 GPIO" + 去抖归 HMI, 复用 comp_io.h IoCompletion + ErrorCode, 砍 in_isr/BLOCK, 传输语义外部独立内部统一路由在 mod_hmi); 非总线设备全并入新 peripheral 域 (OutputBase/SensorBase/OLED 无基类 + 8 设备, 全 HAL-free 走 BSP); 编码器迁 motor 域 (独立结构体组合 Uart/Gpio/ADC, ctx: fast); mod_hmi 唯一路由决策点 (HmiPorts fan-out); 编码器 host 单测 12/12 + com_can 单测 7/7
+> **最后更新：** 2026-08-15 — PID 域重构完成: 回归父类 `PidBase` + 子类架构 (Components/pid/comp_pid.h/.c 契约 + Devices/pid 14 子类 standard/parallel/dcl/pi/reg4/reg3/pr/qpr/p2pd/p/i/pd/nl/cascade + pids.h 句柄软总线), 撤销 stage-23 的扁平 `PidLinear` (comp_pid_linear.h 删除, 算法经 n/reg4/stand 等子类保留), mod_buck/supercap/current_share 迁移到 pid_reg4 (aw=CLAMP 位级), FCL→pid_parallel, motor/balance/follower→PidBase*, 上层解反向依赖. 新增 PLL 域: 父类 PllBase(PD→LF→VCO) + 5 子类 (pll_sogi/srf/notch/ddsrf/sogi_fll) + plls.h, 旧 comp_pll.h/c + comp_sogi_fll.h 已删, 算法统一收进本域 (PllNotch 开启基类精确 VCO). 此前: comm 子系统重构 (阶段 0-4): comm 瘦身为通信传输 (CommBase 契约身份 + 5 传输类 Uart/Spi/I2c/Can/Gpio, ComKey 删 "Key 就是 GPIO" + 去抖归 HMI, 复用 comp_io.h IoCompletion + ErrorCode, 砍 in_isr/BLOCK, 传输语义外部独立内部统一路由在 mod_hmi); 非总线设备全并入新 peripheral 域 (OutputBase/SensorBase/OLED 无基类 + 8 设备, 全 HAL-free 走 BSP); 编码器迁 motor 域 (独立结构体组合 Uart/Gpio/ADC, ctx: fast); mod_hmi 唯一路由决策点 (HmiPorts fan-out); 编码器 host 单测 12/12 + com_can 单测 7/7

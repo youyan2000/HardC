@@ -27,12 +27,12 @@ BSP/ → Components/ → Devices/ → Module/ → App/
 | ADC | `comp_adc` | `adc_follower`, `adc_dc_sampler`, `adc_ac_sampler` | `mod_sampler` |
 | COM | `comp_comm` | `com_uart`, `com_spi`, `com_i2c`, `com_can`, `com_gpio` | `mod_comm`, `mod_cmd_dispatch`, `mod_serial_proto`, `mod_can_proto`, `mod_pmbus`, `mod_hmi` |
 | Peripheral | `comp_output`, `comp_sensor`, `comp_mpu` | `per_led`, `per_laser`, `per_beep`, `per_buzzer`, `per_fan`, `per_oled`, `per_mpu6050`, `per_ultrasonic` | — |
-| PID | `comp_pid` | `pid_standard`, `pid_cascade`, `pid_p2pd`, `pid_parallel`, `pid_pr`, `pid_qpr`, `pid_dcl`, `pid_grando`, `pid_solar` | — |
+| PID | `comp_pid`（父类 PidBase + PidOps 虚表）, `comp_tcm`（调参） | `pid_standard`, `pid_parallel`, `pid_dcl`, `pid_pi`, `pid_reg4`, `pid_reg3`, `pid_pr`, `pid_qpr`, `pid_p2pd`, `pid_p`, `pid_i`, `pid_pd`, `pid_nl`, `pid_cascade`, `pids.h` | — |
 | PWM | `comp_pwm` | `pwm_buckboost`, `pwm_half_bridge`, `pwm_full_bridge`, `pwm_interleaved`, `pwm_resonant`, `pwm_sepic`, `pwm_svpwm` | `mod_powerctrl` |
 | Power | `comp_power_stage` | — | `mod_buck`（PowerStage 示例，YmaC 拓扑选择器入口） |
 | Motor | `comp_motor`, `comp_step_motor` | `motor_tim`, `motor_step`, `motor_encoder` | `mod_motor`, `mod_turn`, `mod_follower`, `mod_balance`, `mod_fcl_ctrl` |
 | VCU | `comp_complex`, `comp_crc`, `comp_viterbi`, `comp_interleaver`, `comp_rs` | — | `mod_pmbus` |
-| DSP | `comp_dlog`, `comp_vector`, `comp_pi_reg4`, `comp_bldc_instaspin` | — | `mod_sfra` |
+| DSP | `comp_dlog`, `comp_vector`, `comp_bldc_instaspin` | — | `mod_sfra` |
 
 独立 Component（单头文件，无 Devices 层）覆盖 PFC、坐标变换、PLL、MPPT、滤波器、FFT 窗函数、信号发生器、速度估计等算法领域，详见 [agent.md](agent.md) 独立 Component 表。
 
@@ -55,10 +55,9 @@ python YmaC/yaml_config_builder.py          # Linux
 # 3. 或纯 CLI：从工程 YAML 生成骨架（无 GUI 环境）
 python YmaC/scaffold.py gen Config/projects/<name>.yaml
 
-# 4. 手动编译（注入 App 后）
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/starm-clang.cmake
-make -j$(nproc)
+# 4. 手动编译（注入 App 后）— 工程级 CMakeLists 由 scaffold 生成（含闭包全部 .c + include 路径）
+cmake -S build/gen/<name> -B build/out/<name> -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake
+cmake --build build/out/<name> -j
 ```
 
 选完拓扑后只剩两件事：在 App 层接外部 I/O（采样输入 / PWM 输出 / HMI），然后用 YmaC 调参（离线 Tab1 注入 + 运行时 Tab3 0xFB 串口帧）。
@@ -74,7 +73,7 @@ make -j$(nproc)
 |------|------|
 | [CLAUDE.md](CLAUDE.md) | 共同约定：Git 约定、代码生成规则、App 架构（人与 AI 共读） |
 | [agent.md](agent.md) | AI 行为准则 + OOP 方法论：虚函数表、继承/多态、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 64 条调参教训 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 70 条调参教训 |
 | [docs/debug/history/](docs/debug/history/README.md) | 项目完整历程 |
 | [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
 | [docs/learning/](docs/learning/) | 学习总结资料（外部项目学习报告 + 架构原则） |
