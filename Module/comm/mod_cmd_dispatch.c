@@ -71,7 +71,7 @@ bool cmd_dispatch_execute(CmdDispatcher *me, CarCmd cmd, const uint8_t *payload,
 //   KEY3(button=2): 单击/长按→CMD_STOP  双击→CMD_OLED_PAGE
 //   KEY4(button=3): 单击→CMD_TASK_3   双击→CMD_TURN_180      长按→CMD_CAL_START
 //
-// event: 0=单击(KEY_EVENT_CLICK) 1=双击(KEY_EVENT_DOUBLE) 2=长按(KEY_EVENT_LONG)
+// event: 0=单击(HMI_KEY_EVENT_CLICK) 1=双击(HMI_KEY_EVENT_DOUBLE) 2=长按(HMI_KEY_EVENT_LONG)
 CarCmd cmd_from_button(uint8_t button_id, uint8_t event) {
   // 用户在此填充实际按键映射
   (void)button_id;

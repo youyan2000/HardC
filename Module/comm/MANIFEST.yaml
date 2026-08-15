@@ -13,5 +13,4 @@ files:
   - mod_pmbus.c
   - mod_can_proto.h
   - mod_can_proto.c
-depends:
-  - components/comm
+depends: []
