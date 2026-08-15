@@ -1,11 +1,11 @@
-#ifndef PER_LASER_H
-#define PER_LASER_H
-
 // 激光笔外设 — OutputBase 子类, GPIO 开关
 //
 // 迁移: 原 Devices/gpo/gpo_laser.c (阶段2 peripheral 域收编)
 // 改造: GPIO_TypeDef*/pin + active_low → BspGpioPin (HAL-free)
 // 安全优先: 初始化默认关闭, 绝不允许意外点亮
+
+#ifndef PER_LASER_H
+#define PER_LASER_H
 
 #include "comp_output.h"
 #include "bsp_gpio.h"

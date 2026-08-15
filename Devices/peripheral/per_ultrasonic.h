@@ -1,6 +1,3 @@
-#ifndef PER_ULTRASONIC_H
-#define PER_ULTRASONIC_H
-
 // 超声波测距外设 — SensorBase 子类, UART 总线轮询模型
 //
 // 迁移: 原 Devices/comm/_legacy/com_ultrasonic.h/c (阶段2 peripheral 域收编)
@@ -11,6 +8,9 @@
 //
 // 测量模型: 不绑 SensorBase.measure (轮询型设备), 由 App 在 CTX_MAIN 每 10ms 调
 //   per_ultrasonic_tick (触发/超时) + per_ultrasonic_process (收环组帧).
+
+#ifndef PER_ULTRASONIC_H
+#define PER_ULTRASONIC_H
 
 #include "comp_sensor.h"
 #include "com_uart.h"

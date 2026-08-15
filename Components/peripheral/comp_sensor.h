@@ -1,6 +1,3 @@
-#ifndef COMP_SENSOR_H
-#define COMP_SENSOR_H
-
 // SensorBase — 测量设备契约身份基类
 //
 // 定位: 与 CommBase (comp_comm.h) 平行的测量契约, 只承载 实例名 + 生命周期 + 测量能力.
@@ -9,6 +6,9 @@
 //
 // measure: 触发一次测量并返回 ErrorCode (ERR_OK=0 成功). 未绑定 → ERR_NOT_SUPPORT.
 //   轮询型设备 (如超声波 tick/process 模型) 可不绑 measure, 由 App 直接轮询子类 API.
+
+#ifndef COMP_SENSOR_H
+#define COMP_SENSOR_H
 
 #include <stdint.h>
 #include "comp_error_code.h"

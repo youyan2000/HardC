@@ -1,6 +1,3 @@
-#ifndef COMP_OUTPUT_H
-#define COMP_OUTPUT_H
-
 // OutputBase — 通用输出抽象基类
 //
 // 来源: 原 Components/gpo/comp_gpo.h 改造 (阶段2 peripheral 域收编)
@@ -9,6 +6,9 @@
 //
 // 能力: on/off (必须) + set (可选, 开关型 NULL) + toggle (可选, NULL 退化 on)
 // 子类: per_led/per_laser/per_beep (GPIO 开关) + per_buzzer/per_fan (TIM PWM), Devices/peripheral
+
+#ifndef COMP_OUTPUT_H
+#define COMP_OUTPUT_H
 
 #include <stdint.h>
 

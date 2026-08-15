@@ -1,6 +1,3 @@
-#ifndef DEV_PERS_H
-#define DEV_PERS_H
-
 // 全局外设句柄 — 替代已删的 gpos.h (Devices/gpo)
 // board_init.c 绑定到具体子类实例, Module/App 层通过此文件访问 (值包含, 零 malloc)
 //
@@ -9,6 +6,9 @@
 //   output_on(&g_led_board->base);       // 打开板载 LED
 //   output_set(&g_buzzer->base, 500);    // 设置蜂鸣器占空比
 //   per_ultrasonic_tick(g_ultrasonic);   // 每 10ms 触发测距
+
+#ifndef DEV_PERS_H
+#define DEV_PERS_H
 
 #include "comp_output.h"
 #include "per_oled.h"

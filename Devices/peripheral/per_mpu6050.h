@@ -1,6 +1,3 @@
-#ifndef PER_MPU6050_H
-#define PER_MPU6050_H
-
 // MPU6050 六轴 IMU 外设 — SensorBase 子类 + 全局传输接缝
 //
 // 迁移: 原 Devices/sensor/mpu6050.c + mpu6050.h (阶段2 peripheral 域收编)
@@ -11,6 +8,9 @@
 //
 // 总线: Iic* (HW 或 SW 模式, 7-bit 从机地址 0x68 由 App 配总线注入)
 // 改造: 原 mpu6050.c 的软件 I2C bit-bang (i2c_*) 已删除, 底层统一走 Iic 类.
+
+#ifndef PER_MPU6050_H
+#define PER_MPU6050_H
 
 #include "comp_sensor.h"
 #include "com_i2c.h"

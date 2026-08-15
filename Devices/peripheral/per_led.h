@@ -1,11 +1,11 @@
-#ifndef PER_LED_H
-#define PER_LED_H
-
 // LED 外设 — OutputBase 子类, GPIO 开关
 //
 // 迁移: 原 Devices/gpo/gpo_led.c (阶段2 peripheral 域收编)
 // 改造: GPIO_TypeDef*/pin + active_low → BspGpioPin (HAL-free, bsp_gpio 无 active-low 反转)
 // 简化: 原双模 (GPIO/PWM 调光) 只保留 GPIO 开关, PWM 调光能力并入 per_buzzer/per_fan 形态
+
+#ifndef PER_LED_H
+#define PER_LED_H
 
 #include "comp_output.h"
 #include "bsp_gpio.h"

@@ -1,3 +1,8 @@
+// 输出设备基类实现 —— OutputBase 父类的构造/析构
+//
+// 提供统一基类契约: 绑定名称 + inited, 派生设备 (per_led/laser/beep/buzzer/fan) 继承
+// 并绑定各自 static ops (on/off/toggle/set 等)
+
 #include "comp_output.h"
 #include <stddef.h>
 

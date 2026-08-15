@@ -1,6 +1,3 @@
-#ifndef PER_OLED_H
-#define PER_OLED_H
-
 // OLED (SSD1306) 外设 — 3 线软件 SPI bit-bang
 //
 // 迁移: 原 Devices/sensor/oled.c + oled.h (阶段2 peripheral 域收编)
@@ -12,6 +9,9 @@
 //
 // 显存布局: buf[p*128+c] — 页 p (0..7) × 列 c (0..127), 共 128*8 = 1024 字节
 // 无基类: OLED 是"显示"语义, 不属 SensorBase 测量 / OutputBase 开关, 独立成类.
+
+#ifndef PER_OLED_H
+#define PER_OLED_H
 
 #include <stdint.h>
 #include "bsp_gpio.h"

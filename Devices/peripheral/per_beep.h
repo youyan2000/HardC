@@ -1,11 +1,11 @@
-#ifndef PER_BEEP_H
-#define PER_BEEP_H
-
 // 有源蜂鸣器外设 — OutputBase 子类, GPIO 开关
 //
 // 迁移: 原 Devices/gpo/gpo_beep.c (阶段2 peripheral 域收编)
 // 改造: GPIO_TypeDef*/pin + active_low → BspGpioPin (HAL-free)
 // 语义: 通电就叫, 断电就停 (无需 PWM), 典型用途: 按键反馈音 (100ms 短鸣)
+
+#ifndef PER_BEEP_H
+#define PER_BEEP_H
 
 #include "comp_output.h"
 #include "bsp_gpio.h"

@@ -1,3 +1,7 @@
+// 传感器基类实现 —— SensorBase 父类的构造/析构
+//
+// 提供统一基类契约: 绑定名称 + 测量回调, 派生设备 (per_*) 继承并绑定自身 ops
+
 #include "comp_sensor.h"
 #include <stddef.h>
 

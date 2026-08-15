@@ -1,11 +1,11 @@
-#ifndef PER_FAN_H
-#define PER_FAN_H
-
 // 风扇外设 — OutputBase 子类, TIM PWM
 //
 // 迁移: 原 Devices/gpo/gpo_fan.c (阶段2 peripheral 域收编)
 // 已知偏离: 保留 TIM_HandleTypeDef* (bsp_pwm 后端未覆盖 F1 通用 TIM PWM), 记录待收编
 // 语义: on/off 启停 PWM 输出, set 调占空比 (转速)
+
+#ifndef PER_FAN_H
+#define PER_FAN_H
 
 #include "comp_output.h"
 #include "bsp_stm32_hal.h"
