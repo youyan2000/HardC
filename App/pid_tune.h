@@ -1,6 +1,3 @@
-#ifndef PID_TUNE_H
-#define PID_TUNE_H
-
 // 串口 PID 调参协议 —— 独立模块, 不依赖任何 PID 类型
 //
 // 使用模式 (参考 0xFB 协议):
@@ -13,6 +10,9 @@
 //
 //   主循环 (BackgroundTask):
 //     pid_tune_respond();                // 校验通过 → 调回调 → printf 响应
+
+#ifndef PID_TUNE_H
+#define PID_TUNE_H
 
 #include <stdint.h>
 #include <stdbool.h>
