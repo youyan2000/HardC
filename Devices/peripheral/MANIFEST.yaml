@@ -1,0 +1,31 @@
+id: devices/peripheral
+layer: Devices
+description: 外设设备实现 — Oled/Mpu6050/Ultrasonic 传感器 + 五个输出 (Led/Laser/Beep/Buzzer/Fan)
+files:
+  - pers.h
+  - per_oled.h
+  - per_oled.c
+  - per_mpu6050.h
+  - per_mpu6050.c
+  - per_ultrasonic.h
+  - per_ultrasonic.c
+  - per_led.h
+  - per_led.c
+  - per_laser.h
+  - per_laser.c
+  - per_beep.h
+  - per_beep.c
+  - per_buzzer.h
+  - per_buzzer.c
+  - per_fan.h
+  - per_fan.c
+depends:
+  - components/peripheral
+  - components/comm
+  - components/contract
+  - components/codec
+  - devices/comm
+  - BSP/bsp_gpio.h
+  - BSP/bsp_delay.h
+  - BSP/container_of.h
+  - BSP/bsp_stm32_hal.h
