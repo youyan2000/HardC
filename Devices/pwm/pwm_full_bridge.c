@@ -3,16 +3,18 @@
 // 两腿 H 桥 + 移相控制: A腿和 B腿各自独立输出互补 PWM,
 // 功率传输由两腿之间的相位差控制: P ∝ sin(phase_deg)
 //
-// 移相实现: B腿的定时器复位触发源链接到 A腿的相位参考点 (CMP2),
-// 而非 Master Period. 这样 B腿波形相对于 A腿整体偏移.
+// 移相实现: B腿相对 A腿滞后 phase_deg. F334 无 TIMACMP (Timer A 的 CMP 不能复位其它定时器),
+// 跨定时器相位走主定时器 CMP 锚点 (bsp_set_phase_shift): B腿 RSTxR = MSTCMPn,
+// MCMPnR = MPER×deg/360; phase 0 腿不接线, 随 Master PERIOD 自由运行即 0° 基准.
+// 同定时器 CMP2xR = period×deg/360 为 CMP2 移相值 (calc_phase_cmp2, 与 BSP 写寄存器同式).
 //
-// A腿: 复位 = Master PERIOD  (0° 参考)
-// B腿: 复位 = A腿 CMP2       (phase_deg 偏移)
+// A腿: 复位 = Master PERIOD     (0° 参考, 自由运行)
+// B腿: 复位 = MSTCMPn (deg/360) (滞后 phase_deg)
 //
 // 占空比公式 (中心对齐):
 //   CMP1 = period/2 * (1 - duty)   — 上升沿 (SET)
 //   CMP3 = period/2 * (1 + duty)   — 下降沿 (RESET)
-//   CMP2 = period/2                — 中心参考 (也是 B腿的复位触发源)
+//   CMP2 = period * phase_deg/360  — 移相值 (bsp_set_phase_shift 写 CMP2xR 同式)
 
 #include "pwm_full_bridge.h"
 #include "container_of.h"
@@ -22,16 +24,25 @@
 // ======== 内部辅助 ========
 
 static inline float clamp_duty(float duty) {
-  if (duty < 0.0f) return 0.0f;
-  if (duty > 1.0f) return 1.0f;
+  if (duty < 0.0f)
+    return 0.0f;
+  if (duty > 1.0f)
+    return 1.0f;
   return duty;
 }
 
 static inline float clamp_phase(float deg) {
   // 移相角限于 0~180 度
-  if (deg < 0.0f)   return 0.0f;
-  if (deg > 180.0f) return 180.0f;
+  if (deg < 0.0f)
+    return 0.0f;
+  if (deg > 180.0f)
+    return 180.0f;
   return deg;
+}
+
+static inline uint32_t calc_phase_cmp2(uint32_t period, float phase_deg) {
+  // 与 bsp_set_phase_shift (bsp_hrtim.c) 写 CMP2xR 同公式: period×deg/360
+  return (uint32_t) ((float) period * phase_deg / 360.0f);
 }
 
 // ======== ops 实现 ========
@@ -41,29 +52,29 @@ static void fb_start(PwmBase *base) {
 
   // === A腿配置 ===
   BspPwmTimerConfig tcfg_a = {
-    .timer         = me->timer_a,
-    .period        = me->period,
-    .output_mask   = me->output_mask_a,
-    .complementary = true,
-    .cmp1          = (me->period / 2) * (1.0f - me->duty_a),
-    .cmp2          = me->period / 2,                                 // 中心点
-    .cmp3          = (me->period / 2) * (1.0f + me->duty_a),
-    .deadtime_rising  = me->deadtime_ns,
-    .deadtime_falling = me->deadtime_ns,
+      .timer = me->timer_a,
+      .period = me->period,
+      .output_mask = me->output_mask_a,
+      .complementary = true,
+      .cmp1 = (me->period / 2) * (1.0f - me->duty_a),
+      .cmp2 = me->period / 2,  // 中心点
+      .cmp3 = (me->period / 2) * (1.0f + me->duty_a),
+      .deadtime_rising = me->deadtime_ns,
+      .deadtime_falling = me->deadtime_ns,
   };
   bsp_config_timer(me->bsp_cfg.handle, &tcfg_a);
 
   // === B腿配置 (CMP2 偏移实现移相) ===
   BspPwmTimerConfig tcfg_b = {
-    .timer         = me->timer_b,
-    .period        = me->period,
-    .output_mask   = me->output_mask_b,
-    .complementary = true,
-    .cmp1          = (me->period / 2) * (1.0f - me->duty_b),
-    .cmp2          = calc_phase_cmp2(me->period, me->phase_deg),  // 移相
-    .cmp3          = (me->period / 2) * (1.0f + me->duty_b),
-    .deadtime_rising  = me->deadtime_ns,
-    .deadtime_falling = me->deadtime_ns,
+      .timer = me->timer_b,
+      .period = me->period,
+      .output_mask = me->output_mask_b,
+      .complementary = true,
+      .cmp1 = (me->period / 2) * (1.0f - me->duty_b),
+      .cmp2 = calc_phase_cmp2(me->period, me->phase_deg),  // 移相
+      .cmp3 = (me->period / 2) * (1.0f + me->duty_b),
+      .deadtime_rising = me->deadtime_ns,
+      .deadtime_falling = me->deadtime_ns,
   };
   bsp_config_timer(me->bsp_cfg.handle, &tcfg_b);
 
@@ -75,7 +86,7 @@ static void fb_start(PwmBase *base) {
 
 static void fb_stop(PwmBase *base) {
   PwmFullBridge *me = container_of(base, PwmFullBridge, base);
-  uint32_t timer_mask  = (1u << me->timer_a) | (1u << me->timer_b);
+  uint32_t timer_mask = (1u << me->timer_a) | (1u << me->timer_b);
   uint32_t output_mask = me->output_mask_a | me->output_mask_b;
   bsp_stop(me->bsp_cfg.handle, timer_mask, output_mask);
 }
@@ -102,7 +113,8 @@ static void fb_set_duty(PwmBase *base, uint8_t ch, float duty) {
 
 static void fb_set_freq(PwmBase *base, uint32_t freq_hz) {
   PwmFullBridge *me = container_of(base, PwmFullBridge, base);
-  if (freq_hz == 0) return;  // 防除零
+  if (freq_hz == 0)
+    return;  // 防除零
   me->period = me->bsp_cfg.clk_hz / freq_hz;
 
   // 两腿同频
@@ -120,15 +132,13 @@ static void fb_set_freq(PwmBase *base, uint32_t freq_hz) {
 static void fb_set_deadtime(PwmBase *base, uint32_t deadtime_ns) {
   PwmFullBridge *me = container_of(base, PwmFullBridge, base);
   me->deadtime_ns = deadtime_ns;
-  bsp_update_deadtime(me->bsp_cfg.handle, me->timer_a,
-                          deadtime_ns, deadtime_ns);
-  bsp_update_deadtime(me->bsp_cfg.handle, me->timer_b,
-                          deadtime_ns, deadtime_ns);
+  bsp_update_deadtime(me->bsp_cfg.handle, me->timer_a, deadtime_ns, deadtime_ns);
+  bsp_update_deadtime(me->bsp_cfg.handle, me->timer_b, deadtime_ns, deadtime_ns);
 }
 
 // 移相: 更新 B腿相对于 A腿的相位
 static void fb_set_phase(PwmBase *base, uint8_t ch, float phase_deg) {
-  (void)ch;
+  (void) ch;
   PwmFullBridge *me = container_of(base, PwmFullBridge, base);
   me->phase_deg = clamp_phase(phase_deg);
 
@@ -145,52 +155,51 @@ static void fb_emergency_stop(PwmBase *base) {
 
 // ======== 虚表 ========
 static const PwmOps fb_ops = {
-  .start          = fb_start,
-  .stop           = fb_stop,
-  .set_duty       = fb_set_duty,
-  .set_freq       = fb_set_freq,
-  .set_deadtime   = fb_set_deadtime,
-  .set_phase      = fb_set_phase,
-  .emergency_stop = fb_emergency_stop,
+    .start = fb_start,
+    .stop = fb_stop,
+    .set_duty = fb_set_duty,
+    .set_freq = fb_set_freq,
+    .set_deadtime = fb_set_deadtime,
+    .set_phase = fb_set_phase,
+    .emergency_stop = fb_emergency_stop,
 };
 
 // ======== 构造 ========
 
-void pwm_fb_init(PwmFullBridge *me, uint32_t freq_hz, uint32_t deadtime_ns,
-                 BspPwmTimer timer_a, BspPwmTimer timer_b,
+void pwm_fb_init(PwmFullBridge *me, uint32_t freq_hz, uint32_t deadtime_ns, BspPwmTimer timer_a, BspPwmTimer timer_b,
                  uint32_t out_mask_a, uint32_t out_mask_b) {
   pwm_base_init(&me->base);
 
-  me->bsp_cfg.handle       = NULL;
+  me->bsp_cfg.handle = NULL;
   me->bsp_cfg.clk_hz = 0;
-  me->bsp_cfg.use_dll      = false;
+  me->bsp_cfg.use_dll = false;
 
-  me->timer_a       = timer_a;
-  me->timer_b       = timer_b;
+  me->timer_a = timer_a;
+  me->timer_b = timer_b;
   me->output_mask_a = out_mask_a;
   me->output_mask_b = out_mask_b;
 
-  me->duty_a       = 0.0f;
-  me->duty_b       = 0.0f;
-  me->deadtime_ns  = deadtime_ns;
-  me->phase_deg    = 0.0f;
-  me->period       = 0;
+  me->duty_a = 0.0f;
+  me->duty_b = 0.0f;
+  me->deadtime_ns = deadtime_ns;
+  me->phase_deg = 0.0f;
+  me->period = 0;
   me->center_aligned = true;
 
   // PSFB ZVS 自适应默认值
-  me->zvs_adaptive_enable   = false;
-  me->zvs_min_deadtime_ns   = 100.0f;   // 最小死区 100ns
-  me->zvs_max_deadtime_ns   = 500.0f;   // 最大死区 500ns
-  me->zvs_current_threshold = 1.0f;     // 1A 阈值
-  me->duty_loss_comp        = 0.0f;     // 无补偿
-  me->zvs_state             = PsfbZvsState_Unknown;
-  me->zvs_margin_pu         = 1.0f;     // 初始裕量充足
+  me->zvs_adaptive_enable = false;
+  me->zvs_min_deadtime_ns = 100.0f;  // 最小死区 100ns
+  me->zvs_max_deadtime_ns = 500.0f;  // 最大死区 500ns
+  me->zvs_current_threshold = 1.0f;  // 1A 阈值
+  me->duty_loss_comp = 0.0f;         // 无补偿
+  me->zvs_state = PsfbZvsState_Unknown;
+  me->zvs_margin_pu = 1.0f;  // 初始裕量充足
 
-  me->base.mode     = PwmMode_FullBridge;
-  me->base.num_ch   = 2;               // A腿 + B腿 = 2 个可独立控制通道
+  me->base.mode = PwmMode_FullBridge;
+  me->base.num_ch = 2;  // A腿 + B腿 = 2 个可独立控制通道
   me->base.duty_min = 0.0f;
-  me->base.duty_max = 0.95f;           // 全桥需留死区裕量
-  me->base.ops      = &fb_ops;
+  me->base.duty_max = 0.95f;  // 全桥需留死区裕量
+  me->base.ops = &fb_ops;
 
   bsp_init(&me->bsp_cfg);
   fb_set_freq(&me->base, freq_hz);
@@ -228,8 +237,7 @@ void pwm_fb_set_deadtime(PwmFullBridge *me, uint32_t deadtime_ns) {
 
 // ======== PSFB ZVS 自适应 (来源: TI controlSUITE PWMDRV_PSFB) ========
 
-void pwm_fb_set_zvs_adaptive(PwmFullBridge *me, bool enable,
-                              float min_ns, float max_ns, float i_threshold_a) {
+void pwm_fb_set_zvs_adaptive(PwmFullBridge *me, bool enable, float min_ns, float max_ns, float i_threshold_a) {
   me->zvs_adaptive_enable = enable;
   me->zvs_min_deadtime_ns = min_ns;
   me->zvs_max_deadtime_ns = max_ns;
@@ -237,8 +245,10 @@ void pwm_fb_set_zvs_adaptive(PwmFullBridge *me, bool enable,
 }
 
 void pwm_fb_set_duty_loss_comp(PwmFullBridge *me, float comp) {
-  if (comp < 0.0f) comp = 0.0f;
-  if (comp > 0.2f) comp = 0.2f;
+  if (comp < 0.0f)
+    comp = 0.0f;
+  if (comp > 0.2f)
+    comp = 0.2f;
   me->duty_loss_comp = comp;
 }
 
@@ -267,8 +277,10 @@ float pwm_fb_adaptive_deadtime(PwmFullBridge *me, float i_load) {
   float dt_final = dt_basic + margin_corr;
 
   // 硬件限幅
-  if (dt_final < me->zvs_min_deadtime_ns) dt_final = me->zvs_min_deadtime_ns;
-  if (dt_final > me->zvs_max_deadtime_ns) dt_final = me->zvs_max_deadtime_ns;
+  if (dt_final < me->zvs_min_deadtime_ns)
+    dt_final = me->zvs_min_deadtime_ns;
+  if (dt_final > me->zvs_max_deadtime_ns)
+    dt_final = me->zvs_max_deadtime_ns;
 
   return dt_final;
 }
@@ -283,18 +295,16 @@ float pwm_fb_adaptive_deadtime(PwmFullBridge *me, float i_load) {
 //   超前腿: i_leading > I_ZVS_min → ZVS OK, 否则丢失
 //   滞后腿: i_lagging > I_ZVS_min → ZVS OK, 否则丢失
 //   I_ZVS_min = sqrt(Coss * Vbus^2 / L_resonant) (典型 ~0.5A)
-PsfbZvsState pwm_fb_zvs_margin_update(PwmFullBridge *me,
-                                       float i_leading, float i_lagging,
-                                       float vds_sample) {
+PsfbZvsState pwm_fb_zvs_margin_update(PwmFullBridge *me, float i_leading, float i_lagging, float vds_sample) {
   // 最小 ZVS 电流 (粗略估计, 典型值 0.3~0.8A)
   float i_zvs_min = me->zvs_current_threshold * 0.5f;
 
   // 电流幅值判断
   float i_lead_abs = (i_leading < 0.0f) ? -i_leading : i_leading;
-  float i_lag_abs  = (i_lagging < 0.0f) ? -i_lagging : i_lagging;
+  float i_lag_abs = (i_lagging < 0.0f) ? -i_lagging : i_lagging;
 
   bool lead_zvs = (i_lead_abs > i_zvs_min);
-  bool lag_zvs  = (i_lag_abs > i_zvs_min);
+  bool lag_zvs = (i_lag_abs > i_zvs_min);
 
   // Vds 硬开关检测 (硬件比较器/ADC)
   bool vds_ok = (vds_sample < 10.0f);  // Vds < 10V → ZVS 实现
@@ -314,7 +324,8 @@ PsfbZvsState pwm_fb_zvs_margin_update(PwmFullBridge *me,
     // 滞后腿丢失: 轻载时典型问题
     // 裕量 = 电流相对于 ZVS 最小电流的比例
     float margin = i_lag_abs / i_zvs_min;
-    if (margin > 1.0f) margin = 1.0f;
+    if (margin > 1.0f)
+      margin = 1.0f;
     me->zvs_margin_pu = margin * 0.8f;  // 上限 0.8 (滞后腿天然裕量较低)
   }
 
@@ -346,9 +357,12 @@ float pwm_fb_duty_loss_compensate(PwmFullBridge *me, float duty_target, float i_
 
   // 硬件限幅 (含补偿后, 不能超过物理最大值)
   float d_max = me->base.duty_max - d_loss;  // 确保补偿后不超过 duty_max
-  if (d_max < me->base.duty_min) d_max = me->base.duty_min;
-  if (d_cmd > me->base.duty_max) d_cmd = me->base.duty_max;
-  if (d_cmd < me->base.duty_min) d_cmd = me->base.duty_min;
+  if (d_max < me->base.duty_min)
+    d_max = me->base.duty_min;
+  if (d_cmd > me->base.duty_max)
+    d_cmd = me->base.duty_max;
+  if (d_cmd < me->base.duty_min)
+    d_cmd = me->base.duty_min;
 
   return d_cmd;
 }
