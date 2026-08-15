@@ -30,6 +30,7 @@ typedef enum {
   PwmMode_FullBridge,    // 全桥移相模式
   PwmMode_Interleaved,   // 交错并联模式
   PwmMode_Resonant,      // 谐振变频模式
+  PwmMode_SinePwm,       // 正弦脉宽调制 (SPWM, 单相/三相逆变)
 } PwmMode;
 
 // ======== 前向声明 ========

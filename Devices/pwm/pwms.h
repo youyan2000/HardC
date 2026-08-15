@@ -24,6 +24,7 @@ extern PwmBase *g_half_bridge;   // 半桥 PWM
 extern PwmBase *g_full_bridge;   // 全桥移相 PWM
 extern PwmBase *g_interleaved;   // 交错并联 PWM
 extern PwmBase *g_resonant;      // 谐振变频 PWM
+extern PwmBase *g_spwm;          // 正弦脉宽调制 PWM (单相/三相逆变)
 
 // 用户扩展句柄
 extern PwmBase *g_user0;
