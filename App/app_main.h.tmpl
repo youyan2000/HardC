@@ -40,13 +40,13 @@
 // --- COM-OOP: 通信 ---
 #include "comp_comm.h"
 // #include "com_uart.h"      // 按需 (Device 层含硬 HAL include, 见下文)
-// #include "com_key.h"       // 按需 (Device 层含硬 HAL include)
-// #include "com_oled.h"      // 按需取消注释
-// #include "com_mpu6050.h"
-// #include "com_ultrasonic.h"
+// #include "com_gpio.h"       // 按需 (按键=GPIO 输入, 去抖在 HMI)
+// #include "com_can.h"       // 按需 (CAN 传输, supercap_3ph 拓扑启用; 含硬 HAL include bsp_stm32_hal.h)
+// #include "pers.h"          // 外设全局句柄 (peripheral 域)
 #include "mod_comm.h"          // 帧协议解析
 #include "mod_cmd_dispatch.h"  // 统一命令分发
 #include "mod_serial_proto.h"  // 调试串口协议
+#include "mod_can_proto.h"  // CAN 协议 (超级电容遥测; HMI 输出端口)
 
 // --- Motor-OOP: 电机控制 Module ---
 #include "mod_motor.h"     // MotApp 电机状态机
@@ -62,11 +62,13 @@
 #include "pid_parallel.h"  // 可选
 
 // --- Power-OOP: 电源控制 (PowerStage 集成模块示例: Buck 降压) ---
-#include "comp_power_stage.h"  // PowerStage 父类接口 (ops 虚表 + 状态机)
-#include "comp_pi_reg4.h"      // PiReg4 四态 PI (双环值包含)
-#include "pwm_buckboost.h"     // PwmBuckBoost — 单路 Buck/Boost PWM
-#include "adc_dc_sampler.h"    // AdcDcSampler — 直流采样器
-#include "mod_buck.h"          // ModBuck — Buck 降压控制模块
+#include "comp_power_stage.h"   // PowerStage 父类接口 (ops 虚表 + 状态机)
+#include "comp_pi_reg4.h"       // PiReg4 四态 PI (双环值包含)
+#include "pwm_buckboost.h"      // PwmBuckBoost — 单路 Buck/Boost PWM
+#include "adc_dc_sampler.h"     // AdcDcSampler — 直流采样器
+#include "mod_buck.h"           // ModBuck — Buck 降压控制模块
+#include "mod_current_share.h"  // ModCurrentShare — 三相均流 (supercap_3ph 拓扑)
+#include "mod_supercap.h"       // ModSuperCap — 超级电容功率控制 (supercap_3ph 拓扑)
 // #include "mod_powerctrl.h"   // 状态机模板 (按需)
 
 // --- ADHardC: 采样 ---
@@ -75,10 +77,13 @@
 // #include "adc_dc_sampler.h"
 // #include "mod_sampler.h"
 
-// --- GPO-OOP: 通用输出 ---
-// #include "comp_gpo.h"
-// #include "gpo_led.h"
-// #include "gpo_buzzer.h"
+// --- Peripheral-OOP: 外设 (显示/IMU/测距/输出) ---
+// #include "per_oled.h"        // OLED 显示 (无基类)
+// #include "per_mpu6050.h"     // MPU6050 六轴 (SensorBase)
+// #include "per_ultrasonic.h"  // 超声波测距 (SensorBase, UART 轮询)
+// #include "comp_output.h"     // OutputBase 输出基类
+// #include "per_led.h"         // LED (GPIO 开关)
+// #include "per_buzzer.h"      // 无源蜂鸣器 (TIM PWM)
 
 // --- Motor (根级 Components/Devices) ---
 // #include "comp_motor.h"
@@ -108,17 +113,22 @@ typedef struct {
   float csc_vlimit;  // 级联 PID 内环限幅 (vlimit=20 刚好, LESSONS.md #13)
 } MotorCfg;
 
-// 示例: 电源参数组 (Buck 降压 — PowerStage 集成模块)
-// PowerCfg 直接 typedef 自 ModBuckCfg, 保证与模块运行配置零漂移,
-// 可注入字段 = ModBuckCfg 全部字段 (含 0xFB 槽位 0-9 与非槽位通道/限幅)
+// --- Power-OOP: 电源配置类型 (CFGSTRUCT 锚点 — 由生成器按拓扑重定义) ---
+// PowerCfg = 拓扑主控制模块 (control_module) 的 cfg 类型:
+//   Buck (默认):          typedef ModBuckCfg PowerCfg;
+//   supercap_3ph:         typedef ModSuperCapCfg PowerCfg;  (gen_app 替换锚点内容)
+// ProjectConfig 内 .power 字段类型跟随此 typedef.
+/* YMAC CFGSTRUCT BEGIN */
 typedef ModBuckCfg PowerCfg;
+/* YMAC CFGSTRUCT END */
 
 // 项目总配置 — 聚合所有子系统的可调参数
 typedef struct {
   MotorCfg mot_a;
   MotorCfg mot_b;
   // FollowerCfg follower;    // 循迹参数 (按需)
-  PowerCfg power;  // 电源: Buck 降压 (PowerStage 演示)
+  PowerCfg power;     // 电源: 主控制模块配置 (类型 = CFGSTRUCT 锚点定义)
+  ModShareCfg share;  // 均流配置 (supercap_3ph 拓扑使用; Buck 默认未用, 零初始化无副作用)
   // AdcCfg     adc;           // ADC 采样参数 (按需)
   // StepMotorCfg step;         // 步进电机参数 (按需)
   // BalCfg     bal;            // 球板平衡参数 (按需)
@@ -138,13 +148,13 @@ extern ProjectConfig g_cfg;
 typedef struct {
   // --- Device 实例 (值包含) ---
   // Uart       drv_uart;         // USART1 调试串口
-  // ComKey     drv_key1;         // 按键1
+  // Gpio       drv_key1;         // 按键1 (GPIO 输入, 去抖在 HMI)
   // PidStandard drv_vel_a;       // 电机A 速度环
   // PidStandard drv_pos_a;       // 电机A 位置环
   // PidCascade drv_csc_a;        // 电机A 级联
   // PidP2PD   drv_fpid;          // 循迹 P2PD
   // MotTim    drv_mtr_a;         // 电机A 驱动
-  // Mpu6050   drv_mpu;           // 陀螺仪
+  // PerMpu6050 drv_mpu;          // 陀螺仪 (peripheral 域)
   // AdcFollower drv_follower;    // 红外循迹
 
   // --- Module 实例 (值包含) ---
@@ -153,6 +163,10 @@ typedef struct {
   // Follower  flw;               // 循迹状态机 (mod_follower.h)
   // TurnCtrl  turn;              // 转弯状态机 (mod_turn.h)
   // Hmi       hmi;               // 人机交互 (mod_hmi.h)
+  //   // 输出端口路由 (board_init 绑定): hmi_port_bind(&hmi.out.can, &can_proto, cb_can);
+  //   //                             hmi_port_bind(&hmi.out.uart, &serial_proto, cb_uart);
+  //   //                             hmi_port_bind(&hmi.out.led, &g_led_board, cb_led);
+  //   // 端口回调在 hmi_tick (控制 ISR/CTX_FAST) 执行, 必须非阻塞 — 只入队/置标志, 真实 I/O 由 BackgroundTask
   // ModBalance bal;              // 球板平衡 (mod_balance.h, 按需)
   // StepMotor step_x;            // X轴步进电机 (motor_step.h, 按需)
   // StepMotor step_y;            // Y轴步进电机 (motor_step.h, 按需)
@@ -161,13 +175,17 @@ typedef struct {
   ModComm mod_comm;            // 帧协议解析
   CmdDispatcher cmd_dispatch;  // 命令分发器
   SerialProto serial_proto;    // 串口协议
+  ModCanProto can_proto;       // CAN 协议 (HMI 输出端口, 按需)
 
+  /* YMAC ROOT BEGIN */
+  // ==== 由 ymac_cfg 生成: 电源域根成员 (默认 = Buck 参考; supercap_3ph 替换为 share/supercap/drv_can) ====
   // --- Power-OOP: 电力电子设备 (Buck 演示) ---
   PwmBuckBoost drv_buck_pwm;  // Buck 降压 PWM 设备 (pwm_buckboost.h)
   AdcDcSampler drv_dc_adc;    // 直流采样器 (adc_dc_sampler.h, vout/iout/vin)
 
   // --- Power-OOP: 电源控制 Module (PowerStage 集成模式示例) ---
   ModBuck buck;  // Buck 降压控制 (mod_buck.h)
+  /* YMAC ROOT END */
 
   // --- 诊断 ---
   Heartbeat heartbeat;      // 心跳看门狗 (comp_protection.h): FAST 内 Heartbeat_Tick, SLOW 内 Heartbeat_Check

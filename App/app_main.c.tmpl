@@ -18,12 +18,70 @@
 #include "app_main.h"
 #include "pid_tune.h"  // 0xFB 串口调参 (槽位 → PowerCfg)
 
-// 0xFB 调参回调 (定义见文件末尾, 槽位映射与 Config/topologies/buck.yaml 一致)
+// 0xFB 调参回调 (定义见文件末尾; 槽位映射委托给 MODULES 锚点 modules_apply_tune, 拓扑 params.slot 驱动)
 static void on_pid_tune_received(const float coef[10]);
 
 // ======== 全局实例 ========
 ProjectConfig g_cfg;
 ProjectRoot g_root;
+
+// ======== 模块接线 (生成域) ========
+// 由 ymac_cfg 生成: 拓扑 (control_module + params.slot + share/comm 段) 驱动的模块接线.
+// 本块默认内容 = Buck 参考 (与 Config/topologies/buck.yaml 一致, 原样搬自旧硬编码);
+// gen_app 按拓扑整块替换 /* YMAC MODULES BEGIN/END */ 之间内容.
+// 契约见 docs/debug/build-toolchain-design.md §4.8.
+/* YMAC MODULES BEGIN */
+// ==== 生成: 拓扑=buck (参考) ====
+static void modules_apply_config(void) {
+  // 电源: Buck 降压 (PowerStage 集成模块)
+  // PowerCfg == ModBuckCfg (typedef), 整体拷贝零漂移, 再派生 PI 限幅
+  g_root.buck.cfg = g_cfg.power;
+  mod_buck_sync_cfg(&g_root.buck);
+}
+
+static void modules_board_init(void) {
+  // ModBuck 实例化: 绑定 ops + 存 cfg (来自 g_cfg.power) + 初始化双环 PI
+  // (init 内部已 sync_cfg 派生 PI 限幅; 末尾 apply_config() 会再同步一次)
+  mod_buck_init(&g_root.buck, &g_cfg.power);
+  // 指针注入: ModBuck 具体设备 + PowerStage 基类 pwm/adc (base 首成员下溯)
+  mod_buck_bind(&g_root.buck, &g_root.drv_buck_pwm, &g_root.drv_dc_adc);
+  // 0xFB 串口调参: 槽位 0-9 → g_cfg.power → apply_config (见 modules_apply_tune)
+  pid_tune_set_apply_cb(on_pid_tune_received);
+}
+
+static void modules_fast_tick(void) {
+  // 电源控制: Buck 降压 (采样→双环→PWM, 内部状态机, 未 start 时为空转)
+  mod_buck_tick(&g_root.buck);
+}
+
+static void modules_slow_tick(void) {
+  // Buck 参考: 无 SLOW 钩子 (supercap_3ph 生成器注入 1kHz 遥测发送)
+}
+
+static void modules_main_loop(void) {
+  // Buck 参考: 无 MAIN 钩子 (supercap_3ph 生成器注入 mod_can_poll + 事件排空)
+}
+
+static void modules_apply_tune(const float coef[10]) {
+  // 槽位 0-9 → g_cfg.power (同步回配置, 下次 YAML 注入保持一致)
+  // 槽位映射与 Config/topologies/buck.yaml params.slot 一致:
+  //   [0]=vref [1]=iref [2]=pid_v.kp [3]=pid_v.ki
+  //   [4]=pid_i.kp [5]=pid_i.ki [6]=ff_weight
+  //   [7]=ovp [8]=ocp [9]=soft_start_step
+  g_cfg.power.vref = coef[0];
+  g_cfg.power.iref = coef[1];
+  g_cfg.power.pid_v.kp = coef[2];
+  g_cfg.power.pid_v.ki = coef[3];
+  g_cfg.power.pid_i.kp = coef[4];
+  g_cfg.power.pid_i.ki = coef[5];
+  g_cfg.power.ff_weight = coef[6];
+  g_cfg.power.ovp = coef[7];
+  g_cfg.power.ocp = coef[8];
+  g_cfg.power.soft_start_step = coef[9];
+  // 同步到运行时实例 (整体拷贝 + PI 限幅派生)
+  apply_config();
+}
+/* YMAC MODULES END */
 
 // ======== 1. YAML 配置注入目标 ========
 // YmaC 工具扫描 conf/*.yaml → 渲染 C designated initializer → 注入到下方标记之间
@@ -106,10 +164,8 @@ void apply_config(void) {
   // pid_p2pd_set_kp (&g_root.drv_fpid, g_cfg.follower.pid.kp);
   // pid_p2pd_set_kd (&g_root.drv_fpid, g_cfg.follower.pid.kd);
 
-  // 电源: Buck 降压 (PowerStage 集成模块)
-  // PowerCfg == ModBuckCfg (typedef), 整体拷贝零漂移, 再派生 PI 限幅
-  g_root.buck.cfg = g_cfg.power;
-  mod_buck_sync_cfg(&g_root.buck);
+  // 模块接线: cfg → 运行时实例同步 (拓扑驱动, 见 MODULES 锚点)
+  modules_apply_config();
 
   // 原则: 只拷参数, 不拷状态 (积分器/历史误差不清零)
 }
@@ -140,14 +196,8 @@ void board_init(void) {
   // === 此处由 ymac_cfg 注入 BSP/外设绑定 (HRTIM + ADC + 通道注释) ===
   /* YMAC BSP END */
 
-  // ModBuck 实例化: 绑定 ops + 存 cfg (来自 g_cfg.power) + 初始化双环 PI
-  // (init 内部已 sync_cfg 派生 PI 限幅; 末尾 apply_config() 会再同步一次)
-  mod_buck_init(&g_root.buck, &g_cfg.power);
-  // 指针注入: ModBuck 具体设备 + PowerStage 基类 pwm/adc (base 首成员下溯)
-  mod_buck_bind(&g_root.buck, &g_root.drv_buck_pwm, &g_root.drv_dc_adc);
-
-  // 0xFB 串口调参: 槽位 0-9 → g_cfg.power → apply_config (见文件末尾)
-  pid_tune_set_apply_cb(on_pid_tune_received);
+  // --- 3b3. 模块接线 (拓扑驱动, 见 MODULES 锚点): 模块 init/bind + 0xFB 回调注册 ---
+  modules_board_init();
 
   // --- 3c. 通用 Module (每个项目都需要) ---
 
@@ -187,9 +237,8 @@ void App_OnControlTick(void) {
   // === 第2层: HMI + 命令分发 ===
   // hmi_tick(&g_root.hmi);
 
-  // === 第3层: 控制算法 (状态机 tick) ===
-  // 电源控制: Buck 降压 (采样→双环→PWM, 内部状态机, 未 start 时为空转)
-  mod_buck_tick(&g_root.buck);
+  // === 第3层: 控制算法 (状态机 tick) — 模块接线 (拓扑驱动, 见 MODULES 锚点) ===
+  modules_fast_tick();
   // 电机 tick (按需): motapp_tick(&g_root.mtr_a);  follower_tick(&g_root.flw);
 
   // === 第4层: 执行器输出 ===
@@ -202,6 +251,9 @@ void App_OnControlTick(void) {
 // 监控定时器 ISR — CTX_SLOW (软实时): 慢保护去抖 / 状态聚合 / 心跳喂狗 / 软关断判决
 // 与 FAST 分离: 这里允许轻微抖动, 但确认故障即置关断; 硬件封波 (PWM emergency_stop / HW FAULT 引脚) 负责及时
 void App_OnSlowTick(void) {
+  // === 0. 模块慢周期钩子 (拓扑驱动, 见 MODULES 锚点) ===
+  modules_slow_tick();
+
   // === 1. 心跳 → 喂狗 (监控三件套: comp_protection.h Heartbeat + bsp_watchdog.h) ===
   // FAST ISR 已调用: Heartbeat_Tick(&g_root.heartbeat);            // 快通道心跳++
   // 死锁判定: 连续 N tick 心跳不变 → 停止喂狗 → IWDG 硬件复位
@@ -233,6 +285,7 @@ void App_OnUartRx(uint8_t byte) {
 
 // GPIO 外部中断 ISR — 编码器脉冲 + MPU6050 INT + 按键
 void App_OnGpioExti(uint16_t pin) {
+  (void) pin;  // ISR 钩子签名固定 (CubeMX EXTI 回调); 模板示例未用
   // LESSONS.md #11: EXTI 回调中必须判断来源
   // if (pin == MPU6050_INT_Pin) {
   //   mpu6050_drv_dmp_isr(&g_root.drv_mpu);
@@ -246,6 +299,9 @@ void App_OnGpioExti(uint16_t pin) {
 // LESSONS.md #6: 不要在 ISR 中发串口 — 所有 printf/软件I2C/OLED 在此完成
 
 void BackgroundTask(void) {
+  // --- 模块主循环钩子 (拓扑驱动, 见 MODULES 锚点): CAN 轮询 / 事件排空 ---
+  modules_main_loop();
+
   // --- 软件 I2C (阻塞操作, 不能放 ISR) ---
   // mpu6050_drv_poll_gyro_z(&g_root.drv_mpu);
 
@@ -280,24 +336,9 @@ void BackgroundTask(void) {
 // ======== 6. 串口 0xFB PID 调参回调 ========
 //
 // 收到合法调参帧后由 pid_tune_respond() 在主循环中回调 (非 ISR).
-// 槽位映射 (与 Config/topologies/buck.yaml params.slot 完全一致):
-//   [0]=vref  [1]=iref  [2]=pid_v.kp  [3]=pid_v.ki
-//   [4]=pid_i.kp  [5]=pid_i.ki  [6]=ff_weight
-//   [7]=ovp  [8]=ocp  [9]=soft_start_step
+// 槽位映射委托给 MODULES 锚点的 modules_apply_tune() — 由拓扑 params.slot 生成.
 
 static void on_pid_tune_received(const float coef[10]) {
-  // 槽位 0-9 → g_cfg.power (同步回配置, 下次 YAML 注入保持一致)
-  g_cfg.power.vref = coef[0];
-  g_cfg.power.iref = coef[1];
-  g_cfg.power.pid_v.kp = coef[2];
-  g_cfg.power.pid_v.ki = coef[3];
-  g_cfg.power.pid_i.kp = coef[4];
-  g_cfg.power.pid_i.ki = coef[5];
-  g_cfg.power.ff_weight = coef[6];
-  g_cfg.power.ovp = coef[7];
-  g_cfg.power.ocp = coef[8];
-  g_cfg.power.soft_start_step = coef[9];
-
-  // 同步到运行时实例 (整体拷贝 + PI 限幅派生)
-  apply_config();
+  // 模块接线委托: 槽位映射在 MODULES 锚点 (拓扑 params.slot 驱动, 见 modules_apply_tune)
+  modules_apply_tune(coef);
 }
