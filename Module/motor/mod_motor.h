@@ -1,6 +1,3 @@
-#ifndef MOD_MOTOR_H
-#define MOD_MOTOR_H
-
 // 电机应用模块 — MotApp (Module 层)
 // 单电机状态机: IDLE / SPD(速度控制) / POS(位置控制) / SP(级联位置+速度)
 // app_motor.h/c (MotApp 3-ops 虚表模式)
@@ -15,6 +12,9 @@
 //   1. motapp_init(&me, motor, pid_vel, pid_pos, cascade);
 //   2. ISR 每 tick: motapp_tick(&me);
 //   3. 命令: motapp_set_speed(&me, 50) / motapp_set_position(&me, 1000)
+
+#ifndef MOD_MOTOR_H
+#define MOD_MOTOR_H
 
 #include <stdint.h>
 #include <stdbool.h>

@@ -1,6 +1,3 @@
-#ifndef MOTOR_STEP_H
-#define MOTOR_STEP_H
-
 // 步进电机驱动 — StepMotorBase 的子类 (Devices 层)
 //       + motor_step.h/c (OOP 版, BSP 函数指针注入)
 //       + user_step_motor.h/c (原始 4 相 A→C→B→D)
@@ -15,6 +12,9 @@
 //   - ✅ P1#4: ctx 参数被实际使用, 不丢弃
 //   - ✅ P2#5: ramp_step 加减速占位
 //   - ✅ P2#7: pos_limit_lo/hi 软限位
+
+#ifndef MOTOR_STEP_H
+#define MOTOR_STEP_H
 
 #include "comp_step_motor.h"
 #include "bsp_step_motor.h"

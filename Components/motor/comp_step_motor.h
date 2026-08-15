@@ -1,6 +1,3 @@
-#ifndef COMP_STEP_MOTOR_H
-#define COMP_STEP_MOTOR_H
-
 // 步进电机平台层 — 抽象基类 (独立于 DC 电机 comp_motor)
 // 参考: motor_step.h/c (OOP 版步进电机)
 //
@@ -17,6 +14,9 @@
 //   - ✅ 加减速占位 (Bug #5)
 //   - ✅ 失步检测占位 (Bug #9)
 //   - ✅ 重启不会错相, 初始化时 phase=0 (Bug #8)
+
+#ifndef COMP_STEP_MOTOR_H
+#define COMP_STEP_MOTOR_H
 
 #include <stdint.h>
 #include <stdbool.h>

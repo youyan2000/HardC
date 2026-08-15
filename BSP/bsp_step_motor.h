@@ -1,6 +1,3 @@
-#ifndef BSP_STEP_MOTOR_H
-#define BSP_STEP_MOTOR_H
-
 // BSP 层步进电机硬件抽象
 //
 // 设计原则:
@@ -11,6 +8,9 @@
 //
 // ctx 模式: 每个函数接收 void *ctx → 强转为平台相关结构体 → 访问端口/定时器
 // 允许多实例: 不同轴用不同的 ctx, 同一个函数指针可以服务多个电机
+
+#ifndef BSP_STEP_MOTOR_H
+#define BSP_STEP_MOTOR_H
 
 #include <stdint.h>
 #include <stdbool.h>

@@ -1,6 +1,3 @@
-#ifndef MOD_TURN_H
-#define MOD_TURN_H
-
 // 转弯控制模块 — TurnCtrl (Module 层)
 // TurnCtrl (编码器 tick 计数转弯)
 //       + LESSONS #3 (不用陀螺仪, 用 tick 计数)
@@ -16,6 +13,9 @@
 //   1. turnctrl_init(&me, mtr_a, mtr_b);
 //   2. 触发: turnctrl_execute(&me, TURN_90_LEFT, pwm);
 //   3. ISR 每 tick: turnctrl_tick(&me);
+
+#ifndef MOD_TURN_H
+#define MOD_TURN_H
 
 #include <stdint.h>
 #include <stdbool.h>
