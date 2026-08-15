@@ -1,6 +1,3 @@
-#ifndef COMP_PWM_H
-#define COMP_PWM_H
-
 // PWM 平台层 —— 电力电子 PWM 输出抽象基类
 //
 // 基类只定义电力电子 PWM 的共性操作:
@@ -17,6 +14,9 @@
 //   STM32 HRTIM (G4/H7/F3) — 高精度定时器, ~184ps 分辨率
 //   TI C2000 ePWM          — 增强型 PWM, ~150ps 分辨率
 // 本层 (Components + Devices) 不看寄存器, 只管理 PWM 参数和拓扑逻辑
+
+#ifndef COMP_PWM_H
+#define COMP_PWM_H
 
 #include <stdint.h>
 #include <stdbool.h>

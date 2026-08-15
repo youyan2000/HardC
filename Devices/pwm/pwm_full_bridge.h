@@ -1,6 +1,3 @@
-#ifndef PWM_FULL_BRIDGE_H
-#define PWM_FULL_BRIDGE_H
-
 // 全桥移相 PWM —— PwmBase 子类
 //
 // 拓扑: 两个半桥 (A腿 + B腿) 组成 H 桥, 通过调节两腿之间的相位差控制功率传输
@@ -21,6 +18,9 @@
 // 输出:
 //   ch=0 → A腿 (TA1/TA2, 互补+死区)
 //   ch=1 → B腿 (TB1/TB2, 互补+死区)
+
+#ifndef PWM_FULL_BRIDGE_H
+#define PWM_FULL_BRIDGE_H
 
 #include "comp_pwm.h"
 #include "bsp_pwm.h"

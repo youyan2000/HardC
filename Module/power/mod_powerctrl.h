@@ -1,6 +1,3 @@
-#ifndef MOD_POWERCTRL_H
-#define MOD_POWERCTRL_H
-
 // 功率控制状态机模板 — PWM-OOP Module 层
 // Module 层状态机模式
 //
@@ -20,6 +17,9 @@
 //     Component_PID    pid_v;      // 值包含具体 PID
 //     LowPassFilter    filt;       // 值包含滤波器
 //   } MyPowerCtrl;
+
+#ifndef MOD_POWERCTRL_H
+#define MOD_POWERCTRL_H
 
 #include <stdbool.h>
 #include <stdint.h>

@@ -1,6 +1,3 @@
-#ifndef PWM_HALF_BRIDGE_H
-#define PWM_HALF_BRIDGE_H
-
 // 半桥 PWM —— PwmBase 子类
 //
 // 拓扑: 两个开关管串联 (上管+下管), 互补导通, 死区插入防止直通
@@ -14,6 +11,9 @@
 // 输出波形: 中心对齐 (上下计数), CMP1=上升沿, CMP3=下降沿
 //   - TA1 (高侧): SET=CMP1, RESET=CMP3
 //   - TA2 (低侧): 死区单元自动生成互补波形
+
+#ifndef PWM_HALF_BRIDGE_H
+#define PWM_HALF_BRIDGE_H
 
 #include "comp_pwm.h"
 #include "bsp_pwm.h"

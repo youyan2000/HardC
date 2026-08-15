@@ -1,6 +1,3 @@
-#ifndef PWM_RESONANT_H
-#define PWM_RESONANT_H
-
 // 谐振变换器变频 PWM —— PwmBase 子类
 //
 // 拓扑: 通过调节开关频率改变谐振腔阻抗, 从而控制输出电压/功率
@@ -23,6 +20,9 @@
 // 变频约束:
 //   频率范围受限于: 谐振腔参数 (Lr, Cr, Lm) + 磁性元件饱和 + 开关损耗
 //   典型范围: 50kHz ~ 300kHz (LLC), 100kHz ~ 500kHz (高频 GaN)
+
+#ifndef PWM_RESONANT_H
+#define PWM_RESONANT_H
 
 #include "comp_pwm.h"
 #include "bsp_pwm.h"

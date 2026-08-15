@@ -1,6 +1,3 @@
-#ifndef PWM_WPT_H
-#define PWM_WPT_H
-
 // 无线充电 (WPT) 线圈驱动 —— PwmBase 子类, 单相半桥
 //
 // 拓扑: E 侧半桥 (互补对输出, 如 BSP_OUT_TIMER_E_PAIR), 中心对齐对称双沿,
@@ -17,6 +14,9 @@
 // 接线契约: init 不写硬件 (bsp_cfg.handle 为 NULL). App 注入 handle + clk_hz
 //   后调 pwm_wpt_set_freq → set_duty → start. 字段集固定, 不增 deadtime 字段:
 //   start 时死区=0, App 需要死区时在 start 后调 set_deadtime (直接转发 BSP).
+
+#ifndef PWM_WPT_H
+#define PWM_WPT_H
 
 #include "comp_pwm.h"
 #include "bsp_pwm.h"

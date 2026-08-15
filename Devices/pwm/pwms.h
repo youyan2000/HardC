@@ -1,6 +1,3 @@
-#ifndef PWMS_H
-#define PWMS_H
-
 // PWM 全局句柄 —— 应用层只需要 include 这一个头文件
 //
 // 使用方式:
@@ -11,6 +8,9 @@
 //   pwm_emergency_stop(g_buck_main);
 //
 // 句柄在 board_init.c 中绑定具体子类实例
+
+#ifndef PWMS_H
+#define PWMS_H
 
 #include "comp_pwm.h"
 

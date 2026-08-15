@@ -1,6 +1,3 @@
-#ifndef PWM_BUCKBOOST_H
-#define PWM_BUCKBOOST_H
-
 // 四开关 Buck/Boost PWM —— PwmBase 子类, 相位参数化 (phases: 1..3)
 //
 // 从第一天支持单相与三相: 一路相位 = 两个互补腿 (A 腿 + B 腿) = 两个 HRTIM 定时器.
@@ -21,6 +18,9 @@
 //
 // 接线契约: init 阶段不写硬件 (bsp_cfg.handle 为 NULL). App 在 board_init 注入
 //   handle + clk_hz 后调用 pwm_bb_set_freq, 再 set_mode/ratio/alpha, 最后 start.
+
+#ifndef PWM_BUCKBOOST_H
+#define PWM_BUCKBOOST_H
 
 #include "comp_pwm.h"
 #include "bsp_pwm.h"

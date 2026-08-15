@@ -1,6 +1,3 @@
-#ifndef PWM_INTERLEAVED_H
-#define PWM_INTERLEAVED_H
-
 // 多相交错并联 PWM —— PwmBase 子类
 //
 // 拓扑: N 个相同的半桥并联, 每相之间均匀错相 360°/N, 降低输入/输出电流纹波
@@ -23,6 +20,9 @@
 //   ...
 //
 // 均流: 各相占空比独立可调, 上层 PID 计算出 per-phase duty 后分别写入
+
+#ifndef PWM_INTERLEAVED_H
+#define PWM_INTERLEAVED_H
 
 #include "comp_pwm.h"
 #include "bsp_pwm.h"
