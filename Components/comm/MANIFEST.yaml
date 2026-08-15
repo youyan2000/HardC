@@ -1,7 +1,8 @@
 id: components/comm
 layer: Components
-description: 通信父类 — UART/SPI/I2C/CAN 统一接口, 不透明句柄
+description: 通信契约身份基类 — CommBase 契约身份 + 生命周期 + 诊断 (数据面在 Devices/comm 子类)
 files:
   - comp_comm.h
   - comp_comm.c
-depends: []
+depends:
+  - components/contract
