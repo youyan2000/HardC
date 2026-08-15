@@ -125,14 +125,14 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | `Components/comp_pwm.h/c` | PWM 父类：PwmBase + PwmOps 虚表 |
 | `Components/comp_pid.h/c` | PID 父类：PidBase + PidOps 虚表 |
 | `Components/comp_pi_reg4.h` | **4 状态 PI 调节器** — 设定值滤波 + P + I + 前馈, 双抗积分饱和 |
-| `Components/comp_gpo.h/c` | 通用输出父类：GpoBase + GpoOps 虚表 |
-| `Components/comp_comm.h/c` | 通信父类：CommBase + CommOps 虚表 |
+| `Components/peripheral/comp_output.h/c` | 输出基类：OutputBase + OutputOps 虚表 (on/off/set/toggle) |
+| `Components/comm/comp_comm.h/c` | 通信契约基类：CommBase + 诊断 ops (self_check/reset, 可空), 数据面不虚化 |
 | `Components/comp_motor.h/c` | 电机父类：MotorBase + MotorOps 虚表 |
 | `Components/comp_bldc_instaspin.h` | **InstaSPIN-BLDC 无感方波** — 3 阶段启动 (ALIGN/OPENLOOP/CLOSED) + BEMF ZC 检测 + 速度 PI |
-| `Components/comp_resolver.h` | **旋转变压器接口** — 浮点解算 + IQmath 定点解调 (DDS/PLL), 含 comp_iqmath.h |
-| `Components/comp_mpu.h` / `comp_mpu_dmp.c` | MPU6050 DMP 算法层 |
+| `Components/motor/comp_resolver.h` | **旋转变压器接口** — 浮点解算 + IQmath 定点解调 (DDS/PLL), 含 comp_iqmath.h |
+| `Components/peripheral/comp_mpu.h` / `comp_mpu_dmp.c` | MPU6050 DMP 算法层 (peripheral 域) |
 | `Components/comp_pfc.h` | **PFC 功率因数校正** — 电流指令 (PfcICmd) + 无桥 (PfcBlIcmd) + RMS² 倒数 |
-| `Components/comp_esmo.h` | **增强滑模观测器 (eSMO)** — PLL 锁相环 + 反电势滤波, PMSM/BLDC 无感 FOC |
+| `Components/motor/comp_esmo.h` | **增强滑模观测器 (eSMO)** — PLL 锁相环 + 反电势滤波, PMSM/BLDC 无感 FOC |
 | `Components/comp_dlog.h` | **数据记录器** — 1ch/4ch 环形缓冲 + 触发 + 预分频 (Dlog1ch/Dlog4ch) |
 | `Components/comp_vector.h` | **向量运算库** — 批量 add/sub/mul/dot/mag/absmax/clamp + Vector3 三相便捷结构体 |
 | `Components/comp_complex.h` | **复数运算库** — 直角坐标 + 极坐标, 值类型, 矢量旋转 (complex_expj), ISR 安全 |
@@ -159,7 +159,7 @@ Config/params/*.yaml  →  Python YmaC/yaml_config_builder.py  →  注入 app_m
 | 路径 | 用途 |
 |------|------|
 | [agent.md](agent.md) | 本文件 — AI/人类共读的总纲，完整 OOP 方法论 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (58 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (64 条 + 经验模板), git 版本管理, 禁止回退 |
 
 ## 3.5 BSP 硬件加速抽象层 🔌
 
@@ -220,11 +220,11 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | 域 | Component | Devices 子类 | Module | 句柄头文件 |
 |----|-----------|-------------|--------|-----------|
 | **ADC** | `comp_adc.h/c` | `adc_follower`, `adc_dc_sampler`, `adc_ac_sampler` | `mod_sampler` | `adcs.h` |
-| **COM** | `comp_comm.h/c` | `com_uart`, `com_spi`, `com_i2c`, `com_can`, `com_key`, `com_mpu6050`, `com_oled`, `com_ultrasonic`, `com_encoder` | `mod_comm`, `mod_cmd_dispatch`, `mod_serial_proto`, `mod_pmbus` | `comms.h` |
-| **GPO** | `comp_gpo.h/c` | `gpo_led`, `gpo_laser`, `gpo_beep`, `gpo_buzzer`, `gpo_fan` | — | `gpos.h` |
+| **COM** | `comp_comm.h/c` | `com_uart`, `com_spi`, `com_i2c`, `com_can`, `com_gpio` | `mod_comm`, `mod_cmd_dispatch`, `mod_serial_proto`, `mod_can_proto`, `mod_pmbus` | — |
+| **Peripheral** | `comp_output.h/c`, `comp_sensor.h/c`, `comp_mpu.h` + `comp_mpu_dmp.c` | `per_led`, `per_laser`, `per_beep`, `per_buzzer`, `per_fan`, `per_oled`, `per_mpu6050`, `per_ultrasonic` | `mod_hmi` | `pers.h` |
 | **PID** | `comp_pid.h/c` | `pid_standard`, `pid_cascade`, `pid_p2pd`, `pid_parallel`, `pid_pr`, `pid_qpr` | — | `pids.h` |
 | **PWM** | `comp_pwm.h/c` | `pwm_buckboost`, `pwm_half_bridge`, `pwm_full_bridge`, `pwm_interleaved`, `pwm_resonant`, `pwm_svpwm` | `mod_powerctrl` | `pwms.h` |
-| **Motor** | `comp_motor.h/c` | `motor_tim` | `mod_motor`, `mod_turn`, `mod_follower`, `mod_fcl_ctrl` | — |
+| **Motor** | `comp_motor.h/c` | `motor_tim`, `motor_step`, `motor_encoder` | `mod_motor`, `mod_turn`, `mod_follower`, `mod_fcl_ctrl` | — |
 
 **独立 Component（无 Devices 层, 单头文件 static inline）：**
 
@@ -239,7 +239,6 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_protection.h` | — | 保护框架 — 阈值检测、去抖、分级响应 (Components/protection/ 域) |
 | `comp_protection_3lvl.h` | `Prot3LvlDelay` | 三电平逆变器延迟保护 — 主开关立即关断 + 内开关故障消隐延迟关断 (ride-through, 非锁存自重新布防) |
 | `comp_pfc.h` | `PfcICmd`, `PfcBLICmd`, `PfcBlIcmd`, `PfcInvRmsSqr`, `PfcInvSqr` | PFC 电流指令, 含无桥桥臂选择 |
-| `comp_esmo.h` | `EsmoCfg`, `EsmoState` | eSMO 滑模观测器 — PLL 角度/速度跟踪 |
 | `comp_dlog.h` | `Dlog1ch`, `Dlog4ch` | 数据记录器 — 环形缓冲 + 触发 + 预分频 |
 | `comp_vector.h` | — (float* 数组), `Vector3` | 向量批量运算 + 三相便捷结构体 |
 | `comp_complex.h` | `Complex32` | 复数运算 (直角+极坐标) — add/sub/mul/div/mag/phase/conj/expj |
@@ -248,8 +247,10 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_rs.h` | `RsCfg`, `RsState` | Reed-Solomon RS(255,239) — GF(256) BM+Chien+Forney 译码 |
 | `comp_interleaver.h` | `InterleaverCfg`, `Interleaver` | 卷积交织器 — Forney 型 B分支×D延迟, 配合 RS 纠错 |
 | `comp_bldc_instaspin.h` | `BldcInstaSpinCfg`, `BldcInstaSpinState` | InstaSPIN-BLDC — 3阶段启动 + BEMF ZC + 速度 PI |
+| `comp_esmo.h` | `EsmoCfg`, `EsmoState` | eSMO 滑模观测器 — PLL 角度/速度跟踪 |
 | `comp_aci_se.h` | `AciSeConst`, `AciSe` | ACI 转差法转速估计 — 磁链角微分 + 转差计算 (与 comp_aci_fe 配对) |
 | `comp_mod6.h` | `Mod6Cnt` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
+| `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
 | `comp_impulse.h` | `Impulse` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_sogi_fll.h` | `SogiFll`, `SogiFllOsgCoeff`, `SogiFllLpfCoeff` | SOGI 锁相环 FLL 变体 — SOGI-QSG + 频率锁定环, 自适应电网频率漂移 |
 | `comp_power_meas.h` | `PowerMeas`, `EnergyAccu`, `PowerMeas3Ph` | 电力测量 — Vrms/Irms/P/Q/S/PF/相位角 + 能量脉冲积分 (残余结转) + 三相聚合 (总功率/线电压/电流矢量和) |
@@ -260,7 +261,6 @@ void bsp_update_duty(BspPwmHandle *h, BspPwmTimer t, uint32_t cmp1, uint32_t cmp
 | `comp_arc_detect.h` | `ArcDetect` | 光伏电弧检测 — FFT 频带能量 2 子带加权 + 单频干扰滤除 + dB 阈值判定 |
 | `comp_pid_nl.h` | `NlPidCfg`, `NlPidState` | 非线性 PID — P/I/D 各通路独立幂律整形 (α/δ/γ), 强鲁棒控制 |
 | `comp_tcm.h` | `TcmCapture` | 自动调参 TCM — 触发式阶跃响应捕获 (预触发环) + IAE/ISE/ITAE 准则 |
-| `comp_resolver.h` | `Resolver`, `ResolverFixedCfg`, `ResolverFixedState` | 旋变接口 — 浮点解算 + IQmath DDS/PLL 定点解调 |
 | `comp_math.h` | — | 数学工具 — 唯一 π/2π float 常量源 (M_PI/M_2PI) + 硬件加速宏 (MATH_SQRT/MATH_ISQRT/MATH_ABS) + 限幅/绝对值/死区/线性映射 |
 | `comp_error.h` | — | 统一错误码 bitmask — ERROR_SET/CLEAR/IS_SET 宏 |
 
@@ -436,14 +436,14 @@ Module/<域>/mod_xxx.h/c       — (可选) 业务模块，组合多个 Device
 App/app_main.c                — #include "xxxs.h", 使用句柄
 ```
 
-> `<域>` 与文件前缀一致：adc / comm / gpo / pid / pwm / motor / dsp / power / math / codec / sensor。
+> `<域>` 与文件前缀一致：adc / comm / pid / pwm / motor / dsp / power / math / codec / protection / contract / peripheral。
 
 ## 6. 代码风格约定
 
 | 规则 | 示例 |
 |------|------|
 | 函数命名 | `<module>_<verb>` — `led_on`, `adc_read_ch`, `gpo_set` |
-| 结构体命名 | `PascalCase` — `LedBase`, `GpoLed`, `AdcOps` |
+| 结构体命名 | `PascalCase` — `OutputBase`, `PerLed`, `AdcOps` |
 | 变量命名 | `snake_case` — `on_level`, `raw_cap`, `num_ch` |
 | 指针参数 | 统一用 `me`（非 `this` / `self`），始终第一个参数 |
 | 构造/析构 | 始终 `_init` / `_deinit` 成对 |
@@ -480,7 +480,7 @@ App/app_main.c                — #include "xxxs.h", 使用句柄
 1. 复制需要的 `Component + Device + Module` 文件到目标工程
 2. 确保 `BSP/container_of.h` 和 `Components/comp_math.h` 加入 include path
 3. 修改 Device 文件中的硬件句柄以适配你的硬件
-4. 应用层通过全局句柄头文件（`gpos.h` / `pwms.h` / `comms.h` / `pids.h`）操作，不感知子类
+4. 应用层通过全局句柄头文件（`pers.h` / `pwms.h` / `adcs.h` / `pids.h`）操作，不感知子类（comm 无句柄头 — 传输类由 App 直接持有实例，见 §8.2）
 
 ### 方式二：基于父类继承新子类 — 需要新类型的设备
 
@@ -525,55 +525,60 @@ AdcBase (虚表 + 名称 + DMA 缓冲区指针 + 位置偏差)
 
 **依赖：** `BSP/container_of.h`, `Components/comp_math.h`, STM32 HAL
 
-### 8.2 COM 子系统 — 通信外设
+### 8.2 COM 子系统 — 通信传输
 
-**继承树：**
+**定位（三线）：** comm 是 CTX_MAIN 低优先级线 — 非实时、跟得上人的速度即可。传输类只做"字节搬运"；协议解析/OLED/应答全跑 BackgroundTask；总线 IRQ 收字节只入 SPSC 环（comp_ring），不解析。主线（CTX_FAST）永不直接调 comm 写 — FAST 需要下发数据走 comp_mailbox（周期边界生效）/ comp_latch，comm 在 MAIN 收取。
+
+**继承树（5 传输类，ComKey 已删 — "Key 就是 GPIO"）：**
 ```
-CommBase (虚表 + 名称 + 接收缓冲区 + 当前字节)
-├── ComUart      — USART 驱动 (阻塞 TX / 中断逐字节 RX)
-├── ComSpi       — SPI 主模式 + CS 引脚控制
-├── ComI2c       — I2C 主模式 + 设备地址
-├── ComCan       — CAN 消息帧收发 + 硬件过滤器
-├── ComKey       — 按键驱动 (GPIO 读取 + 双击/长按状态机)
-├── ComMpu6050   — MPU6050 六轴传感器 (DMP + 回退双模式)
-├── ComOled      — OLED SSD1306 薄包装
-├── ComUltrasonic — 超声波测距 (触发→接收→解码)
-└── ComEncoder   — 位置编码器 (BiSS-C/Endat22/SinCos/T-Format/PTO, 协议分发 + 位置解算 + 速度估计)
+CommBase (契约身份: 名称 + 诊断 ops; 数据面不虚化)
+├── Uart      — 字节流 (USART; 组合 comp_ring.h SPSC)
+├── Spi       — 全双工 + 寄存器
+├── I2c       — 从机寻址 + 寄存器 (保留 iic_read_reg/iic_write_reg)
+├── Can       — 帧订阅分发 (can_register/id→fn; 删 send 前4字节当 StdId 的 hack)
+└── Gpio      — 数字 IO + 中断 (无去抖、无 active-low 反转 — 留上层)
 ```
 
-**CommOps 虚表（4 必须 + 2 可选）：** send(必须) / bgn(必须) / read(必须) / avail(必须) / is_ok(可选) / reset(可选)
+**CommOps 诊断虚表（可空）：** self_check(可选) / reset(可选)。数据面不虚化 — SPSC 环/寄存器/订阅表全在子类结构体。
 
-**依赖：** `BSP/container_of.h`, `Components/comp_math.h`, `Components/comp_mpu.h`, STM32F1 HAL
+**契约词汇（学 LibXR 惯例契约, 减配）：**
+- **复用 comp_io.h IoCompletion**（IO_NONE/ASYNC_FLAG/ASYNC_CB/SYNC）+ **comp_error_code.h ErrorCode**（I/O 返回值, 向用 LibXR 的软件系统汇报, 不弱化为 bool）
+- **Configuration POD 定义在各自子类头**（不进 base — 五类配置字段完全不同, 放 base 退化为 void* 弱类型槽）
+- **I/O 统一形态**：`xxx_write(me, CommConstData, IoCompletion)` 返回 ErrorCode；发起时声明完成模式（comm 默认 IO_ASYNC_FLAG, OLED/日志类 IO_NONE）
+- **总线 IRQ 收字节走专用入口 `xxx_rx_push(me, byte)`**（ISR 安全, 只入 SPSC）— 砍 in_isr 参数（调用树即上下文, §1.2）
+- **无 BLOCK/信号量**（HardC 无线程, 调用树即上下文）
+- **传输语义外部独立、内部统一、路由在 HMI**：五类对外保持各自语义接口（CAN 帧/字节流/寄存器/电平）；只有 Module 层 HMI 决定某事件用 CAN 发 / UART 发 / LED 指示 / 同时多路（mod_hmi 持输出端口表 HmiPorts fan-out, 见 Module/hmi/mod_hmi.h）
 
-**ComEncoder 位置编码器 (CommBase 子类)：**
+**各传输类 API：** Uart=`uart_write/read/rx_push`；Spi=`spi_write/read/transfer/read_reg`；I2c=`iic_write_reg/iic_read_reg`（iic_init_hw/iic_init_sw 双模式）；Can=`can_send/register/unregister/poll`；Gpio=`gpio_read/write/toggle/cfg_output/cfg_input/enable_irq`
 
-> **来源:** TI controlSUITE position_manager, 翻译为 HardC 纯C 版本
+**依赖：** `BSP/container_of.h`, `Components/contract/comp_io.h`, `Components/contract/comp_error_code.h`, `Components/math/comp_math.h`；Gpio 全 HAL-free（走 BSP/bsp_gpio.h），其余类经 BSP/bsp_stm32_hal.h
 
-**支持协议:** BiSS-C (RS485 双向, MA+SLO+CRC6) / Endat22 (RS485 双向, 命令帧+MRS码) / SinCos (模拟 1Vpp 差分, 正余弦插值) / T-Format (串行单向, 纯接收) / PTO (脉冲序列 ABZ+UVW, 正交计数)
+**位置编码器已迁 motor 域**（非 ADC 采样, 服务 CTX_FAST 闭环, 独立 Encoder 结构体持 Uart/Gpio/ADC 总线指针）→ 见 §8.6 Motor。
 
-**关键 API:** `encoder_init(cfg)` → `encoder_read_position()` (ISR 热路径) → `encoder_update(dt)` (主循环, 速度估计+诊断) → `encoder_get_angle/get_velocity/get_error_count/is_ok`
+### 8.3 Peripheral 子系统 — 非总线外设
 
-**EncoderCfg POD:** proto / bits_single / bits_multi / freq_hz / timeout_us / use_crc
+**定位：** 所有非总线设备（显示/传感/输出）归入 peripheral 域。**不建万能基类**（避免重演 CommBase 假共性）— 按语义分三类：
+- **OutputBase**（`Components/peripheral/comp_output.h`）— 开关类输出: LED/激光/有源蜂鸣器（Gpio 组合）/无源蜂鸣器/风扇（PWM 组合）
+- **SensorBase**（`Components/peripheral/comp_sensor.h`）— 测量类: MPU6050/超声波（测量 + valid 标志）
+- **OLED 无基类**（`per_oled`）— 显示语义独立成类
 
-**Encoder Instance:** CommBase 父类 + 位置缓存 (raw_position/single_turn/multi_turn/angle_rad/velocity) + 错误状态 (connected/crc_error/timeout_error/error_count) + union proto_data (按协议特有数据)
-
-**依赖:** `Components/comp_comm.h`, `<stdint.h>`, `<stdbool.h>`
-
-### 8.3 GPO 子系统 — 通用输出
-
-**继承树：**
+**继承树（输出基类）：**
 ```
-GpoBase (虚表 + 名称)
-├── GpoLed    — LED (双模: GPIO 开关 / PWM 调光)
-├── GpoLaser  — 激光笔 (GPIO 开关, 安全优先: 默认关闭)
-├── GpoBeep   — 有源蜂鸣器 (GPIO 开关)
-├── GpoBuzzer — 无源蜂鸣器 (PWM 调音)
-└── GpoFan    — 风扇 (PWM 调速)
+OutputBase (ops + 名称)
+├── PerLed      — LED (Gpio 组合, GPIO 开关)
+├── PerLaser    — 激光笔 (Gpio 组合, 安全优先: 默认关闭)
+├── PerBeep     — 有源蜂鸣器 (Gpio 组合)
+├── PerBuzzer   — 无源蜂鸣器 (PWM 组合, 调音)
+└── PerFan      — 风扇 (PWM 组合, 调速)
 ```
 
-**GpoOps 虚表（2 必须 + 1 可选）：** on(必须) / off(必须) / set_brightness(可选)
+**OutputOps 虚表（2 必须 + 1 可选）：** on(必须) / off(必须) / set(可选)
 
-**关键教训：** 子类按设备类型分（LED/Laser/Buzzer），不按电气机制分（GPIO/PWM）。安全关键外设（激光）必须在 `_init()` 中显式写 OFF。见 LESSONS.md #28, #29。
+**全局句柄：** `pers.h`（替代已删的 gpos.h）— board_init 绑定具体实例, Module/App 层通过 `g_led_board` 等访问。
+
+**关键教训：** 子类按设备类型分（LED/Laser/Buzzer），不按电气机制分（Gpio/PWM）。安全关键外设（激光）必须在 `_init()` 中显式写 OFF。见 LESSONS.md #28, #29。
+
+**FAIL-SAFE：** ops 未绑定时 output_on/off 触发挂起（`for(;;)`），不静默返回后空指针解引用；可选 USE_STM32_ASSERT 编译为 assert()。peripheral 设备与 comm 传输类组合（`Xxx *bus` 指针），全部经 BSP 层 — 设备本身 HAL-free。
 
 ### 8.4 PID 子系统 — 控制器
 
@@ -628,6 +633,23 @@ MotorBase (虚表 + 名称 + ops)
 
 **依赖：** `BSP/container_of.h`, `Components/comp_math.h`, STM32F1 HAL
 
+**位置编码器 Encoder（独立结构体，非 MotorBase 子类，`Devices/motor/motor_encoder.h/c`）：**
+
+> **来源:** TI controlSUITE position_manager, 翻译为 HardC 纯C 版本
+> **定位:** 转子位置反馈 — 功率控制采样的一种非 ADC 采样, 服务 CTX_FAST 闭环. ctx: fast (ISR 读位置热路径) / slow+main (速度估计+诊断)
+
+**支持协议:** BiSS-C (RS485 双向, MA+SLO+CRC6) / Endat22 (RS485 双向, 命令帧+MRS码) / SinCos (模拟 1Vpp 差分, 正余弦插值) / T-Format (串行单向, 纯接收) / PTO (脉冲序列 ABZ+UVW, 正交计数)
+
+**总线组合（非继承）：** 去 CommBase 成员, 独立 Encoder 结构体持总线指针 — BiSS/Endat/TFormat→`Uart *`、PTO→`Gpio *`、SinCos→`BspAdcHandle *`；未绑定的总线走 `rx_buf` 注入（总线 IRQ/App 填帧, 本类只解析, 与 comm 传输类组合）。
+
+**关键 API（返 ErrorCode）：** `encoder_init(cfg, uart, gpio, adc)` → `encoder_request()` (Endat 组帧经 uart; 未绑总线 ERR_STATE; BiSS 需 RS485 方向能力, ERR_NOT_SUPPORT) → `encoder_read_position()` (ISR 热路径; ERR_TIMEOUT=帧短 / ERR_CHECK=CRC失败 / ERR_STATE=未知协议) → `encoder_update(dt)` (主循环, 速度估计+诊断) → `encoder_get_angle/get_velocity/get_error_count/is_ok`
+
+**EncoderCfg POD:** proto / bits_single / bits_multi / freq_hz / timeout_us / use_crc
+
+**Encoder Instance:** 位置缓存 (raw_position/single_turn/multi_turn/angle_rad/velocity) + 状态 (connected/crc_error/timeout_error/error_count) + union proto_data (按协议特有数据: biss/endat/sincos/pto)
+
+**依赖:** `com_uart.h`, `com_gpio.h`, `BSP/bsp_adc.h`, `Components/contract/comp_error_code.h`
+
 #### comp_bldc_instaspin.h — InstaSPIN-BLDC 无传感器方波驱动
 
 > **来源:** TI InstaSPIN-BLDC 算法概念 (SPRA590/SPRA695/SPRABQ7), 解绑自 ROM 实现, 翻译为 HardC 纯C float inline 版本
@@ -656,6 +678,71 @@ ALIGN (强制对齐) → OPENLOOP (开环加速, V/f 控制) → CLOSED (BEMF ZC
 **ZC 检测三重抗噪:** (1) 换向后 blanking 空白窗口避开续流振铃, (2) 滞环阈值 (2% Vbus) 过滤小幅噪声, (3) zc_filter_cnt 连续确认窗口消除偶发抖动.
 
 **依赖:** `<math.h>`, `<stdbool.h>`
+
+#### comp_esmo.h — 增强滑模观测器 (eSMO)
+
+**六阶段算法：** 电流估计 → 滑模控制(sat) → 反电动势滤波 → PLL 鉴相 → PI+VCO → 角度归一化
+
+**调用方式（ISR 中每控制周期）：**
+```c
+esmo_run(&obs, &cfg, v_alpha, v_beta, i_alpha, i_beta);
+float theta = esmo_get_theta(&obs);
+float speed = esmo_get_speed(&obs);  // 电角速度 rad/s
+```
+
+**相比基础 SMO (comp_smo.h) 的改进：** PLL 替代 arctan (角度更平滑) + 反电动势低通滤波 (减少抖振) + 速度直接由 PLL 输出
+
+**依赖：** `<math.h>`
+
+#### comp_aci_se.h — 异步电机转差法转速估计器
+
+> **来源:** TI controlSUITE motor_control/math_blocks/v4.3 (aci_se.h, aci_se_const.h)
+> **新增日期:** 2026-08-12
+
+**与 comp_aci_fe 配对:** aci_fe 估计转子磁链 → aci_se 从磁链 + 电流估计转速 (转差法, 感应电机无传感器转速估计)
+
+**算法 (全标幺 pu):**
+1. **转差速度** `WSlip = K1×(PsiDr×IQs − PsiQr×IDs)/|Psi|²` (低磁链保护, 防除零)
+2. **同步转速** `WSyn = K2×ΔThetaFlux` — 磁链角差分, 仅在角度 0.20~0.80 线性区有效 (0/1 边界回绕差分会跳变 → 保持上一拍)
+3. **低通滤波** `WPsi = K3×WPsi + K4×WSyn` (抑制微分噪声)
+4. **转子转速** `WrHat = WPsi − WSlip`, 饱和 [-1,1] pu
+5. **转速输出** `WrHatRpm = BaseRpm × WrHat`
+
+**系数计算 aci_se_const_calc:** Tr=Lr/Rr; Tc=1/(2π·fc); Wb=2π·fb; K1=1/(Wb·Tr); K2=1/(fb·Ts); K3=Tc/(Tc+Ts); K4=Ts/(Tc+Ts)
+
+**关键 API (全部 static inline):**
+- `aci_se_const_calc(&cfg)` — 物理参数 → 系数
+- `aci_se_init(me, &cfg, base_rpm)` — 初始化
+- `aci_se_run(me, i_qs_s, i_ds_s, psi_dr_s, psi_qr_s, theta_flux)` — ISR 热路径, 返回估计转速 (rpm)
+- `aci_se_reset(me)` — 重置
+
+**依赖:** 无 (纯 float)
+
+#### comp_resolver.h — 旋转变压器接口 (浮点 + IQmath 定点)
+
+> **来源:** TI controlSUITE motor_control/math_blocks/v4.3 (resolver.h) + motor_control/libs/resolver/v101 (Resolver_Fixed.h)
+> **v1.1 扩展:** IQmath (Q24) 定点完整信号链 (DDS 励磁 + 同步解调 + LPF + atan2 查表 + PLL 锁相环)
+> **新增日期:** 2026-08-12
+
+**双路径:**
+- **浮点路径 (Resolver)** — 简单解算: 机械角度 = (raw - offset) × 2π/steps_per_turn; 电角度 = pole_pairs × 机械角度
+- **IQmath 定点路径 (ResolverFixedCfg + ResolverFixedState)** — 完整旋变信号链, 零浮点依赖, 适合无 FPU 平台
+
+**IQmath 信号链 (5 步):**
+1. DDS 励磁载波生成 → sin 参考输出 (DAC/PWM)
+2. ADC 同步采样 sin/cos 调制信号
+3. 同步解调: ADC × 励磁参考 → 提取包络
+4. 一阶 IIR LPF 滤除 2ω 残差 → sin_dc/cos_dc
+5. atan2 查表 + PLL 锁相环 → 滤波角度 + 速度估计
+
+**关键 API (全部 static inline):**
+- `resolver_init/decode/set_offset(me)` — 浮点简单解算
+- `resolver_fixed_cfg_default(fs)` → 默认配置 (励磁 10kHz, LPF 500Hz)
+- `resolver_fixed_excite(cfg, st)` — DDS 相位累加, 返回励磁 sin 参考 (Q24)
+- `resolver_fixed_demodulate(cfg, st, sin_adc, cos_adc)` — 5 步解调 + PLL, 返回电角度 Q24 per-unit
+- `resolver_fixed_get_angle_rad/get_speed(cfg, st)` — Q24→float 弧度 / rad/s
+
+**依赖:** `<math.h>`, `<stdint.h>`, `comp_iqmath.h`
 
 ### 8.7 StepMotor 子系统 — 步进电机
 
@@ -700,21 +787,6 @@ PfcInvRmsSqr  — 输入 RMS² 倒数 (带最小值限制)
 PfcInvSqr     — 带 HALF_PI 缩放的平方倒数
 PfcBlIcmd     — 无桥 PFC 电流指令 (正/负半周互斥, 两路输出)
 ```
-
-**依赖：** `<math.h>`
-
-#### comp_esmo.h — 增强滑模观测器 (eSMO)
-
-**六阶段算法：** 电流估计 → 滑模控制(sat) → 反电动势滤波 → PLL 鉴相 → PI+VCO → 角度归一化
-
-**调用方式（ISR 中每控制周期）：**
-```c
-esmo_run(&obs, &cfg, v_alpha, v_beta, i_alpha, i_beta);
-float theta = esmo_get_theta(&obs);
-float speed = esmo_get_speed(&obs);  // 电角速度 rad/s
-```
-
-**相比基础 SMO (comp_smo.h) 的改进：** PLL 替代 arctan (角度更平滑) + 反电动势低通滤波 (减少抖振) + 速度直接由 PLL 输出
 
 **依赖：** `<math.h>`
 
@@ -856,30 +928,6 @@ int n = viterbi_traceback(&vt, decoded, sizeof(decoded));
 - `pid_reg3_init/reset(me)` — 初始化/重置积分器 (保留比例/微分状态)
 - `pid_reg3_run(me, cfg, ref, fdb)` — 标准变体
 - `pid_reg3_run_pos(me, cfg, ref, fdb)` — 位置变体
-
-**依赖:** 无 (纯 float)
-
-#### comp_aci_se.h — 异步电机转差法转速估计器
-
-> **来源:** TI controlSUITE motor_control/math_blocks/v4.3 (aci_se.h, aci_se_const.h)
-> **新增日期:** 2026-08-12
-
-**与 comp_aci_fe 配对:** aci_fe 估计转子磁链 → aci_se 从磁链 + 电流估计转速 (转差法, 感应电机无传感器转速估计)
-
-**算法 (全标幺 pu):**
-1. **转差速度** `WSlip = K1×(PsiDr×IQs − PsiQr×IDs)/|Psi|²` (低磁链保护, 防除零)
-2. **同步转速** `WSyn = K2×ΔThetaFlux` — 磁链角差分, 仅在角度 0.20~0.80 线性区有效 (0/1 边界回绕差分会跳变 → 保持上一拍)
-3. **低通滤波** `WPsi = K3×WPsi + K4×WSyn` (抑制微分噪声)
-4. **转子转速** `WrHat = WPsi − WSlip`, 饱和 [-1,1] pu
-5. **转速输出** `WrHatRpm = BaseRpm × WrHat`
-
-**系数计算 aci_se_const_calc:** Tr=Lr/Rr; Tc=1/(2π·fc); Wb=2π·fb; K1=1/(Wb·Tr); K2=1/(fb·Ts); K3=Tc/(Tc+Ts); K4=Ts/(Tc+Ts)
-
-**关键 API (全部 static inline):**
-- `aci_se_const_calc(&cfg)` — 物理参数 → 系数
-- `aci_se_init(me, &cfg, base_rpm)` — 初始化
-- `aci_se_run(me, i_qs_s, i_ds_s, psi_dr_s, psi_qr_s, theta_flux)` — ISR 热路径, 返回估计转速 (rpm)
-- `aci_se_reset(me)` — 重置
 
 **依赖:** 无 (纯 float)
 
@@ -1091,32 +1139,6 @@ TCM (Tuning Criteria Module): armed 状态持续把误差写入预触发环形�
 - `sgen_deadzone_init/run/reset(me)` — 活动/零区交替, 双极性反转
 
 **依赖:** `<math.h>` (sinf/cosf)
-
-#### comp_resolver.h — 旋转变压器接口 (浮点 + IQmath 定点)
-
-> **来源:** TI controlSUITE motor_control/math_blocks/v4.3 (resolver.h) + motor_control/libs/resolver/v101 (Resolver_Fixed.h)
-> **v1.1 扩展:** IQmath (Q24) 定点完整信号链 (DDS 励磁 + 同步解调 + LPF + atan2 查表 + PLL 锁相环)
-> **新增日期:** 2026-08-12
-
-**双路径:**
-- **浮点路径 (Resolver)** — 简单解算: 机械角度 = (raw - offset) × 2π/steps_per_turn; 电角度 = pole_pairs × 机械角度
-- **IQmath 定点路径 (ResolverFixedCfg + ResolverFixedState)** — 完整旋变信号链, 零浮点依赖, 适合无 FPU 平台
-
-**IQmath 信号链 (5 步):**
-1. DDS 励磁载波生成 → sin 参考输出 (DAC/PWM)
-2. ADC 同步采样 sin/cos 调制信号
-3. 同步解调: ADC × 励磁参考 → 提取包络
-4. 一阶 IIR LPF 滤除 2ω 残差 → sin_dc/cos_dc
-5. atan2 查表 + PLL 锁相环 → 滤波角度 + 速度估计
-
-**关键 API (全部 static inline):**
-- `resolver_init/decode/set_offset(me)` — 浮点简单解算
-- `resolver_fixed_cfg_default(fs)` → 默认配置 (励磁 10kHz, LPF 500Hz)
-- `resolver_fixed_excite(cfg, st)` — DDS 相位累加, 返回励磁 sin 参考 (Q24)
-- `resolver_fixed_demodulate(cfg, st, sin_adc, cos_adc)` — 5 步解调 + PLL, 返回电角度 Q24 per-unit
-- `resolver_fixed_get_angle_rad/get_speed(cfg, st)` — Q24→float 弧度 / rad/s
-
-**依赖:** `<math.h>`, `<stdint.h>`, `comp_iqmath.h`
 
 #### comp_fft_window.h — FFT 窗函数库 (18 种窗, float + Q31)
 

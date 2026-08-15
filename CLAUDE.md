@@ -11,12 +11,12 @@
 HardC/
 ├── BSP/             # L1: 不透明句柄 → 平台抽象
 ├── Components/      # L2: comp_*.h/c → 父类 + ops 虚表
-│   ├── adc/ comm/ gpo/ pid/ pwm/          # 父类域
-│   ├── dsp/ motor/ power/ protection/ math/ codec/ sensor/ contract/
+│   ├── adc/ comm/ pid/ pwm/                # 父类域
+│   ├── peripheral/ dsp/ motor/ power/ protection/ math/ codec/ contract/
 │   └── (每子目录含 MANIFEST.yaml 自描述)
 ├── Devices/         # L3: <域>_<子类>.h/c → 具体硬件实现
-│   ├── adc/ comm/ gpo/ pid/ pwm/
-│   └── motor/ sensor/
+│   ├── adc/ comm/ pid/ pwm/
+│   └── peripheral/ motor/
 ├── Module/          # L4: mod_*.h/c → 业务逻辑模块
 │   ├── motor/ power/ comm/ hmi/
 ├── App/             # L5: 应用入口模板 + PID 调参协议
@@ -33,7 +33,7 @@ HardC/
 | 文档 | 内容 |
 |------|------|
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (58 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (64 条 + 经验模板), git 版本管理, 禁止回退 |
 | [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
 | [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) | 目录分组、MANIFEST 自描述、scaffold 骨架生成工具设计 |
 
@@ -154,7 +154,7 @@ git branch -d feature/my-new-device
 
 ### 子系统独立性
 
-所有子系统通过文件前缀区分（ADC/COM/GPO/PID/PWM/Motor），**文件按子系统归入 `Components/<域>/` + `Devices/<域>/` + `Module/<域>/` 子目录**，每个子目录含 `MANIFEST.yaml` 自描述（依赖声明）。修改子系统内部文件时，确认 [agent.md](agent.md) 中对应的 §8 子系统参考不需要同步更新。如果改了 API、增加了子类、修改了 ops 虚表签名，**必须同步更新文档**，并检查该子系统的 `MANIFEST.yaml` 依赖是否需要增删。
+所有子系统通过文件前缀区分（ADC/COM/Peripheral/PID/PWM/Motor），**文件按子系统归入 `Components/<域>/` + `Devices/<域>/` + `Module/<域>/` 子目录**，每个子目录含 `MANIFEST.yaml` 自描述（依赖声明）。修改子系统内部文件时，确认 [agent.md](agent.md) 中对应的 §8 子系统参考不需要同步更新。如果改了 API、增加了子类、修改了 ops 虚表签名，**必须同步更新文档**，并检查该子系统的 `MANIFEST.yaml` 依赖是否需要增删。
 
 ## App 层开发规则
 
@@ -244,11 +244,11 @@ make -j$(nproc)
 | 域 | Component | Devices 子类数 | 句柄头文件 |
 |----|-----------|--------------|-----------|
 | ADC | `comp_adc.h/c` | 3 (Follower/DC/AC Sampler) | `adcs.h` |
-| COM | `comp_comm.h/c` | 9 (UART/SPI/I2C/CAN/Key/MPU6050/OLED/Ultrasonic/Encoder) | `comms.h` |
-| GPO | `comp_gpo.h/c` | 5 (LED/Laser/Beep/Buzzer/Fan) | `gpos.h` |
+| COM | `comp_comm.h/c`（契约基类: 名称 + 诊断 ops self_check/reset, 数据面不虚化, 复用 comp_io.h IoCompletion + ErrorCode） | 5 (Uart/Spi/I2c/Can/Gpio) + 协议模块 (mod_comm/mod_cmd_dispatch/mod_serial_proto/mod_can_proto/mod_pmbus, 全跑 CTX_MAIN) | — |
+| Peripheral | `comp_output.h/c` (OutputBase 开关类) + `comp_sensor.h/c` (SensorBase 测量类) + `comp_mpu.h` (+ `comp_mpu_dmp.c`) | 8 (Led/Laser/Beep/Buzzer/Fan/Oled/Mpu6050/Ultrasonic; OLED 无基类, 设备=域基类+Gpio/PWM/UART 总线组合, 全 HAL-free) | `pers.h` |
 | PID | `comp_pid.h/c` + `comp_pi_reg4.h` (四态PI) + `comp_pid_reg3.h` (三态PID) | 9 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar) | `pids.h` |
 | PWM | `comp_pwm.h/c` + `comp_sgen.h` (正弦发生器) | 7 (BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SVPWM/WPT) | `pwms.h` |
-| Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) | 1 (TIM) | — |
+| Motor | `comp_motor.h/c` + `comp_bldc_instaspin.h` (无感FOC) + `comp_mod6.h` (模6换相) + 无感观测器家族 (SMO/eSMO/HFI/ACI/Resolver/SVGEN/CURMOD/VHz/速度角度/电压) | 2 (TIM + Encoder 位置编码器, 非 MotorBase 子类 — 独立结构体组合 Uart/Gpio/ADC 总线) | — |
 | StepMotor | `comp_step_motor.h/c` | 1 (motor_step) | — |
 | Codec | `comp_crc.h` / `comp_checksum.h` / `comp_endian.h` / `comp_viterbi.h` / `comp_interleaver.h` / `comp_rs.h` / `comp_ask.h` | 7 (CRC/Checksum/Endian/Viterbi/Interleaver/RS/ASK) | — |
 | Contract | `comp_io.h` (I/O 完成契约) + `comp_double_buffer.h` / `comp_latch.h` / `comp_ring.h` / `comp_mailbox.h` (五原语跨上下文交接) | — (独立) | — |
@@ -258,7 +258,6 @@ make -j$(nproc)
 
 | Component | 用途 |
 |-----------|------|
-| `comp_esmo.h` | 增强滑模观测器 (eSMO) — PLL 锁相环角度/速度估计 (PMSM/BLDC) |
 | `comp_dlog.h` | 数据记录器 (Dlog1ch/Dlog4ch) — 环形缓冲 + 触发 + 预分频 |
 | `comp_vector.h` | 向量/矩阵批量运算 (add/sub/mul/dot/absmax/clamp + Vector3) |
 | `comp_pfc.h` | PFC 功率因数校正 — 电流指令 + 无桥 PFC (PfcBlIcmd) + RMS² 倒数 |
@@ -273,7 +272,6 @@ make -j$(nproc)
 | `comp_ask.h` | ASK/OOK 无线充电信令 — 12-bit 包 (req+功率+偶校验) 编解码 + 2000Hz 包络解码状态机 |
 | `comp_pi_reg4.h` | 四态 PI 调节器 — 带抗饱和的 PI 控制 (正常/上限/下限/跟踪) |
 | `comp_bldc_instaspin.h` | BLDC InstaSPIN — 无传感器 FOC, FAST 观测器 + 磁链/转矩估计 |
-| `comp_aci_se.h` | ACI 转差法转速估计器 — 磁链角微分 + 转差计算 (与 comp_aci_fe 配对) |
 | `comp_pid_reg3.h` | 三态 PID 调节器 — 反计算抗饱和 + 位置回绕变体 (微分作用在比例输出) |
 | `comp_impulse.h` | 脉冲发生器 — 每 Period 采样输出满幅脉冲 (0x7FFF) |
 | `comp_mod6.h` | 模 6 换相计数器 — BLDC 六步换相步进 (0→5→0) |
@@ -292,10 +290,10 @@ make -j$(nproc)
 | MotApp | `mod_motor.h/c` | 单电机状态机 (IDLE/SPD/POS/SP) + 超时保护 |
 | TurnCtrl | `mod_turn.h/c` | 编码器 tick 计数转弯 (UTURN/LTURN/RTURN) |
 | Follower | `mod_follower.h/c` | P2PD 循迹 (8路红外→差速修正) |
-| HMI | `mod_hmi.h/c` | 按键去抖 + OLED 菜单 + 命令分发 |
+| HMI | `mod_hmi.h/c` | 按键去抖 + OLED 菜单 + 命令分发 + 输出端口路由 (唯一路由决策点: HmiPorts {can,uart,led} fan-out, 回调非阻塞) |
 | ModBalance | `mod_balance.h/c` | 球板平衡 (步进电机+PID, 骨架) |
 | CmdDispatch | `mod_cmd_dispatch.h/c` | 统一命令分发 (按键/串口→CarCmd→回调) |
-| ModComm | `mod_comm.h/c` | 帧协议解析 (0xAA 帧头) |
+| ModComm | `mod_comm.h/c` | 帧协议解析 (0xAA 帧头; send_fn 回调接缝, 未绑定则忽略) |
 | SerialProto | `mod_serial_proto.h/c` | 调试串口协议 (0xFA/FC/EE/EF + PID 调参) |
 | SFRA | `mod_sfra.h/c` | 软件频响分析仪 — DDS扰动注入 + DFT采集 + Bode图输出 |
 | FCL | `mod_fcl_ctrl.h/c` | 快速电流环 — dq 轴双环 PI + 交叉解耦 + 反电动势前馈 |
@@ -306,4 +304,4 @@ make -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-14 — 目录按子系统隔离（Components 12 + Devices 7 + Module 4 子目录）+ 25 个 MANIFEST.yaml 自描述 + YmaC/scaffold.py 骨架生成工具（详见 docs/build-toolchain-design.md）；补齐 math_blocks v4.3 最后 4 算法 (ACI转差法/Reg3 PID/脉冲发生器/模6计数器)；C2000Ware Digital Power SDK 迁移 (SOGI-FLL 锁频环 / 电力测量+能量积分 / 三相计量 / 三电平逆变器延迟保护 + protection 独立域)；comp_math 按功能域拆分 (校验和/大小端 → codec/, inv_sqrtf 内联为 math_inv_sqrtf)；supercap_3ph 拓扑 (pwm_buckboost 相位参数化 N=1..3 + mod_supercap/mod_current_share/mod_can_proto + WPT 备件 comp_ask/pwm_wpt, 拓扑 status: planned 待 App 整合)
+> **最后更新：** 2026-08-15 — comm 子系统重构 (阶段 0-4 完成): comm 瘦身为通信传输 (CommBase 契约身份 + 5 传输类 Uart/Spi/I2c/Can/Gpio, ComKey 删 "Key 就是 GPIO" + 去抖归 HMI, 复用 comp_io.h IoCompletion + ErrorCode, 砍 in_isr/BLOCK, 传输语义外部独立内部统一路由在 mod_hmi); 非总线设备全并入新 peripheral 域 (OutputBase/SensorBase/OLED 无基类 + 8 设备, 全 HAL-free 走 BSP); 编码器迁 motor 域 (独立结构体组合 Uart/Gpio/ADC, ctx: fast); mod_hmi 唯一路由决策点 (HmiPorts fan-out); 编码器 host 单测 12/12 + com_can 单测 7/7
