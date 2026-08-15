@@ -13,6 +13,7 @@ void pll_base_init(PllBase *base) {
   base->kp        = 0.0f;
   base->ki        = 0.0f;
   base->freq_lim  = 0.0f;      // 默认不限幅 (子类 init 可覆盖, 如 SRF 设 ±200)
+  base->vco_mode  = PllVcoEuler;  // 默认欧拉 (子类可切 Precise)
   base->v_q_prev  = 0.0f;
   base->ylf       = 0.0f;
   base->b0        = 0.0f;
@@ -26,7 +27,9 @@ void pll_base_init(PllBase *base) {
 // 统一 LF + VCO: 子类 PD 输出锁相误差 v_q → 纯 PI 推频率 → VCO 积分相位 (重建反馈)
 //   LF(s) = kp + ki/s   ⟶  Tustin:  ylf += b0*v_q[k] + b1*v_q[k-1],  b0=kp+ki·T/2, b1=-kp+ki·T/2
 //   fo   = fn + ylf
-//   θ   += fo·T·2π   (相位折叠到 0~2π)
+//   VCO 按 vco_mode 分派:
+//     PllVcoEuler   — 欧拉积分: θ += fo·T·2π, 相位折叠到 0~2π
+//     PllVcoPrecise — 精确离散振荡器: cos(θ+Δ)=cos·cosΔ−sin·sinΔ, 幅值归一化, θ=atan2(sin,cos)
 //   sin/cos 缓存, 供下一拍鉴相器/旋转变换复用
 void pll_base_lf_vco(PllBase *base, float v_q) {
   // ---- LF: 环路滤波 (纯 PI) ----
@@ -41,20 +44,42 @@ void pll_base_lf_vco(PllBase *base, float v_q) {
   base->v_q_prev = v_q;
   base->ylf      = ylf_new;
 
-  // ---- VCO: 压控振荡器 (角度积分 + 相位折叠) ----
+  // ---- VCO: 压控振荡器 ----
   base->fo = base->fn + base->ylf;
+  float delta_theta = base->fo * base->delta_t * M_2PI;
 
-  base->theta += base->fo * base->delta_t * M_2PI;
-  if (base->theta > M_2PI) {
-    base->theta -= M_2PI;
-  }
-  if (base->theta < 0.0f) {
-    base->theta += M_2PI;
-  }
+  if (base->vco_mode == PllVcoPrecise) {
+    // 精确离散时间振荡器: 三角加法公式 + 幅值归一化 (防幅值漂移)
+    float cos_delta = cosf(delta_theta);
+    float sin_delta = sinf(delta_theta);
+    float cos_new = base->cos_val * cos_delta - base->sin_val * sin_delta;
+    float sin_new = base->sin_val * cos_delta + base->cos_val * sin_delta;
 
-  // 预计算 sin/cos 供下一拍使用
-  base->sin_val = sinf(base->theta);
-  base->cos_val = cosf(base->theta);
+    // 正交归一化 (防止幅值漂移 + 保持单位模长)
+    float mag = MATH_SQRT(cos_new * cos_new + sin_new * sin_new);
+    if (mag > 0.0f) {
+      cos_new /= mag;
+      sin_new /= mag;
+    }
+
+    base->cos_val = cos_new;
+    base->sin_val = sin_new;
+    base->theta   = atan2f(sin_new, cos_new);   // [-π, π]
+    if (base->theta < 0.0f) {
+      base->theta += M_2PI;                     // 折叠到 [0, 2π)
+    }
+  } else {
+    // 欧拉积分 (默认)
+    base->theta += delta_theta;
+    if (base->theta > M_2PI) {
+      base->theta -= M_2PI;
+    }
+    if (base->theta < 0.0f) {
+      base->theta += M_2PI;
+    }
+    base->sin_val = sinf(base->theta);
+    base->cos_val = cosf(base->theta);
+  }
 }
 
 // 运行时更新 LF PI 参数 (重算 Tustin 系数, 不重置积分器)
@@ -65,7 +90,7 @@ void pll_base_set_pi(PllBase *base, float kp, float ki) {
   base->b1 = -kp + ki * base->delta_t * 0.5f;
 }
 
-// 只清零运行时状态 (LF 积分器 + VCO 相位/输出), 保留配置与 ops
+// 只清零运行时状态 (LF 积分器 + VCO 相位/输出), 保留配置与 ops (含 vco_mode)
 void pll_base_reset_state(PllBase *base) {
   base->v_q_prev = 0.0f;
   base->ylf      = 0.0f;

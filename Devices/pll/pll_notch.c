@@ -52,9 +52,9 @@ static void notch_run(PllBase *base, const PllInput *in) {
   me->ynotch[0] = ynotch_new;
   me->out_ynotch = ynotch_new;
 
-  // ---- 阶段 3: 基类 LF + VCO ----
-  me->wo = me->base.fn * M_2PI + base->ylf * M_2PI;
+  // ---- 阶段 3: 基类 LF + VCO (精确离散振荡器) ----
   pll_base_lf_vco(base, ynotch_new);
+  me->wo = base->fo * M_2PI;   // 当前角频率 (rad/s, 只读输出, 供参考)
 }
 
 // 清零: 重置鉴相/陷波历史 + 基类运行时状态
@@ -81,10 +81,11 @@ void pll_notch_init(PllNotch *me, float grid_freq_hz, float dt,
   me->cfg.notch_depth = 0.01f;
   me->cfg.notch_bw    = 0.1f;
 
-  me->base.fn       = grid_freq_hz;
-  me->base.delta_t  = dt;
-  me->base.ops      = &notch_ops;
-  me->wo            = me->base.fn * M_2PI;
+  me->base.fn        = grid_freq_hz;
+  me->base.delta_t   = dt;
+  me->base.ops       = &notch_ops;
+  me->base.vco_mode  = PllVcoPrecise;  // 精确离散振荡器 (保留旧 Notch 精度优势)
+  me->wo             = me->base.fn * M_2PI;
 
   notch_coeff_calc(me);
   pll_base_set_pi(&me->base, kp, ki);

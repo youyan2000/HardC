@@ -294,7 +294,7 @@ static inline uint32_t energy_accu_integrate(EnergyAccu *me, float power_w,
 // 聚合 PF = 总P/总S, 总P<0 时取反 (发电机惯例)
 //
 // 相位差 per-unit: 1.0 = 180° (TI phasetoPhaseAngle 约定, 平衡 120° → 2/3).
-//   默认平衡 120°, 并网时用 set_phase_deg 喂 SrfPll 锁相角
+//   默认平衡 120°, 并网时用 set_phase_deg 喂 PllSrf 锁相角
 
 typedef struct {
   // 参数

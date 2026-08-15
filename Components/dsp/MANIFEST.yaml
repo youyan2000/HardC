@@ -1,6 +1,6 @@
 id: components/dsp
 layer: Components
-description: DSP 算法库 — 滤波器/坐标变换/斜坡与正弦生成/电弧检测/数据记录 (旧锁相环 comp_pll.h/c + comp_sogi_fll.h 保留库存, 现锁相环域 components/pll)
+description: DSP 算法库 — 滤波器/坐标变换/斜坡与正弦生成/电弧检测/数据记录 (锁相环已迁至 components/pll 域)
 files:
   - comp_dlog.h
   - comp_filter.h
@@ -8,9 +8,6 @@ files:
   - comp_iir_3p3z.h
   - comp_fft_window.h
   - comp_impulse.h
-  - comp_pll.h
-  - comp_pll.c
-  - comp_sogi_fll.h
   - comp_arc_detect.h
   - comp_transform.h
   - comp_transform_abc_dq0.h

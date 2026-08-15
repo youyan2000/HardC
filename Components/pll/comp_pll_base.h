@@ -12,12 +12,12 @@
 // 鉴相方式覆盖 (都是乘法/乘积/投影型, 无过零鉴相):
 //   PllSogi   — SOGI-QSG 正交 + Park 乘法投影 (单相高性能, 亦为 SSRF-SPLL 变体)
 //   PllSrf    — Park 旋转坐标乘法投影 (三相标准 SRF)
-//   PllNotch  — 纯乘积累积型检测器 v×cos + 陷波 2f0 (轻量单相)
+//   PllNotch  — 纯乘积累积型检测器 v×cos + 陷波 2f0, 精确离散 VCO (轻量单相)
 //   PllDdsrf  — 双 dq 正负序解耦 + Park 乘法投影 (三相不平衡鲁棒)
 //   PllSogiFll— SOGI-QSG 正交 + Park 乘法投影 + FLL 频率自适
 //
-// 保留旧 comp_pll.h/c (SogiPll/SrfPll/NotchPll/DdsrfPll) + comp_sogi_fll.h (SogiFll)
-// 作为库存不动; 本域子类为其 OOP 重构版 (PllSogi/PllSrf/PllNotch/PllDdsrf/PllSogiFll)。
+// 基线: 旧 comp_pll.h/c (SogiPll/SrfPll/NotchPll/DdsrfPll) + comp_sogi_fll.h (SogiFll)
+// 已删除, 算法统一收进本域 5 子类 (PllSogi/PllSrf/PllNotch/PllDdsrf/PllSogiFll)。
 
 #ifndef COMP_PLL_BASE_H
 #define COMP_PLL_BASE_H
@@ -58,6 +58,15 @@ typedef struct {
   pll_reset_fn reset;  // 可选
 } PllOps;
 
+// ======== VCO 模式 ========
+// Euler   — 欧拉积分角度 (默认, 所有子类一致, 轻量)
+// Precise — 精确离散时间振荡器 (三角加法公式 + 幅值归一化, 防幅值漂移, 更精确)
+//           旧 NotchPll 用此模式, 由 PllNotch 开启以完整保留精度优势
+typedef enum {
+  PllVcoEuler = 0,
+  PllVcoPrecise = 1,
+} PllVcoMode;
+
 // ======== 基类结构体 —— LF(PI) + VCO 字段 + 统一反馈输出 ========
 struct PllBase {
   const PllOps *ops;
@@ -67,6 +76,7 @@ struct PllBase {
   float delta_t;      // 采样周期 (s), 如 1e-4 = 100µs
   float kp, ki;       // LF 环路滤波 PI 参数 (带宽由 kp/ki 决定)
   float freq_lim;     // 频率偏差限幅 (±Hz), 0 = 不限制 (SRF 默认 ±200)
+  PllVcoMode vco_mode; // VCO 模式 (默认 Euler; PllNotch 切 Precise)
 
   // ---- LF (环路滤波 = 纯 PI, Tustin 离散化) 状态 ----
   float v_q_prev;     // 上拍鉴相误差 v_q[k-1]
