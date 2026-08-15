@@ -1,11 +1,11 @@
 // MPU6050 DMP 平台层 — 固件加载、FIFO 读取、四元数→欧拉角
-// 所有 I2C 操作直接调硬件层 mpu6050.h，对驱动层透明
+// 所有 I2C 操作走传输接缝 (comp_mpu.h 声明, per_mpu6050.c 实现转发 Iic*), 对驱动层透明
 //
 // 代码源自 InvenSense eMPL 参考实现（正点原子 STM32 移植版），
 // 按四层架构重构：平台适配宏 → 硬件层函数调用，去除 MSP430 残留
 
 #include "comp_mpu.h"
-#include "mpu6050.h"
+#include "bsp_delay.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>

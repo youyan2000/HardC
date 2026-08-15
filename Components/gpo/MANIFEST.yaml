@@ -1,7 +1,0 @@
-id: components/gpo
-layer: Components
-description: GPO 父类 — LED/蜂鸣器/风扇等数字输出抽象
-files:
-  - comp_gpo.h
-  - comp_gpo.c
-depends: []

@@ -1,0 +1,14 @@
+id: components/peripheral
+layer: Components
+description: 外设域基类 — SensorBase (测量) + OutputBase (开关/调压) + MPU6050 芯片能力层 (comp_mpu + DMP 固件)
+files:
+  - comp_sensor.h
+  - comp_sensor.c
+  - comp_output.h
+  - comp_output.c
+  - comp_mpu.h
+  - comp_mpu_dmp.c
+depends:
+  - components/contract
+  - components/math
+  - BSP/bsp_delay.h
