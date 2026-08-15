@@ -3,7 +3,7 @@ config_id: aggressive
 description: 弯道响应强 — Kpp=4.5 高速过弯, 直线可能轻微摇头
 
 config:
-  # --- 速度环 PID (PidStandard) ---
+  # --- 速度环 PID (PidBase 子类) ---
   vel_a:
     kp: 80.0
     ki: 5.0
@@ -19,7 +19,7 @@ config:
     outmax: 7200.0
     i_outmax: 200.0
 
-  # --- 角度环 PID (PidStandard) ---
+  # --- 角度环 PID (PidBase 子类) ---
   pos_a:
     kp: 60.0
     ki: 0.1

@@ -3,7 +3,7 @@ config_id: default
 description: 平衡参数 — 速度/稳定性经过硬件验证
 
 config:
-  # --- 速度环 PID (PidStandard) ---
+  # --- 速度环 PID (PidBase 子类) ---
   vel_a:
     kp: 80.0
     ki: 5.0
@@ -19,7 +19,7 @@ config:
     outmax: 7200.0
     i_outmax: 200.0
 
-  # --- 角度环 PID (PidStandard) ---
+  # --- 角度环 PID (PidBase 子类) ---
   pos_a:
     kp: 60.0
     ki: 0.1

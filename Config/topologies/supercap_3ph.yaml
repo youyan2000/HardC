@@ -4,8 +4,8 @@
 #   (对照 docs/learning/SuperCap_Projects_Study_Report.md)
 # 相位参数化: 名目 phases: 3, YAML 支持 1..3 — phases:1 退化为 phase_legs 单条目
 #   (单腿 Buck/Boost 可 leg_b_used: false, 仅 timer_a/mask_a)
-# status: planned — 控制模块已实现 (mod_supercap/mod_current_share/mod_can_proto),
-#   拓扑整合待 App 层 (board_init 绑定 + YmaC 工程物化) 后改为 ready
+# status: ready — 控制模块已实现 (mod_supercap/mod_current_share/mod_can_proto) +
+#   接线生成契约三方汇合 (gen_app _MODULE_GEN 发射 + clang ARM gate + host 验证), 2026-08-15 翻转
 # 非槽位注入 (power_lpf_fc/short_ilim/unbalance_thr/num_phases/adc 通道) 由
 #   pwm/adc/share 段派生, 拓扑 ready 时经 _build_config_from_form 一并覆盖
 
@@ -14,7 +14,7 @@ display: 三相并联超级电容
 category: energy-storage
 phases: 3                 # 并联相数 (1..3) — 与 pwm.phase_legs 条目数一致; 1 → 单相退化
 description: 三相并联超级电容功率管理 — 裁判功率级联 (LPF 120Hz → 功率 PI) + 充放限幅 (i_lim×va / cap_ilimit×vb) + taper 满电渐入 + 三相均流 (mod_current_share) + 短路/失平衡保护, 驱动 PwmBuckBoost 三相并联
-status: planned
+status: ready
 modules:
   - components/pwm
   - components/adc
@@ -57,10 +57,13 @@ adc:
 share:
   num_phases: 3
   share_gain: 2.0
+  share_lim: 0.04           # 均流修正限幅 (±4%, ModShareCfg 默认)
   hyst_enter_lo: 0.97       # 模式迟滞进入窗口 [0.97, 1.03] → BuckBoost
   hyst_enter_hi: 1.03
   hyst_exit_lo: 0.90        # 退出窗口 (超出) → Buck/Boost
   hyst_exit_hi: 1.10
+  pid_kp: 0.5               # 相电流 PI 比例 (均流增益由 slot[9] 注入覆盖)
+  pid_ki: 0.0               # 相电流 PI 积分
 comm:
   can:
     tx_id: 0x051            # 遥测帧 (200Hz / 5ms)
