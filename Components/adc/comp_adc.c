@@ -1,3 +1,8 @@
+// ADC 基类实现 —— AdcBase 父类的构造/析构/分派
+//
+// 提供统一基类契约: 成员清零 (init/deinit)、ops 虚表分派 (start_dma/read_ch/process)
+// 子类 (AdcDcSampler/AdcAcSampler/AdcFollower) 在 init 时绑定自身 static ops
+
 #include "comp_adc.h"
 #include <assert.h>
 #include <stddef.h>

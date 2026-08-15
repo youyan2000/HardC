@@ -1,20 +1,17 @@
-/**
- * @file    adc_dc_sampler.c
- * @brief   通用直流采样器实现 —— AdcBase 子类
- *
- * 实现 AdcOps 虚函数表:
- *   .start_dma → start_dma_impl (启动 ADC DMA 循环扫描, N 通道)
- *   .read_ch   → read_ch_impl   (读取通道 i 原始值)
- *   .process   → process_impl   (EMA 滤波 + 线性校准)
- *
- * 核心公式 (每通道独立):
- *   raw_f[i] = alpha[i] * raw[i] + (1-alpha[i]) * raw_f[i]   (EMA 一阶低通)
- *   value[i] = k[i] * raw_f[i] + b[i]                         (线性校准)
- *
- * 参考:
- *   - dev_sampler.h: Device_Sampler_GetVoltage()
- *   - adc_sampler.cpp: 线性校准+滤波
- */
+// 通用直流采样器实现 —— AdcBase 子类
+//
+// 实现 AdcOps 虚函数表:
+//   .start_dma → start_dma_impl (启动 ADC DMA 循环扫描, N 通道)
+//   .read_ch   → read_ch_impl   (读取通道 i 原始值)
+//   .process   → process_impl   (EMA 滤波 + 线性校准)
+//
+// 核心公式 (每通道独立):
+//   raw_f[i] = alpha[i] * raw[i] + (1-alpha[i]) * raw_f[i]   (EMA 一阶低通)
+//   value[i] = k[i] * raw_f[i] + b[i]                         (线性校准)
+//
+// 参考:
+//   - dev_sampler.h: Device_Sampler_GetVoltage()
+//   - adc_sampler.cpp: 线性校准+滤波
 
 #include "adc_dc_sampler.h"
 #include "container_of.h"

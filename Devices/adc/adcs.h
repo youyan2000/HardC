@@ -1,10 +1,10 @@
-#ifndef ADCS_H
-#define ADCS_H
-
 // ADHardC 全局句柄 — 应用层唯一入口
 // 使用方式: #include "adcs.h" → adc_read_ch(g_adc_follower, 0)
 //
 // 命名规则: g_adc_<用途> (全局句柄 g_ 前缀)
+
+#ifndef ADCS_H
+#define ADCS_H
 
 #include "comp_adc.h"
 

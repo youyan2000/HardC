@@ -1,6 +1,3 @@
-#ifndef MOD_SAMPLER_H
-#define MOD_SAMPLER_H
-
 // 采样管理状态机模板 — ADHardC Module 层
 // Module 层状态机模式
 //
@@ -19,6 +16,9 @@
 //     AdcBase      *adc_dev[N];    // 管理的 ADC 设备列表
 //     Module_Status *status;       // 共享状态
 //   } MySampler;
+
+#ifndef MOD_SAMPLER_H
+#define MOD_SAMPLER_H
 
 #include <stdbool.h>
 #include <stdint.h>

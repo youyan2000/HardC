@@ -1,8 +1,8 @@
-#ifndef COMP_ADC_H
-#define COMP_ADC_H
-
 // ADC 平台层 —— 抽象基类
 // 子类: 红外循迹传感器 (drv_adc_follower)
+
+#ifndef COMP_ADC_H
+#define COMP_ADC_H
 
 #include <stdint.h>
 

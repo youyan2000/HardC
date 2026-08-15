@@ -1,28 +1,25 @@
-/**
- * @file    adc_dc_sampler.h
- * @brief   通用直流采样器 —— 继承 AdcBase，N 通道线性校准 + 一阶低通滤波
- *
- * 继承关系:
- *   AdcBase  <—  AdcDcSampler (本文件)
- *
- * 适用场景:
- *   - 单相直流采样: 电池电压、温度传感器 (NTC)、电位器
- *   - 多相直流采样: 多路电压/电流监测点
- *
- * 数据处理 (process):
- *   1. EMA 一阶低通滤波: raw_f = alpha * raw + (1-alpha) * raw_f
- *   2. 线性校准:          value = k * raw_f + b
- *
- * 参考:
- *   - dev_sampler.h: Device_Volt_Sampler / Device_Current_Sampler
- *   - "adc计算得出的数据往往与真实数据之间存在误差，而且基本表现为线性误差"
- *     所以直接将 adc_sum 与真实数据使用一个线性方程转换:
- *     voltage_ / current_ = k * sum_ + b, 并使用一阶线性滤波平稳 adc 数值
- *
- * 与 AdcAcSampler 区别:
- *   - AdcDcSampler: 直流信号, 线性校准+滤波, 通道数可变 (1~8)
- *   - AdcAcSampler: 交流信号, 差分ADC+三相重构+RMS+VDC, 固定 7 通道
- */
+// 通用直流采样器 —— AdcBase 的子类
+//
+// 继承关系:
+//   AdcBase  <—  AdcDcSampler (本文件)
+//
+// 适用场景:
+//   - 单相直流采样: 电池电压、温度传感器 (NTC)、电位器
+//   - 多相直流采样: 多路电压/电流监测点
+//
+// 数据处理 (process):
+//   1. EMA 一阶低通滤波: raw_f = alpha * raw + (1-alpha) * raw_f
+//   2. 线性校准:          value = k * raw_f + b
+//
+// 参考:
+//   - dev_sampler.h: Device_Volt_Sampler / Device_Current_Sampler
+//   - "adc计算得出的数据往往与真实数据之间存在误差，而且基本表现为线性误差"
+//     所以直接将 adc_sum 与真实数据使用一个线性方程转换:
+//     voltage_ / current_ = k * sum_ + b, 并使用一阶线性滤波平稳 adc 数值
+//
+// 与 AdcAcSampler 区别:
+//   - AdcDcSampler: 直流信号, 线性校准+滤波, 通道数可变 (1~8)
+//   - AdcAcSampler: 交流信号, 差分ADC+三相重构+RMS+VDC, 固定 7 通道
 
 #ifndef ADC_DC_SAMPLER_H
 #define ADC_DC_SAMPLER_H

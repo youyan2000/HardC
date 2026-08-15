@@ -1,41 +1,39 @@
-/**
- * @file    adc_ac_sampler.h
- * @brief   三相交流采样驱动 —— 继承 AdcBase，差分+单端同步采样 + 三相重构
- * @note    参考 STM32G474 配置: ADC1, TIM1_TRGO 触发, DMA 循环
- *
- * 继承关系:
- *   AdcBase  <—  AdcAcSampler (本文件)
- *
- * 通道配置 (灵活映射, 不写死):
- *   电压通道 (v_ch[], 差分): 最多 4 路 — 典型: Vab, Vbc, Vab_rec, Vbc_rec
- *   电流通道 (i_ch[], 差分): 最多 8 路 — 典型: Ia_inv,Ib_inv,Ic_inv, Ia_rec,Ib_rec,Ic_rec + 2 spare
- *   参考通道 (vref_ch, 单端): 1 路  — 典型: Vref_1V65
- *
- *   典型 7ch 配置:
- *     i_ch[0..3] = {0,1,2,3}  → Ia_inv, Ic_inv, Ia_rec, Ic_rec
- *     v_ch[0..1] = {4,5}      → Vab, Vbc
- *     vref_ch    = 6          → Vref_1V65
- *
- *   扩展 13ch 配置 (双逆变器+双整流器全监测):
- *     i_ch[0..7] = {0..7}     → 8 路电流 (两组三相+两路预留)
- *     v_ch[0..3] = {8..11}    → 4 路电压
- *     vref_ch    = 12         → Vref_1V65
- *
- * 差分模式關鍵:
- *   - ADC 結果為有符號 int16_t: -4095 ~ +4095 對應 ±3.3V
- *   - 不用減 1.65V 偏置！差分對自動抵消共模
- *
- * 数据处理 (process):
- *   1. 原始 ADC → 工程量: v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
- *                         i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i])
- *   2. 三相电压重构: Vab,Vbc → Va,Vb,Vc (线电压→相电压)
- *   3. 三相电流重构: Ia,Ic → Ia,Ib,Ic (KCL: Ib=-(Ia+Ic))
- *   4. RMS 计算 (arm_rms_f32)
- *   5. DC 母线电压估算 (线电压峰值低通滤波)
- *
- * 适用场景: 电力电子三相逆变器/整流器交流电压电流采样
- * 直流采样请使用 AdcDcSampler (adc_dc_sampler.h)
- */
+// 三相交流采样驱动 —— AdcBase 的子类
+//
+// 参考 STM32G474 配置: ADC1, TIM1_TRGO 触发, DMA 循环
+//
+// 继承关系:
+//   AdcBase  <—  AdcAcSampler (本文件)
+//
+// 通道配置 (灵活映射, 不写死):
+//   电压通道 (v_ch[], 差分): 最多 4 路 — 典型: Vab, Vbc, Vab_rec, Vbc_rec
+//   电流通道 (i_ch[], 差分): 最多 8 路 — 典型: Ia_inv,Ib_inv,Ic_inv, Ia_rec,Ib_rec,Ic_rec + 2 spare
+//   参考通道 (vref_ch, 单端): 1 路  — 典型: Vref_1V65
+//
+//   典型 7ch 配置:
+//     i_ch[0..3] = {0,1,2,3}  → Ia_inv, Ic_inv, Ia_rec, Ic_rec
+//     v_ch[0..1] = {4,5}      → Vab, Vbc
+//     vref_ch    = 6          → Vref_1V65
+//
+//   扩展 13ch 配置 (双逆变器+双整流器全监测):
+//     i_ch[0..7] = {0..7}     → 8 路电流 (两组三相+两路预留)
+//     v_ch[0..3] = {8..11}    → 4 路电压
+//     vref_ch    = 12         → Vref_1V65
+//
+// 差分模式關鍵:
+//   - ADC 結果為有符號 int16_t: -4095 ~ +4095 對應 ±3.3V
+//   - 不用減 1.65V 偏置！差分對自動抵消共模
+//
+// 数据处理 (process):
+//   1. 原始 ADC → 工程量: v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
+//                         i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i])
+//   2. 三相电压重构: Vab,Vbc → Va,Vb,Vc (线电压→相电压)
+//   3. 三相电流重构: Ia,Ic → Ia,Ib,Ic (KCL: Ib=-(Ia+Ic))
+//   4. RMS 计算 (arm_rms_f32)
+//   5. DC 母线电压估算 (线电压峰值低通滤波)
+//
+// 适用场景: 电力电子三相逆变器/整流器交流电压电流采样
+// 直流采样请使用 AdcDcSampler (adc_dc_sampler.h)
 
 #ifndef ADC_AC_SAMPLER_H
 #define ADC_AC_SAMPLER_H

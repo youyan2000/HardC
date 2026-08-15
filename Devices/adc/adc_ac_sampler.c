@@ -1,25 +1,23 @@
-/**
- * @file    adc_ac_sampler.c
- * @brief   三相交流采样器实现 —— AdcBase 子类
- * @note    参考 drv_adc_sampler.c
- *
- * 实现 AdcOps 虚函数表:
- *   .start_dma → start_dma_impl (启动 ADC DMA 循环扫描)
- *   .read_ch   → read_ch_impl   (读取通道 i 原始值)
- *   .process   → process_impl   (工程量转换 + 三相重构 + RMS + Vdc)
- *
- * 通道数灵活配置:
- *   - num_v 路电压 (差分, ≤4):  v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
- *   - num_i 路电流 (差分, ≤8):  i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i])
- *   - 1 路参考 (单端):          vref = se_to_voltage(raw[vref_ch])
- *
- * 三相重构 (process / fast_fetch 中调用):
- *   - 电压: Vab, Vbc → Va, Vb, Vc
- *   - 电流: Ia, Ic  → Ia, Ib, Ic  (KCL: Ib = -(Ia+Ic))
- *
- * ISR 安全: fast_fetch 仅标量浮点运算 (无 arm_rms_f32 / sqrtf)
- * 参考: RM0440 §21.4.6 差分模式 DIFSEL 寄存器
- */
+// 三相交流采样器实现 —— AdcBase 子类
+//
+// 参考 drv_adc_sampler.c
+//
+// 实现 AdcOps 虚函数表:
+//   .start_dma → start_dma_impl (启动 ADC DMA 循环扫描)
+//   .read_ch   → read_ch_impl   (读取通道 i 原始值)
+//   .process   → process_impl   (工程量转换 + 三相重构 + RMS + Vdc)
+//
+// 通道数灵活配置:
+//   - num_v 路电压 (差分, ≤4):  v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
+//   - num_i 路电流 (差分, ≤8):  i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i])
+//   - 1 路参考 (单端):          vref = se_to_voltage(raw[vref_ch])
+//
+// 三相重构 (process / fast_fetch 中调用):
+//   - 电压: Vab, Vbc → Va, Vb, Vc
+//   - 电流: Ia, Ic  → Ia, Ib, Ic  (KCL: Ib = -(Ia+Ic))
+//
+// ISR 安全: fast_fetch 仅标量浮点运算 (无 arm_rms_f32 / sqrtf)
+// 参考: RM0440 §21.4.6 差分模式 DIFSEL 寄存器
 
 #include "adc_ac_sampler.h"
 #include "container_of.h"

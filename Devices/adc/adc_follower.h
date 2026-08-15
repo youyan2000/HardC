@@ -1,9 +1,9 @@
-#ifndef ADC_FOLLOWER_H
-#define ADC_FOLLOWER_H
-
 // 红外循迹传感器驱动 —— AdcBase 的子类
 // 使用 ADC1 + DMA1 通道 1, 8 路扫描 (PA0-PA7)
 // TIM3 TRGO 触发，DMA 循环写入 AdcBase.raw[8]
+
+#ifndef ADC_FOLLOWER_H
+#define ADC_FOLLOWER_H
 
 #include "comp_adc.h"
 #include "stm32f1xx_hal.h"

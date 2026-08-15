@@ -1,3 +1,8 @@
+// 红外循迹传感器驱动实现 —— AdcBase 子类
+//
+// 实现 AdcOps 虚函数表: start_dma / read_ch / process
+// ADC1 + DMA1 通道 1, 8 路扫描 (PA0-PA7), TIM3 TRGO 触发, DMA 循环写 raw[8]
+
 #include "adc_follower.h"
 #include "container_of.h"
 #include <stdio.h>
