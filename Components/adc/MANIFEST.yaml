@@ -1,7 +1,10 @@
 id: components/adc
 layer: Components
-description: ADC 父类 — 采样/校准抽象, 不透明句柄
+description: ADC 父类 — 采样/校准抽象, 不透明句柄 + 信号处理共享承诺 (comp_adc_sig)
 files:
   - comp_adc.h
   - comp_adc.c
-depends: []
+  - comp_adc_sig.h
+depends:
+  - components/dsp      # comp_filter.h — EMA 滤波器 (comp_adc_sig 复用 MathEmavg)
+  - components/math     # comp_math.h — M_PI / MATH_SQRT (comp_adc_sig)
