@@ -8,11 +8,13 @@ files:
   - bsp_dsp.h
   - bsp_dsp_fft.h
   - bsp_dsp_fir.h
+  - bsp_gpio.h            # GPIO 平台无关抽象 (电平 + EXTI 中断, 值类型)
   - bsp_pwm.h
   - bsp_step_motor.h
   - bsp_stm32_hal.h      # STM32 系列 HAL shim (HARDC_STM32_F1/F3/F4/G4/H7 分发)
   - bsp_hrtim.c          # STM32 HRTIM PWM 后端 (bsp_pwm.h, F334/F3/G4/H7)
   - bsp_adc_stm32.c      # STM32 ADC DMA 后端 (bsp_adc.h)
+  - bsp_gpio_stm32.c     # STM32 GPIO 后端 (bsp_gpio.h, GPIO 电平 + EXTI 分发)
   - bsp_watchdog.h       # 看门狗 BSP 抽象 (LibXR Watchdog/STM32Watchdog 移植)
   - bsp_watchdog_stm32.c # STM32 HAL IWDG 后端 (LibXR stm32_watchdog.cpp 移植)
   - bsp_watchdog_c2000.c # C2000 WDT 后端 (Phase 3 按数据手册核对)
