@@ -1,0 +1,18 @@
+id: devices/pll
+layer: Devices
+description: 锁相环设备实现 — 继承 PllBase 的全部鉴相子类 (PllBase 第一成员 + ops 虚表), PD(鉴相)/LF(环路滤波 基类)/VCO(压控振荡器 基类)
+files:
+  - pll_sogi.h
+  - pll_sogi.c
+  - pll_srf.h
+  - pll_srf.c
+  - pll_notch.h
+  - pll_notch.c
+  - pll_ddsrf.h
+  - pll_ddsrf.c
+  - pll_sogi_fll.h
+  - pll_sogi_fll.c
+  - plls.h
+depends:
+  - components/pll
+  - components/math

@@ -1,0 +1,8 @@
+id: components/pll
+layer: Components
+description: 锁相环父类契约 (PllBase + PllOps 虚表) — 承诺 PD(鉴相) → LF(环路滤波) → VCO(压控振荡器) 三环节, 一个输入帧 + 一个反馈输出; LF(PI)+VCO 收进基类下沉复用
+files:
+  - comp_pll_base.h
+  - comp_pll_base.c
+depends:
+  - components/math
