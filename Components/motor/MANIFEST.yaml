@@ -1,12 +1,25 @@
 id: components/motor
 layer: Components
-description: 电机父类 — FOC 电机抽象 + BLDC InstaSPIN + 步进电机 + 模6换相
+description: 电机父类 — FOC 电机抽象 + BLDC InstaSPIN + 无感观测器家族 + 步进电机 + 模6换相
 files:
+  - comp_aci_fe.h
+  - comp_aci_fe.c
+  - comp_aci_se.h
+  - comp_angle.h
+  - comp_bldc_instaspin.h
+  - comp_curmod.h
+  - comp_esmo.h
+  - comp_hfi.h
+  - comp_mod6.h
   - comp_motor.h
   - comp_motor.c
-  - comp_bldc_instaspin.h
-  - comp_mod6.h
+  - comp_resolver.h
+  - comp_smo.h
+  - comp_speed.h
   - comp_step_motor.h
   - comp_step_motor.c
+  - comp_svgen.h
+  - comp_vhz.h
+  - comp_volt.h
 depends:
   - components/math

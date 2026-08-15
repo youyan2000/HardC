@@ -12,7 +12,7 @@
 //   1. 电流估计:   i_est += (dt/Ls) × (V - Rs×i_est - E_filt - Z)
 //   2. 滑模控制:   Z = clamp(I_err × K_slide, ±1)     ← 饱和函数替代符号函数
 //   3. 反电动势提取: E_filt += dt×ωc × (Z - E_filt)     ← 一阶 IIR 低通
-//   4. PLL 鉴相:   ε = Eα_filt×cos(θ) - Eβ_filt×sin(θ)
+//   4. PLL 鉴相:   ε = -Eα_filt×cos(θ) - Eβ_filt×sin(θ)
 //   5. PI → VCO:   积分 += Ki×ε×dt, ω = Kp×ε + 积分, θ += ω×dt
 //   6. 角度归一化: θ ∈ [-π, π]
 //
@@ -156,12 +156,14 @@ static inline void esmo_run(EsmoState *me, const EsmoCfg *cfg,
   me->bemf_beta_filt  += lpf_coeff * (me->smo_beta  - me->bemf_beta_filt);
 
   // ---- 阶段 5: PLL 锁相环角度/速度跟踪 ----
+  // 符号约定与 comp_smo.h 一致: e_α = -E·sinθ, e_β = +E·cosθ
+  // (comp_smo.h: θ = atan2(-e_α, e_β)) → ε = -e_α·cosθ̂ - e_β·sinθ̂ = E·sin(θ-θ̂), 锁定时 θ̂→θ
   // 鉴相器 (Phase Detector):
-  //   ε = Eα_filt × cos(θ_pll) - Eβ_filt × sin(θ_pll)
+  //   ε = -Eα_filt × cos(θ_pll) - Eβ_filt × sin(θ_pll)
   // 原理: 将滤波后的反电动势投影到估计旋转坐标系
   //       锁定时 ε → 0, θ_pll → 真实转子角度
-  me->pll_err = me->bemf_alpha_filt * cosf(me->theta_pll)
-              - me->bemf_beta_filt  * sinf(me->theta_pll);
+  me->pll_err = -me->bemf_alpha_filt * cosf(me->theta_pll)
+               - me->bemf_beta_filt  * sinf(me->theta_pll);
 
   // PI 环路滤波器
   // 积分项累积稳态误差 → 消除静差
