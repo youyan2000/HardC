@@ -1,5 +1,4 @@
 // 大小端转换库 — 16/32 位原地翻转 + 双缓冲拷贝, 无依赖, ISR 安全
-// 来源: 原 Components/math/comp_math.h 拆分
 
 #ifndef COMP_ENDIAN_H
 #define COMP_ENDIAN_H
