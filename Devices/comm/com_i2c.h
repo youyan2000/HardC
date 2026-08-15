@@ -1,30 +1,46 @@
+// I2C 传输类 —— CommBase 子类 (Devices/comm, 阶段1 重构)
+//
+// 语义: 从机寻址 + 寄存器访问. 双模式:
+//   IIC_HW — 硬件 I2C (HAL_I2C_Mem_Write/Mem_Read, 100ms 超时)
+//   IIC_SW — 软件 bit-bang (纯 C 走 bsp_gpio, SCL/SDA 引脚注入, host 可测)
+//
+// 数据面 (模式/句柄/地址/引脚) 在子类结构体, 不进 CommBase 虚表;
+// 保留 iic_read_reg 语义 (写寄存器地址→读 N 字节, 传感器访问标准模式).
+
 #ifndef COM_I2C_H
 #define COM_I2C_H
 
-// I2C 通信驱动 —— CommBase 的子类
-// 主模式 I2C, 设备地址在 init 时绑定
-// send: HAL_I2C_Master_Transmit 阻塞写入
-// bgn:  HAL_I2C_Master_Receive_IT 启动单字节中断接收
-// read: 返回最近收到的字节
-//
-// 扩展 API:
-//   iic_read_reg() — 写寄存器地址 → 读 N 字节（传感器寄存器访问模式）
-
 #include "comp_comm.h"
-#include "stm32f1xx_hal.h"
+#include "comp_io.h"
+#include "comp_error_code.h"
+#include "bsp_gpio.h"
+#include "bsp_stm32_hal.h"
 
-// 子类结构体 —— base 必须是第一个成员（保证 &iic.base == &iic）
+typedef enum { IIC_HW = 0, IIC_SW = 1 } IicMode;
+
+// I2C 类 — HW (HAL I2C) + SW (bit-bang 走 bsp_gpio)
 typedef struct {
-  CommBase           base;      // 基类
-  I2C_HandleTypeDef  *hi2c;     // HAL I2C 句柄
-  uint8_t             dev_addr; // 7位设备地址（已左移1位，即 HAL 需要的格式）
+  CommBase base;            // 基类 (必须第一成员)
+  I2C_HandleTypeDef *hi2c;  // HW 模式句柄 (iic_init_hw)
+  uint8_t dev_addr;         // 7-bit 从机地址
+  BspGpioPin scl;           // SW 模式时钟脚
+  BspGpioPin sda;           // SW 模式数据脚
+  IicMode mode;             // 当前模式
+  IoCompletion completion;
 } Iic;
 
-void iic_init(Iic *me, CommName name, I2C_HandleTypeDef *hi2c, uint8_t dev_addr);
+// HW 模式初始化
+void iic_init_hw(Iic *me, I2C_HandleTypeDef *hi2c, uint8_t dev_addr);
+
+// SW 模式初始化 (bit-bang)
+void iic_init_sw(Iic *me, BspGpioPin scl, BspGpioPin sda, uint8_t dev_addr);
+
 void iic_deinit(Iic *me);
 
-// 扩展 API: 写寄存器地址后读 N 字节 —— 传感器访问标准模式
-// 用法: iic_read_reg(&i2c_dev, 0x3B, buf, 6); // 读 MPU6050 加速度计
-uint8_t iic_read_reg(Iic *me, uint8_t reg, uint8_t *dst, uint8_t len);
+// 写寄存器地址 → 写 len 字节 (传感器寄存器访问模式)
+ErrorCode iic_write_reg(Iic *me, uint8_t reg, const uint8_t *dat, uint16_t len, IoCompletion comp);
 
-#endif
+// 写寄存器地址 → 读 len 字节 (传感器寄存器访问模式)
+ErrorCode iic_read_reg(Iic *me, uint8_t reg, uint8_t *dat, uint16_t len, IoCompletion comp);
+
+#endif  // COM_I2C_H

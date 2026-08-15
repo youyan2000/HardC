@@ -1,40 +1,66 @@
+// CAN 传输类 —— CommBase 子类 (Devices/comm, 阶段1 重构)
+//
+// 语义: 帧订阅分发. 发送直接收 id + data; 接收经订阅表按 id 分发回调.
+// 删掉了旧版"buf 前 4 字节编码 StdId"的 hack — ID 现在是独立参数.
+//
+// 数据面 (订阅表 + 句柄) 在子类结构体, 不进 CommBase 虚表;
+// 中断里 HAL_CAN_IRQHandler 交给 HAL (通知钩子), MAIN 里 can_poll 收帧分发.
+
 #ifndef COM_CAN_H
 #define COM_CAN_H
 
-// CAN 总线通信驱动 —— CommBase 的子类
-// CAN 是消息帧协议（非字节流），CommOps 做最小语义适配:
-//   send: 将 dat 前4字节作 StdId, 后续作 payload, 调用 HAL_CAN_AddTxMessage
-//   bgn:  启动 CAN + 激活 FIFO0 消息挂起中断
-//   read: 轮询 FIFO0, 有新消息时缓存到 rx_data[] 并返回 rx_dlc
-//
-// 扩展 API（CAN 特有，不走 ops）:
-//   can_send_msg()  — 标准帧发送（显式 ID + DLC）
-//   can_poll()      — 轮询 RX FIFO
-//   can_set_filter() — 配置硬件 ID 过滤器
-
 #include "comp_comm.h"
-#include "stm32f1xx_hal.h"
+#include "comp_io.h"
+#include "comp_error_code.h"
+#include "bsp_stm32_hal.h"
 
-// 子类结构体 —— base 必须是第一个成员（保证 &can.base == &can）
+// 订阅表最大条目数
+#define CAN_SUB_MAX 8
+
+// CAN 帧视图
 typedef struct {
-  CommBase          base;      // 基类
-  CAN_HandleTypeDef *hcan;     // HAL CAN 句柄
-  uint32_t          rx_id;     // 最近收到的 CAN ID
-  uint8_t           rx_dlc;    // 最近收到的 DLC (0=无新消息)
-  uint8_t           rx_data[8]; // 最近收到的 payload
-} Can;
+  uint32_t id;
+  uint8_t dlc;  // 0~8
+  uint8_t data[8];
+} CanFrame;
 
-void can_init(Can *me, CommName name, CAN_HandleTypeDef *hcan);
+// 前向声明 (can_rx_fn 引用)
+typedef struct Can Can;
+
+// 订阅回调: 收到匹配 id 的帧时调用
+typedef void (*can_rx_fn)(Can *me, const CanFrame *frame, void *ctx);
+
+typedef struct {
+  CAN_HandleTypeDef *hcan;
+} CanConfig;
+
+// CAN 类 — 帧发送 + 帧订阅分发 (tag 与上方 typedef 前向声明配套)
+struct Can {
+  CommBase base;  // 基类 (必须第一成员)
+  CAN_HandleTypeDef *hcan;
+  IoCompletion completion;
+  struct {
+    uint32_t id;
+    can_rx_fn fn;
+    void *ctx;
+  } subs[CAN_SUB_MAX];
+  uint8_t sub_count;
+};
+
+void can_init(Can *me, const CanConfig *cfg);
+void can_set_config(Can *me, const CanConfig *cfg);
 void can_deinit(Can *me);
 
-// 发送标准 CAN 帧 (11-bit ID, 0-8 字节数据)
-void can_send_msg(Can *me, uint32_t id, const uint8_t *dat, uint8_t dlc);
+// 发送标准帧 (11-bit id, data.len ≤ 8, 否则 ERR_SIZE)
+ErrorCode can_send(Can *me, uint32_t id, CommConstData data, IoCompletion comp);
 
-// 轮询 RX FIFO0: 有新消息时填充 rx_id/rx_dlc/rx_data, 返回 dlc; 无消息返回 0
-uint8_t can_poll(Can *me);
+// 订阅帧 (表满 → ERR_FULL; 同 id 覆盖旧订阅)
+ErrorCode can_register(Can *me, uint32_t id, can_rx_fn fn, void *ctx);
 
-// 配置硬件接收过滤器 (单 filter, 掩码模式)
-// filter_id: 期望的 ID 值   mask_id: 掩码 (1=必须匹配, 0=不关心)
-void can_set_filter(Can *me, uint32_t filter_id, uint32_t mask_id);
+// 取消订阅 (按 id 移除)
+void can_unregister(Can *me, uint32_t id);
 
-#endif
+// MAIN 轮询: 读 RX FIFO0 → 查订阅表分发
+void can_poll(Can *me);
+
+#endif  // COM_CAN_H
