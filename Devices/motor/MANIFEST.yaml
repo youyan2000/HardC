@@ -6,8 +6,12 @@ files:
   - motor_step.c
   - motor_tim.h
   - motor_tim.c
+  - motor_encoder.h
+  - motor_encoder.c
 depends:
   - components/motor
   - components/math
+  - devices/comm
+  - BSP/bsp_adc.h
   - BSP/bsp_step_motor.h
   - BSP/container_of.h
