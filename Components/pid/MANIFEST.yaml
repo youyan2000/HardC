@@ -1,12 +1,10 @@
 id: components/pid
 layer: Components
-description: PID 控制器父类 + 四态 PI / 三态 PID / 非线性 PID / 自动调参
+description: PID 父类契约 (PidBase + PidOps 虚表) / 自动调参工具
 files:
   - comp_pid.h
   - comp_pid.c
-  - comp_pi_reg4.h
-  - comp_pid_reg3.h
-  - comp_pid_nl.h
   - comp_tcm.h
 depends:
   - components/math
+  - components/dsp

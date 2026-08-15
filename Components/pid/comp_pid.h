@@ -1,9 +1,9 @@
-#ifndef COMP_PID_H
-#define COMP_PID_H
-
 // PID 平台层 —— 极简基类: 只管理时钟 + 输出物理限幅 + 抗积分饱和调度
 // 所有子类通过 PidOps 虚表绑定, 基类不假设任何状态变量 (误差/历史等)
 // 统一入口 pid_compute(target, measure) 内部完成 计算 → 限幅 → 抗饱和回调
+
+#ifndef COMP_PID_H
+#define COMP_PID_H
 
 #include <stdint.h>
 #include <stdbool.h>

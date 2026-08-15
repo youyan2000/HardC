@@ -1,27 +1,36 @@
 id: devices/pid
 layer: Devices
-description: PID 设备实现 — 9 种子类 (Standard/Cascade/P2PD/Parallel/PR/QPR/DCL/Grando/Solar)
+description: PID 设备实现 — 继承 PidBase 的全部控制律子类 (PidBase 第一成员 + ops 虚表)
 files:
-  - pid_cascade.h
-  - pid_cascade.c
-  - pid_dcl.h
-  - pid_dcl.c
-  - pid_grando.h
-  - pid_grando.c
-  - pid_p2pd.h
-  - pid_p2pd.c
+  - pid_standard.h
+  - pid_standard.c
   - pid_parallel.h
   - pid_parallel.c
+  - pid_dcl.h
+  - pid_dcl.c
+  - pid_pi.h
+  - pid_pi.c
+  - pid_reg4.h
+  - pid_reg4.c
+  - pid_reg3.h
+  - pid_reg3.c
   - pid_pr.h
   - pid_pr.c
   - pid_qpr.h
   - pid_qpr.c
-  - pid_solar.h
-  - pid_solar.c
-  - pid_standard.h
-  - pid_standard.c
+  - pid_p2pd.h
+  - pid_p2pd.c
+  - pid_p.h
+  - pid_p.c
+  - pid_i.h
+  - pid_i.c
+  - pid_pd.h
+  - pid_pd.c
+  - pid_nl.h
+  - pid_nl.c
+  - pid_cascade.h
+  - pid_cascade.c
   - pids.h
 depends:
   - components/pid
   - components/math
-  - BSP/container_of.h

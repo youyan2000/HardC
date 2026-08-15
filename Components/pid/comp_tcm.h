@@ -1,8 +1,5 @@
 // 控制器自动调参 — 触发式阶跃响应捕获 + 性能准则 (DCL 库 TCM)
 //
-// 来源: TI C2000Ware Digital Power SDK c2000ware/libraries/control/DCL/c28/include/DCL_TCM.h
-// 翻译为 HardC 纯C float 版本 (FDLOG 环形日志 → 自包含环形缓冲)
-//
 // TCM (Tuning Criteria Module) 工作流:
 //   1. 初始化: 捕获窗 size 样本, 其中 lead 个为触发前 (预触发) 样本
 //   2. armed: 连续写入预触发环形缓冲, 检测误差信号越限 (|e|>trigMax 或 <trigMin)

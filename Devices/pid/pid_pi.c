@@ -1,6 +1,6 @@
-// 太阳能 PI 控制器实现 — 条件积分抗饱和
+// 比例积分 (PI) 控制器实现 — 条件积分抗饱和
 //
-// 来源: TI CNTL_PI_F (solar/v1.2/float)
+// 来源: TI CNTL_PI_F (solar/v1.2/float) (原名 pid_solar, 重命名为 pid_pi)
 // 算法:
 //   up = Kp * (Ref - Fbk)
 //   ui = (!prev_saturated) ? (Ki * up + ui_prev) : ui_prev   ← 冻结积分
@@ -8,13 +8,13 @@
 //   Out = clamp(v1, Umin, Umax)
 //   记录 prev_output = Out → 下拍判断 prev_saturated = (Out != v1)
 
-#include "pid_solar.h"
+#include "pid_pi.h"
 #include "container_of.h"
 
 // ======== ops 实现 ========
 
-static float solar_compute(PidBase *base, float target, float measure) {
-  PidSolar *me = container_of(base, PidSolar, base);
+static float pi_compute(PidBase *base, float target, float measure) {
+  PidPi *me = container_of(base, PidPi, base);
 
   // 比例项
   me->up = me->cfg.kp * (target - measure);
@@ -42,8 +42,8 @@ static float solar_compute(PidBase *base, float target, float measure) {
   return me->v1;  // 基类 pid_compute 负责限幅
 }
 
-static void solar_reset(PidBase *base) {
-  PidSolar *me = container_of(base, PidSolar, base);
+static void pi_reset(PidBase *base) {
+  PidPi *me = container_of(base, PidPi, base);
   me->up = 0.0f;
   me->ui = 0.0f;
   me->ui_prev = 0.0f;
@@ -53,23 +53,23 @@ static void solar_reset(PidBase *base) {
 }
 
 // ======== 虚表 ========
-static const PidOps solar_ops = {
-  .compute = solar_compute,
-  .reset   = solar_reset,
+static const PidOps pi_ops = {
+  .compute = pi_compute,
+  .reset   = pi_reset,
   .on_saturation = 0,   // 条件积分在 compute 中自己判断, 不依赖回调
 };
 
 // ======== 构造 ========
 
-void pid_solar_init(PidSolar *me, float dt, float out_min, float out_max,
-                    const PidSolarConfig *cfg) {
+void pid_pi_init(PidPi *me, float dt, float out_min, float out_max,
+                 const PidPiConfig *cfg) {
   pid_base_init(&me->base);
 
   me->base.dt           = dt;
   me->base.out_min      = out_min;
   me->base.out_max      = out_max;
   me->base.anti_windup  = false;  // 内部自己做条件积分, 不依赖基类回调
-  me->base.ops          = &solar_ops;
+  me->base.ops          = &pi_ops;
 
   me->up      = 0.0f;
   me->ui      = 0.0f;
@@ -83,14 +83,14 @@ void pid_solar_init(PidSolar *me, float dt, float out_min, float out_max,
   }
 }
 
-void pid_solar_update_config(PidSolar *me, const PidSolarConfig *cfg) {
+void pid_pi_update_config(PidPi *me, const PidPiConfig *cfg) {
   me->cfg = *cfg;   // cfg 是独立成员, 不影响 up/ui/ui_prev/v1 等状态
 }
 
-void pid_solar_set_kp(PidSolar *me, float kp) {
+void pid_pi_set_kp(PidPi *me, float kp) {
   me->cfg.kp = kp;
 }
 
-void pid_solar_set_ki(PidSolar *me, float ki) {
+void pid_pi_set_ki(PidPi *me, float ki) {
   me->cfg.ki = ki;
 }

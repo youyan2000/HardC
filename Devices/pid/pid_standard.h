@@ -1,6 +1,3 @@
-#ifndef PID_STANDARD_H
-#define PID_STANDARD_H
-
 // 标准 PID 控制器 —— PidBase 的子类
 //
 // 内模原理: 内嵌积分器 (1/s) 跟踪阶跃/恒值信号, 微分器 (s) 提供阻尼
@@ -8,6 +5,9 @@
 // 状态同步: on_saturation 回调实现反算抗积分饱和
 //
 // 特性: 死区 / 变速积分 / 积分分离 / 微分先行 / 前馈 / 积分输出限幅 / 抗积分饱和
+
+#ifndef PID_STANDARD_H
+#define PID_STANDARD_H
 
 #include "comp_pid.h"
 

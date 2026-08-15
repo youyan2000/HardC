@@ -1,6 +1,3 @@
-#ifndef PID_PARALLEL_H
-#define PID_PARALLEL_H
-
 // 并行形式 PID 控制器 —— PidBase 的子类
 //
 // 并行结构: output = K * (Kp*err + Ki*∫err*dt + Kd*derr/dt)
@@ -8,6 +5,9 @@
 // 与 PidStandard (串行形式) 的区别: 串行结构 output = Kp * (err + Ki*∫err*dt + Kd*derr/dt)
 //
 // 并行 PID 公式
+
+#ifndef PID_PARALLEL_H
+#define PID_PARALLEL_H
 
 #include "comp_pid.h"
 #include <stdbool.h>

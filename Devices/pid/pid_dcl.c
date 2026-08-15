@@ -43,6 +43,8 @@ static inline float clampf(float v, float lo, float hi) {
 // ======== ops 实现 ========
 
 // DCL PidOps::compute — 按 DCL_PID.asm 的 5 阶段算法
+//   aw_mode=DCL_AW_PRODUCT → 原 DCL 乘法冻结
+//   aw_mode=DCL_AW_BACKCALC → GRANDO 回算 (Kp 作用于三路和)
 static float dcl_compute(PidBase *base, float target, float measure) {
   PidDcl *me = container_of(base, PidDcl, base);
 
@@ -54,27 +56,38 @@ static float dcl_compute(PidBase *base, float target, float measure) {
   float c2 = me->cfg.c2;
 
   // ---- 阶段 1: 微分支路 (滤波微分, 只对反馈 yk 求导) ----
-  float v1 = kd * c1 * measure;          // 缩放反馈
-  float v4 = v1 - me->d2 - me->d3;       // 一阶 IIR 低通差分
-  me->d2 = v1;                            // 保存输入延迟
-  me->d3 = c2 * v4;                       // 保存反馈延迟 (c2*v4 = d存储)
+  float v1 = kd * c1 * measure;
+  float v4 = v1 - me->d2 - me->d3;
+  me->d2 = v1;
+  me->d3 = c2 * v4;
 
   // ---- 阶段 2: 比例支路 (2-DOF 设定点权重) ----
-  float v5 = kr * target - measure;       // 加权误差 (Kr=0→I-PD, Kr=1→标准PID)
-  v5 = v5 - v4;                            // 减微分贡献 (v4含负号, 实际加阻尼)
-  float v6 = kp * v5;                      // P 项
+  float v5 = kr * target - measure - v4;
+
+  if (me->cfg.aw_mode == DCL_AW_BACKCALC) {
+    // === GRANDO 回算形式: Kp 作用于 (up+ui+ud) 三路和 ===
+    // up = Kr*Ref - Fbk ; D 已入 v4 ; ui 累计带 w1(=i14) 门控
+    float up = kr * target - measure;
+    float i_inc = ki * (target - measure);
+    me->i_storage += i_inc * me->i14;       // w1 门控 (i14=0 冻结)
+    // 输出: Kp*(up + ui + ud), ud 已隐含于 v4 滤波差分贡献
+    me->i14 = 1.0f;                          // 默认允许 (on_saturation 覆盖)
+    me->prev_ref = target;
+    me->prev_fbk = measure;
+    return kp * (up + me->i_storage + v4);
+  }
+
+  // === DCL 原乘法冻结: Kp 只在比例支路, 积分用原始误差 ===
+  float v6 = kp * v5;
 
   // ---- 阶段 3: 积分支路 (乘法型抗饱和) ----
-  float v7 = ki * kp * (target - measure); // 积分增量 (用原始误差)
-  v7 = v7 * me->i14;                        // 饱和冻结: i14=0时v7=0, 积分停止
-  me->i_storage += v7;                      // 累积
-
-  // 重置 i14 为本拍的乐观预设 (下拍默认允许积分)
-  // 若本拍饱和, on_saturation 将覆盖 i14=0 冻结下拍积分
+  float v7 = ki * kp * (target - measure);
+  v7 = v7 * me->i14;
+  me->i_storage += v7;
   me->i14 = 1.0f;
 
   // ---- 阶段 4: 输出合成 + 限幅 ----
-  float v9 = v6 + me->i_storage;           // P + I (D 已隐含在 v5 中)
+  float v9 = v6 + me->i_storage;
   me->prev_ref = target;
   me->prev_fbk = measure;
 

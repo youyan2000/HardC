@@ -1,6 +1,3 @@
-#ifndef PID_P2PD_H
-#define PID_P2PD_H
-
 // P2PD 非线性 PID 控制器 —— PidBase 的子类
 //
 // 内模原理: 不含积分器 → 跟踪阶跃信号有静差, 但平方项提供自动增益调度
@@ -9,6 +6,9 @@
 //   无积分器 → 不需要抗积分饱和 (on_saturation = NULL)
 //
 // 适用场景: 循迹差速 (输入 pos -7~+7) / 转弯角度 (kpp=0 保持线性)
+
+#ifndef PID_P2PD_H
+#define PID_P2PD_H
 
 #include "comp_pid.h"
 

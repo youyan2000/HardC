@@ -1,6 +1,3 @@
-#ifndef PID_PR_H
-#define PID_PR_H
-
 // PR (比例谐振) 控制器 —— PidBase 的子类
 //
 // 内模原理: 内嵌谐振器 s/(s²+ω²), 在谐振频率 ω 处提供无穷大增益,
@@ -16,6 +13,9 @@
 //
 // 离散化: Tustin (双线性) 变换 s = (2/dt) * (z-1)/(z+1)
 //   每个谐振器 → biquad Direct Form I: y = b0*x + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
+
+#ifndef PID_PR_H
+#define PID_PR_H
 
 #include "comp_pid.h"
 #include <stdint.h>

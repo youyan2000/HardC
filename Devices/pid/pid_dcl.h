@@ -21,6 +21,12 @@
 
 #include "comp_pid.h"
 
+// 抗积分饱和模式 (dcl_grando 合并: 两种 DCL 源类策略并存)
+typedef enum {
+  DCL_AW_PRODUCT = 0,   // DCL 乘法冻结: 饱和时 i14=0 冻结积分 (速度更快)
+  DCL_AW_BACKCALC = 1,  // GRANDO 回算: 饱和时用 w1 门控 + 结合反算 (见 on_saturation)
+} PidDclAwMode;
+
 // ======== 配置结构体 ========
 typedef struct {
   float kp;              // 比例增益
@@ -29,6 +35,7 @@ typedef struct {
   float kr;              // 设定点权重 (0=I-PD, 1=标准PID, 默认0.5)
   float c1;              // D 项滤波器输入系数 (通常 2*PI*fc*T)
   float c2;              // D 项滤波器反馈系数 (通常 1/(1+2*PI*fc*T))
+  PidDclAwMode aw_mode;  // 抗饱和模式: PRODUCT (DCL) / BACKCALC (GRANDO)
 } PidDclConfig;
 
 // ======== 子类结构体 ========

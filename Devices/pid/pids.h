@@ -1,6 +1,3 @@
-#ifndef PIDS_H
-#define PIDS_H
-
 // PID 全局句柄 —— 应用层通过此文件访问所有 PID 实例
 // 遵循分层架构: Application → Module → Devices → Components → BSP
 //
@@ -8,6 +5,9 @@
 //   #include "pids.h"
 //   float duty = pid_compute(g_pid_vel, target_speed, measured_speed);
 //   pid_reset(g_pid_ang);
+
+#ifndef PIDS_H
+#define PIDS_H
 
 #include "comp_pid.h"
 

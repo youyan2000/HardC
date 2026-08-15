@@ -1,6 +1,3 @@
-#ifndef PID_QPR_H
-#define PID_QPR_H
-
 // QPR (准比例谐振) 控制器 —— PidBase 的子类
 //
 // 内模原理: 内嵌阻尼谐振器 ω_c*s/(s² + ω_c*s + ω²),
@@ -25,6 +22,9 @@
 //     a1 = 2*(ω² - K²) / den
 //     a2 = (K² - ω_c*K + ω²) / den
 //   PR 就是 QPR 在 ω_c→0 时的极限 (此时 a2→1)
+
+#ifndef PID_QPR_H
+#define PID_QPR_H
 
 #include "comp_pid.h"
 #include <stdint.h>

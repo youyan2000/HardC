@@ -1,6 +1,3 @@
-#ifndef PID_CASCADE_H
-#define PID_CASCADE_H
-
 // 角度+速度双环级联 PID —— 组合模块, 不继承 PidBase
 //
 // 架构: 组合优于继承 — 级联本质是两个独立 PID 控制器的串联编排:
@@ -9,6 +6,9 @@
 //
 // 每个子 PID 独立管理自己的状态、限幅和抗积分饱和
 // 级联模块只负责信号流编排: 串联 → 缩放 → 目标限幅
+
+#ifndef PID_CASCADE_H
+#define PID_CASCADE_H
 
 #include "comp_pid.h"
 
