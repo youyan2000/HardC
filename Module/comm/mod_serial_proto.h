@@ -1,6 +1,3 @@
-#ifndef MOD_SERIAL_PROTO_H
-#define MOD_SERIAL_PROTO_H
-
 // 调试串口协议框架 — COM-OOP Module 层
 // 串口协议设计 (5 种帧类型: 0xFA/0xFB/0xFC/0xEE/0xEF)
 //
@@ -29,6 +26,9 @@
 //   6. 主循环:
 //        if (serial_proto_is_frame_ready(&proto))
 //          serial_proto_process(&proto, &my_cmd_disp);
+
+#ifndef MOD_SERIAL_PROTO_H
+#define MOD_SERIAL_PROTO_H
 
 #include "mod_cmd_dispatch.h"
 #include <stdint.h>

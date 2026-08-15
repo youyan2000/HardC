@@ -1,6 +1,3 @@
-#ifndef MOD_CAN_PROTO_H
-#define MOD_CAN_PROTO_H
-
 // 超级电容 CAN 协议模块 — COM-OOP Module 层 (ctx main)
 // 来源: WEILAI 未来战队 2026 三相超级电容 FDCAN 协议
 //   (对照 docs/learning/SuperCap_Projects_Study_Report.md 八、通信协议对比)
@@ -32,6 +29,9 @@
 //   5. 主循环: mod_can_poll(&can);  // 排空 RX, 逐帧走 mod_can_on_frame
 //
 // ctx: main — 协议收发全部在主循环/低速上下文, 不进 28kHz 控制 ISR
+
+#ifndef MOD_CAN_PROTO_H
+#define MOD_CAN_PROTO_H
 
 #include <stdint.h>
 #include <stdbool.h>

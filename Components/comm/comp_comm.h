@@ -1,6 +1,3 @@
-#ifndef COMP_COMM_H
-#define COMP_COMM_H
-
 // 通信契约身份基类 — CommBase 只承载契约身份 + 生命周期 + 诊断
 //
 // 定位: 不绑定任何传输/设备/协议, 数据面在子类 (Uart/Spi/I2c/Can/Gpio, Devices/comm)
@@ -12,6 +9,9 @@
 // 诊断虚表 CommOps: self_check/reset 均 [可选], 可空
 //   comm_self_check: ops 或 self_check 为空 → 返回 0 (通过)
 //   comm_reset:      ops 或 reset 为空 → 忽略
+
+#ifndef COMP_COMM_H
+#define COMP_COMM_H
 
 #include "comp_io.h"
 #include "comp_error_code.h"

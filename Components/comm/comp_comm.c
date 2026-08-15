@@ -1,3 +1,8 @@
+// 通信基类实现 —— CommBase 父类的构造/析构/诊断
+//
+// 提供统一基类契约: 绑定契约身份 (name) + inited 标志、诊断分派 (self_check/reset)
+// 传输子类 (com_uart/spi/i2c/can/gpio) 在 init 时绑定自身 static ops
+
 #include "comp_comm.h"
 #include <stddef.h>
 

@@ -1,6 +1,3 @@
-#ifndef MOD_CMD_DISPATCH_H
-#define MOD_CMD_DISPATCH_H
-
 // 统一命令分发框架 — COM-OOP Module 层
 // CarCmd 统一分发模式 (mod_hmi.h/c — car_cmd_dispatch)
 //
@@ -16,6 +13,9 @@
 //   2. cmd_dispatch_init(&disp);
 //   3. cmd_dispatch_register(&disp, CMD_MOT_FORWARD, my_forward_handler);
 //   4. 在按键扫描 / 串口解析中: cmd_dispatch_execute(&disp, cmd, payload, len);
+
+#ifndef MOD_CMD_DISPATCH_H
+#define MOD_CMD_DISPATCH_H
 
 #include <stdint.h>
 #include <stdbool.h>

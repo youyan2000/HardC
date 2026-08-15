@@ -1,6 +1,3 @@
-#ifndef MOD_HMI_H
-#define MOD_HMI_H
-
 // 人机交互模块 — HMI (Module 层)
 // HMI (按键+OLED菜单+命令分发)
 //       + user_hmi.c (3按键+OLED菜单)
@@ -14,6 +11,9 @@
 //   1. hmi_init(&me, keys, key_count, disp, oled);
 //   2. ISR 每 tick: hmi_tick(&me);
 //   3. hmi_dispatch(&me) 被 cmd_dispatch_execute 调用
+
+#ifndef MOD_HMI_H
+#define MOD_HMI_H
 
 #include <stdint.h>
 #include <stdbool.h>

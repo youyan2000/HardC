@@ -1,6 +1,3 @@
-#ifndef MOD_COMM_H
-#define MOD_COMM_H
-
 // Module 层帧协议解析器
 // 变长帧协议, 参考 Rx_FSM 三帧协议模式
 //
@@ -16,6 +13,9 @@
 //   3. mod_comm_on(&app, 0x01, my_handler);        // 注册命令回调
 //   4. mod_comm_feed(&app, byte);                  // HAL RX 回调中逐字节喂入
 //   5. mod_comm_send(&app, 0x02, data, len);       // 组帧发送
+
+#ifndef MOD_COMM_H
+#define MOD_COMM_H
 
 #include <stdint.h>
 
