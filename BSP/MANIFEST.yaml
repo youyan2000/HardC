@@ -9,12 +9,27 @@ files:
   - bsp_dsp_fft.h
   - bsp_dsp_fir.h
   - bsp_gpio.h            # GPIO 平台无关抽象 (电平 + EXTI 中断, 值类型)
+  - bsp_uart.h            # UART DMA 抽象 (位置式循环 RX + 单发 TX, 对标 libxr UART model)
+  - bsp_uart_stm32.c      # STM32 UART DMA 后端 (bsp_uart.h, HAL_UARTEx_ReceiveToIdle_DMA)
+  - bsp_uart_c2000.c      # C2000 UART 后端 (bsp_uart.h, SCI RX 中断搬运, driverlib 待验证)
+  - bsp_i2c.h             # I2C 中断事务抽象 (mem_write/read_async + 完成回调, BSP 之上零 HAL)
+  - bsp_i2c_stm32.c       # STM32 I2C 后端 (bsp_i2c.h, HAL_I2C_Mem_Write_IT/Mem_Read_IT)
+  - bsp_spi.h             # SPI 中断事务抽象 (transfer/write/read_async + 完成回调, BSP 之上零 HAL)
+  - bsp_spi_stm32.c       # STM32 SPI 后端 (bsp_spi.h, HAL_SPI_*_IT)
+  - bsp_spi_c2000.c       # C2000 SPI 后端 (bsp_spi.h, FIFO 中断逐字节, driverlib 待验证)
+  - bsp_can.h             # CAN 中断收发抽象 (FIFO 中断接收 + 发送 + 回调订阅, BSP 之上零 HAL)
+  - bsp_can_stm32.c       # STM32 CAN 后端 (bsp_can.h, HAL_CAN_AddTxMessage + RxFifo 中断)
+  - bsp_can_c2000.c       # C2000 CAN 后端 (bsp_can.h, CAN 中断读帧, driverlib 待验证)
+  - bsp_irq.h             # 中断优先级分层抽象 — 确保 FAST 绝对优先, 不被 HMI/SLOW 干扰
+  - bsp_irq_stm32.c       # STM32 IRQ 后端 (bsp_irq.h, HAL_NVIC_SetPriority 把 FAST 抢优先设最小)
+  - bsp_irq_c2000.c       # C2000 IRQ 后端 (bsp_irq.h, PIE 不嵌套即保证, 占位)
   - bsp_pwm.h
   - bsp_step_motor.h
   - bsp_stm32_hal.h      # STM32 系列 HAL shim (HARDC_STM32_F1/F3/F4/G4/H7 分发)
   - bsp_hrtim.c          # STM32 HRTIM PWM 后端 (bsp_pwm.h, F334/F3/G4/H7)
   - bsp_adc_stm32.c      # STM32 ADC DMA 后端 (bsp_adc.h)
   - bsp_gpio_stm32.c     # STM32 GPIO 后端 (bsp_gpio.h, GPIO 电平 + EXTI 分发)
+  - bsp_gpio_c2000.c     # C2000 GPIO 后端 (bsp_gpio.h, driverlib, GPIO INT1 分发)
   - bsp_watchdog.h       # 看门狗 BSP 抽象 (LibXR Watchdog/STM32Watchdog 移植)
   - bsp_watchdog_stm32.c # STM32 HAL IWDG 后端 (LibXR stm32_watchdog.cpp 移植)
   - bsp_watchdog_c2000.c # C2000 WDT 后端 (Phase 3 按数据手册核对)

@@ -28,5 +28,6 @@ depends:
   - components/dsp       # comp_filter (LowPassFilter) — 超级电容裁判功率低通
   - components/protection # comp_protection (Hysteresis/Debounce/ModeSync) — 超级电容保护/均流
   - devices/pwm
+  - devices/pid   # pid_reg4 (PidReg4 = TI pi_reg4) — mod_buck/supercap/current_share 功率环
   - devices/adc
   - BSP/container_of.h   # mod_supercap ops container_of 下溯

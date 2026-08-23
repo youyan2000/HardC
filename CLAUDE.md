@@ -18,7 +18,7 @@ HardC/
 ├── BSP/             # L1: 不透明句柄 → 平台抽象
 ├── Components/      # L2: comp_*.h/c → 父类 + ops 虚表
 │   ├── adc/ comm/ pid/ pwm/                # 父类域
-│   ├── peripheral/ dsp/ motor/ power/ protection/ math/ codec/ contract/
+│   ├── peripheral/ dsp/ motor/ power/ protection/ math/ codec/ contract/ database/
 │   └── (每子目录含 MANIFEST.yaml 自描述)
 ├── Devices/         # L3: <域>_<子类>.h/c → 具体硬件实现
 │   ├── adc/ comm/ pid/ pwm/
@@ -29,19 +29,24 @@ HardC/
 ├── Config/          # YAML 配置（topologies 拓扑目录 + projects 工程 + params 参数变体）
 ├── YmaC/            # yaml_config_builder.py (GUI 配置注入) + scaffold.py (CLI 骨架生成)
 ├── docs/
-│   ├── learning/    # 学习总结资料（外部项目学习报告 + 架构原则）
-│   └── debug/       # 记录和计划（history/ 每阶段一文件 + LESSONS/ROADMAP + 设计文档）
+│   ├── README.md    # 文档首页导航
+│   ├── concept.md   # 思想哲学（唯一思想权威）
+│   ├── coding/      # 编码方法论（oop + 采样-处理-发波 + 保护/HMI 线程）
+│   ├── subsystems/  # 子系统参考（adc/pid/pll/pwm/... 各一文件）
+│   ├── history/     # 开发历史（stage-* 每阶段一文件）+ lessons.md 教训库
+│   ├── PLAN.md      # 唯一主线计划
+│   └── learning/    # 外部项目学习报告
 └── cmake/           # 工具链文件
 ```
-> 目录分组表、MANIFEST schema、scaffold 工具规范见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第一节。
+> 目录分组表、MANIFEST schema、scaffold 工具规范见 [docs/PLAN.md](docs/PLAN.md) §一.3（已实现规格一句话 + 实现位置）。
 
 **核心文档：**
 | 文档 | 内容 |
 |------|------|
+| [docs/concept.md](docs/concept.md) | **设计原则（唯一思想权威）**：定位、三上下文、五层、系统层原语、复用 libxr 边界、远程注册表 |
 | [agent.md](agent.md) | OOP 方法论、分层架构、虚函数表、继承/多态模式、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 调参教训库 (70 条 + 经验模板), git 版本管理, 禁止回退 |
-| [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
-| [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) | 目录分组、MANIFEST 自描述、scaffold 骨架生成工具设计 |
+| [docs/history/lessons.md](docs/history/lessons.md) | 调参教训库 (70 条 + 经验模板), git 版本管理, 禁止回退 |
+| [docs/PLAN.md](docs/PLAN.md) | **唯一主线计划** — 已完成归档 + 未完成待办（含工具链/运行时/拓扑/系统层原语/远程分发） |
 
 **App 模板：**
 | 文件 | 用途 |
@@ -58,6 +63,33 @@ HardC/
 | [.claude/skills/c-code-style](.claude/skills/c-code-style/SKILL.md) | 代码风格：2空格缩进、K&R大括号、命名约定 |
 | [.claude/skills/stm32-hal](.claude/skills/stm32-hal/SKILL.md) | STM32 HAL/LL 专业知识 |
 | [.claude/skills/code-review-workflow](.claude/skills/code-review-workflow/SKILL.md) | **强制**写-审双Agent工作流 |
+| [.claude/skills/project-orchestration](.claude/skills/project-orchestration/SKILL.md) | **项目统筹**：多 Agent 并发协作治理 — 用 RTOS 并发原语（线程/信号量/互斥锁/事件/队列/双缓冲/发布订阅）隐喻映射到 Agent 协作，防互相踩踏/撕裂/扯皮，含 plan 审批 + 角色边界 + 提交闸门 + git 状态纪律 |
+
+
+## AI 助手工作准则（行为契约）
+
+> 本节只约束 AI 的执行方式，与面向共同约定的 CLAUDE.md 互补：CLAUDE.md 面向人与 AI 双方，本节约束 AI 的执行方式。思想依据 [docs/concept.md](docs/concept.md)。
+
+1. **计划先行** — 任何非平凡改动（新功能 / 重构 / 重组 / 涉及 3+ 文件）必须先给出 plan 并获批准，再动手实现。禁止大范围"边做边改"的自由发挥。
+2. **每动作更新 HISTORY + LESSONS** — 每完成一个动作/阶段，同步更新 [docs/history/](docs/history/README.md)（阶段、commit 归因、错误与修正）与 [docs/history/lessons.md](docs/history/lessons.md)（新教训按经验模板，禁止回退）。文档落后于代码 = 违约。
+3. **遵守代码风格** — 一律遵循 2 空格缩进、K&R 大括号、命名规范、include guard（见 [docs/coding/oop.md](docs/coding/oop.md) §6），提交前用 `.clang-format` / `.clang-tidy` 校验。
+4. **Git 纪律** — 不自动提交；用户允许后**及时**按子系统拆分 commit（见下方 Git 约定）；提交前 `git status` 核对范围。
+5. **写-审双 Agent** — 任何代码生成走强制 `code-review-workflow`（Writer → Reviewer），Reviewer 不可跳过（纯 .md / YAML 修改例外，commit 注明 `no-review: <原因>`）。
+6. **库资产保护（误删库资产 = 最严重违规）** — HardC 是组件库不是可执行工程（见上方定位声明 + LESSONS.md #56）。未调用的组件/函数是**库存**，**禁止**以"无调用者 / 未被当前 App 或拓扑调用"为由删除、废弃或标注。删除/移动只允许两种情形：域归属重整（`git mv` 保留内容）或用户明确指令。Reviewer 不得把"未被调用"报为缺陷，检查清单见 code-review-workflow「库资产保护」节。
+
+
+## 中断优先级三档（库级强制约定）
+
+> **严格三档：FAST > SLOW > HMI，由 `bsp_irq_apply()` 默认强制（失败停机），不靠工程自觉。**
+> 详见 [docs/coding/protection-hmi.md](docs/coding/protection-hmi.md) 与 [bsp_irq.h](BSP/bsp_irq.h)。
+
+1. **FAST**（控制定时器 ISR）抢优先 **0**（最高）——采样→控制→发波→快保护。
+2. **SLOW**（监控定时器 ISR）抢优先 **1**——慢保护/心跳/喂狗。
+3. **CTX_HMI**（HMI/通信中断，`App_OnHmiTick`）抢优先 **2**——按键去抖/命令分发/收包入队。
+4. 后台（BackgroundTask）主循环——慢 I/O（printf/OLED/协议/Flash）。
+5. `bsp_irq_apply` 强制写 0/1/2 并全量读回校验；**返回 false = 误配，必须停机**，不允许带病运行。
+6. 工程必须定义 `FAST_CTRL_IRQN` / `SLOW_CTRL_IRQN` / `HMI_IRQN` 三宏（STM32 IRQn / C2000 PIE 组占位）。
+7. **禁止**把任何通信/HMI 中断优先级设到与 FAST 同级（0）——三档必须严格分离。
 
 ## Git 管理约定
 
@@ -199,7 +231,7 @@ python YmaC/yaml_config_builder.py --cli default
 
 ## 工程骨架生成 (scaffold.py)
 
-> **新项目从 `Config/projects/<project>.yaml` 起步。** 声明式列出需要的子系统，工具自动解析依赖、生成构建文件与 App 骨架。规范见 [docs/debug/build-toolchain-design.md](docs/debug/build-toolchain-design.md) 第二节。
+> **新项目从 `Config/projects/<project>.yaml` 起步。** 声明式列出需要的子系统，工具自动解析依赖、生成构建文件与 App 骨架。规范见 [docs/PLAN.md](docs/PLAN.md) §一.3。
 
 ```bash
 # 校验全部 MANIFEST.yaml（结构 + 依赖合法性）
@@ -232,7 +264,7 @@ cmake --build build/out/<project> -j$(nproc)
 ## BSP 硬件加速抽象层
 
 > **Components 层禁止直接 include 平台加速库。** 所有硬件加速 (DSP/PWM/ADC) 通过 `BSP/` 层的不透明句柄接口分发。
-> 详见 [docs/debug/LESSONS.md](docs/debug/LESSONS.md) #17 和 [agent.md](agent.md) §3.5.
+> 详见 [docs/history/lessons.md](docs/history/lessons.md) #17 和 [agent.md](agent.md) §3.5.
 
 | 文件 | 内容 |
 |------|------|
@@ -254,7 +286,7 @@ cmake --build build/out/<project> -j$(nproc)
 | 域 | Component | Devices 子类数 | 句柄头文件 |
 |----|-----------|--------------|-----------|
 | ADC | `comp_adc.h/c` | 3 (Follower/DC/AC Sampler) | `adcs.h` |
-| COM | `comp_comm.h/c`（契约基类: 名称 + 诊断 ops self_check/reset, 数据面不虚化, 复用 comp_io.h IoCompletion + ErrorCode） | 5 (Uart/Spi/I2c/Can/Gpio) + 协议模块 (mod_comm/mod_cmd_dispatch/mod_serial_proto/mod_can_proto/mod_pmbus, 全跑 CTX_MAIN) | — |
+| COM | `comp_comm.h/c`（契约基类: 名称 + 诊断 ops self_check/reset, 数据面不虚化）+ `comp_dma_rx.h/comp_dma_tx.h`（DMA model, 对标 libxr） | 5 (Uart/Spi/I2c/Can/Gpio) + 协议模块 (mod_comm/mod_cmd_dispatch/mod_serial_proto/mod_can_proto/mod_pmbus, 全跑 CTX_HMI) — **BSP 之上零 HAL, 非阻塞** (UART DMA / SPI/I2C 中断事务 / CAN FIFO 中断+发送队列; SW I2C 已删) | — |
 | Peripheral | `comp_output.h/c` (OutputBase 开关类) + `comp_sensor.h/c` (SensorBase 测量类) + `comp_mpu.h` (+ `comp_mpu_dmp.c`) | 8 (Led/Laser/Beep/Buzzer/Fan/Oled/Mpu6050/Ultrasonic; OLED 无基类, 设备=域基类+Gpio/PWM/UART 总线组合, 全 HAL-free) | `pers.h` |
 | PID | `comp_pid.h/c` (父类 PidBase + PidOps, 纯契约) + `comp_tcm.h` (自动调参) | 14 (Standard 串行 / Parallel 并行 / DCL 2-DOF+D滤波(含grando) / Pi 条件PI(原名 Solar) / Reg4 设定值滤波+前馈 / Reg3 反计算+位置wrap / PR 理想谐振 / QPR 准谐振 / P2PD 非线性 / P 纯比例 / I 纯积分 / PD 比例+微分 / NL 幂律整形 / Cascade 级联) | `pids.h` |
 | PLL | `comp_pll_base.h/c` (父类 PllBase + PllOps, PD→LF→VCO 三环节, 一个输入帧+一个反馈输出, LF(PI)+VCO 下沉基类) | 5 (Sogi SOGI正交+Park投影(含SSRF-SPLL) / Srf Park旋转投影 / Notch 纯乘法+陷波 / Ddsrf 正负序解耦 / SogiFll SOGI+FLL频率自适) | `plls.h` |
@@ -291,6 +323,7 @@ cmake --build build/out/<project> -j$(nproc)
 | `comp_power_fund.h` | 基波电力分析 — 同步正交相关解调 (IEC 62053), 基波有效值/有功/无功 + THD, 对谐波污染免疫 |
 | `comp_protection.h` | 保护框架 — 阈值检测、去抖、分级响应 (Components/protection/ 域) |
 | `comp_protection_3lvl.h` | 三电平逆变器延迟保护 — 主开关立即关断 + 内开关故障消隐延迟关断 (ride-through, 非锁存自重新布防) |
+| `comp_database.h/c` | 闪存键值数据库 — 主备双块 + 顺序写入, 参数/校准持久化 (PLAN §2.1 系统层原语, `Components/database/`, FlashOps 访问, 可 host 单测) |
 
 **Module 层 (L4) — 业务逻辑（位于 `Module/motor/`、`power/`、`comm/`、`hmi/`）：**
 | 模块 | 文件 | 用途 |
@@ -312,4 +345,4 @@ cmake --build build/out/<project> -j$(nproc)
 
 ---
 
-> **最后更新：** 2026-08-15 — PID 域重构完成: 回归父类 `PidBase` + 子类架构 (Components/pid/comp_pid.h/.c 契约 + Devices/pid 14 子类 standard/parallel/dcl/pi/reg4/reg3/pr/qpr/p2pd/p/i/pd/nl/cascade + pids.h 句柄软总线), 撤销 stage-23 的扁平 `PidLinear` (comp_pid_linear.h 删除, 算法经 n/reg4/stand 等子类保留), mod_buck/supercap/current_share 迁移到 pid_reg4 (aw=CLAMP 位级), FCL→pid_parallel, motor/balance/follower→PidBase*, 上层解反向依赖. 新增 PLL 域: 父类 PllBase(PD→LF→VCO) + 5 子类 (pll_sogi/srf/notch/ddsrf/sogi_fll) + plls.h, 旧 comp_pll.h/c + comp_sogi_fll.h 已删, 算法统一收进本域 (PllNotch 开启基类精确 VCO). 此前: comm 子系统重构 (阶段 0-4): comm 瘦身为通信传输 (CommBase 契约身份 + 5 传输类 Uart/Spi/I2c/Can/Gpio, ComKey 删 "Key 就是 GPIO" + 去抖归 HMI, 复用 comp_io.h IoCompletion + ErrorCode, 砍 in_isr/BLOCK, 传输语义外部独立内部统一路由在 mod_hmi); 非总线设备全并入新 peripheral 域 (OutputBase/SensorBase/OLED 无基类 + 8 设备, 全 HAL-free 走 BSP); 编码器迁 motor 域 (独立结构体组合 Uart/Gpio/ADC, ctx: fast); mod_hmi 唯一路由决策点 (HmiPorts fan-out); 编码器 host 单测 12/12 + com_can 单测 7/7
+> **最后更新：** 2026-08-16 — 通信层 DMA/中断事务改造完成: BSP 之上零 HAL（bsp_uart/i2c/spi/can 五抽象 × stm32/c2000 后端）+ comp_dma_rx/tx DMA model（对标 libxr）+ com_uart/i2c/spi/can 全部接入（UART DMA / SPI/I2C 中断事务 / CAN FIFO 中断+发送队列, SW I2C 删除）+ 中断优先级三档（bsp_irq 库级强制 FAST>SLOW>HMI + CTX_HMI 钩子）。此前: PID 域重构完成 (父类 PidBase + 14 子类 + PLL 域 PllBase + 5 子类); comm 子系统重构 (阶段 0-4) 见 stage-22。

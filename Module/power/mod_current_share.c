@@ -11,7 +11,9 @@
 #include "mod_current_share.h"
 #include <string.h>
 
-// 控制周期 (秒) — 28.3kHz, 须与 App_OnControlTick 调用频率一致 (与 mod_supercap 同源)
+// 控制周期 (秒) — 固定 28.3kHz 契约: 须与 App_OnControlTick 调用频率一致 (与 mod_supercap 同源)
+//   (与 mod_supercap 的 cfg.control_freq_hz 参数化不同, 本模块保持固定 28333 — 若需参数化
+//    由工程在 mod_current_share.h 增加 cfg 字段后派生, 当前保持最小改动)
 #define MOD_SHARE_DT (1.0f / 28333.0f)
 
 // 占空比律输入钳位 — 与 pwm_buckboost 律常量一致 (ratio_lo/hi, 律在 Device 内部再次钳位)
@@ -104,12 +106,25 @@ void mod_share_tick(ModCurrentShare *me) {
   }
 
   // 1. 电压比 → 模式迟滞 (钳位到律窗口)
+  // va 下限防除零 (母线电压 <1V 视为无效采样, 用 1V 兜底保 ratio 有界)
   float va = me->va > 1.0f ? me->va : 1.0f;
   me->ratio = me->vb / va;
   me->ratio = math_clamp_f(me->ratio, MOD_SHARE_RATIO_LO, MOD_SHARE_RATIO_HI);
   bool bb = Hysteresis_Update(&me->mode_hyst, me->ratio);
-  uint8_t mode =
-      bb ? (uint8_t) PwmMode_BuckBoost : (me->ratio < 1.0f ? (uint8_t) PwmMode_Buck : (uint8_t) PwmMode_Boost);
+  // 模式判定与迟滞退出边界一致 (0.90/1.10): bb=false 时在窗口内保持上次子模式 (迟滞记忆),
+  // 超出退出边界才切 Buck/Boost — 避免"迟滞窗口内按 1.0 误判"导致模式抖动
+  uint8_t mode = PwmMode_BuckBoost;
+  if (!bb) {
+    if (me->ratio <= me->cfg.hyst_exit_lo) {
+      mode = (uint8_t) PwmMode_Buck;
+    } else if (me->ratio >= me->cfg.hyst_exit_hi) {
+      mode = (uint8_t) PwmMode_Boost;
+    } else {
+      // 窗口内: 保持上次子模式 (初次默认 Buck)
+      mode = (me->last_written_mode == (uint8_t) PwmMode_Boost) ? (uint8_t) PwmMode_Boost
+                                                              : (uint8_t) PwmMode_Buck;
+    }
+  }
   me->cur_mode = mode;
 
   // 2. 相电流均值 + 每相基准

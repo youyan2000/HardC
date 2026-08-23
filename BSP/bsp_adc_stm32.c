@@ -7,11 +7,20 @@
 #include "bsp_adc.h"
 #include "bsp_stm32_hal.h"
 
+// ADC 校准 (A9 实现, 按系列分派):
+//   F1:   无校准寄存器 (RM0008 §11: 硬件自动 offset 校正) — 无操作, 精度靠外部校准
+//   F3/G4/H7: 支持单端+差分校准 → HAL_ADCEx_Calibration_Start(hadc, SingleDiff)
+//   F4:   支持单端/差分校准 (stm32f4xx_hal_adc_ex.h)
+// 前提: 必须在 ADC 使能且首次转换之前调用 (阻塞自校准); 由 board_init 执行
 void bsp_adc_calibrate(void *hadc, BspAdcMode mode) {
   if (!hadc)
     return;
-  (void) mode;  // F334/F3 无校准; F1/G4 校准流程见 HAL 版本差异
-  // TODO: 系列相关校准 (G4: HAL_ADCEx_Calibration_Start; F1: ADC_CAL 位)
+#if defined(HARDC_STM32_F1)
+  (void) mode;  // F1 无校准流程 (硬件自动 offset 校正)
+#else
+  uint32_t single_diff = (mode == BSP_ADC_DIFFERENTIAL) ? ADC_DIFFERENTIAL_ENDED : ADC_SINGLE_ENDED;
+  HAL_ADCEx_Calibration_Start((ADC_HandleTypeDef *) hadc, single_diff);
+#endif
 }
 
 void bsp_adc_start_dma(void *hadc, void *hdma, uint16_t *buf, int num_ch) {

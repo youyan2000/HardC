@@ -20,9 +20,9 @@
 //     v_ch[0..3] = {8..11}    → 4 路电压
 //     vref_ch    = 12         → Vref_1V65
 //
-// 差分模式關鍵:
-//   - ADC 結果為有符號 int16_t: -4095 ~ +4095 對應 ±3.3V
-//   - 不用減 1.65V 偏置！差分對自動抵消共模
+// 差分模式关键:
+//   - ADC 结果为有符号 int16_t: -4095 ~ +4095 对应 ±3.3V
+//   - 不用减 1.65V 偏置！差分对自动抵消共模
 //
 // 数据处理 (process):
 //   1. 原始 ADC → 工程量: v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
@@ -42,6 +42,7 @@
 #include "comp_adc.h"
 #include "comp_io.h"          // 运行时契约: I/O 完成方式 (转换完成置 data_ready = IO_ASYNC_FLAG)
 #include "bsp_adc.h"          // BspAdcHandle 不透明句柄 — 跨平台 (STM32/C2000), 去除 HAL 硬依赖
+#include "comp_double_buffer.h"  // 五原语之 PingPong: DMA→FAST 采样快照 (撕裂读消除, A7)
 #include "comp_math.h"        // MATH_SQRT — 纯 C 块 RMS 回退 (替代 arm_math.h arm_rms_f32)
 #include <stdbool.h>
 
@@ -54,6 +55,27 @@
 // 移入实例后窗口可配置, 默认保持 800 以对齐原行为。每路各占 ADC_AC_RMS_WIN 个 float 环形缓冲。
 #define ADC_AC_RMS_WIN 800
 
+// 过零检测死区 (V) — Va 须越过 ±此值才计一次正过零, 抑制 0 附近噪声抖动产生伪过零
+// (工程可按实际噪声覆盖; 缺省 0.1V — 对电网级相电压噪声免疫, 小信号采样可调小)
+#ifndef ADC_AC_FREQ_HYST_V
+#define ADC_AC_FREQ_HYST_V 0.1f
+#endif
+
+// ======== 编译器内存屏障 (A11) ========
+// data_ready 是跨上下文标志 (ADC 完成回调置位, 消费侧轮询). C 语言 volatile 不保证
+// 非 volatile 访问 (raw 写/读) 不被重排到 volatile 访问之后 — 需显式屏障保证:
+//   生产侧: raw/工程量写入在 data_ready=1 之前完成 (process_impl 末尾调用)
+//   消费侧: 看到 data_ready=1 后再读 raw (见下方 data_ready 字段注释)
+//   GCC/Clang: 扩展 asm 内存屏障; TI CGT (C28x): asm 语句是调度屏障 (不跨语句重排)
+#if defined(__GNUC__) || defined(__clang__)
+#define ADC_AC_MEM_BARRIER() __asm volatile("" ::: "memory")
+#elif defined(__TI_COMPILER_VERSION__)
+#define ADC_AC_MEM_BARRIER() __asm(" nop")
+#else
+#define ADC_AC_MEM_BARRIER() ((void) 0)
+#endif
+
+
 // 单路滑动窗 RMS 状态 (per-ring 独立 — V / I 各一份, 互不污染)
 typedef struct {
   float    sum_sq;               // 累计平方和 (窗口内)
@@ -64,7 +86,8 @@ typedef struct {
 
 typedef struct {
   AdcBase            base;          // [首成员!] 基类
-  uint16_t           raw_buf[ADC_AC_MAX_CH]; // [基类绑定] DMA 缓冲区
+  uint16_t           raw_buf[2 * ADC_AC_MAX_CH]; // [PingPong] 双倍缓冲: 对半切分为两个快照块 (A7)
+  DoubleBuffer       dbuf;          // PingPong 双缓冲状态 (active/pending 块翻转, 撕裂读消除)
   BspAdcHandle      *hadc;         // BSP ADC 句柄 (STM32: &hadc1; C2000: ADC 基址)
   BspAdcHandle      *hdma;         // BSP DMA/触发句柄 (STM32: &hdma_adc1; C2000: 触发源)
   IoCompletion       completion;    // 完成契约: 发起时声明完成方式 (本设备固定 IO_ASYNC_FLAG)
@@ -102,7 +125,17 @@ typedef struct {
   // ---- 诊断 ----
   float  vref_measured;             // 参考电压实测值 (V)
 
-  // ---- 数据就绪标志 (ADC EOS ISR 设置) ----
+  // ---- 频率测量 (过零检测, fast_fetch 每周期推进; 真测, 不硬编码) ----
+  float  freq_hz;                // 当前测得基波频率 (Hz, 0=尚未测得)
+  float  freq_timebase_hz;       // fast_fetch 调用频率 (Hz) — 频率测量时间基准; init 缺省 10000, 工程按实际控制频率覆盖
+  float  freq_prev_va;           // 上次 Va (过零检测用)
+  uint32_t freq_period_ticks;    // 距上次正过零的 tick 数 (2 次正过零 = 1 完整周期)
+  uint32_t freq_last_period;     // 上个完整周期的 tick 数 (freq 时间基准)
+  uint8_t  freq_cross_cnt;       // 过零计数 (2 次=1 周期)
+
+  // ---- 数据就绪标志 (ADC 完成回调置位) ----
+  // 消费侧读取模式: if (me->data_ready) { ADC_AC_MEM_BARRIER(); ...读 raw... }
+  // 生产侧: process_impl 末尾 ADC_AC_MEM_BARRIER() 后置 true (A11, 见 .c)
   volatile bool data_ready;
 } AdcAcSampler;
 
@@ -127,12 +160,14 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
 // 反初始化: 停止 DMA、清空 ops
 void adc_ac_sampler_deinit(AdcAcSampler *me);
 
-// ADC 转换完成回调 — 在 HAL_ADC_ConvCpltCallback 中调用
+// ADC 转换完成回调 — 在 HAL_ADC_ConvCpltCallback (STM32 DMA 完成) / ePWM ISR (C2000) 中调用
 // 契约: 生产者置 data_ready 标志 (IO_ASYNC_FLAG) — 与 init 声明不符即配置错误, 不可静默 (assert)
-// DMA 已将数据写入 base.raw[], 执行电压电流重构 + RMS
+// DMA 刚写满非活动块 → 切快照 (base.raw 指向新活动块) + 重装 DMA 到完成时活动块, 再执行
+// 工程量转换 + 三相重构 + RMS (process). FAST 的 fast_fetch 只读活动块 → DMA 从不写 FAST
+// 正在读的块 (A7: 撕裂读消除, 与 AdcDcSampler 同款 PingPong 语义)
 void adc_ac_sampler_fetch(AdcAcSampler *me);
 
-// ISR 安全瞬时读取 — 仅 va/vb/vc + ia1/ib1/ic1, 无 RMS/VDC
+// ISR 安全瞬时读取 — 仅 va/vb/vc + ia1/ib1/ic1 + 频率过零推进 (freq_hz 真测), 无 RMS/VDC
 // 不做滑动窗 RMS 聚合 (ISR 中用 FPU/长循环 → 可能 HardFault)
 void adc_ac_sampler_fast_fetch(AdcAcSampler *me);
 

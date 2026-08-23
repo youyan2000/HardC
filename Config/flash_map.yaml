@@ -1,0 +1,58 @@
+# Config/flash_map.yaml — Flash 分区表 (供 Bootloader / YmaC 生成 bsp_flash_map.h)
+#
+# 用途: 定义 Bootloader / App / 参数区 的 Flash 分区, YmaC 从本文件生成:
+#   - C 头文件 bsp_flash_map.h (const BspFlashRegion 数组)
+#   - 两个链接脚本 (bootloader_flash.ld / app_flash.ld)
+#   - bootloader 拓扑的 mod_bootloader 配置 (app_addr/app_max_size)
+#
+# 每个 MCU 一段 (platform + mcu 标识), YmaC 按目标选择.
+#
+# 注意地址空间差异:
+#   STM32: 32 位地址, Flash 从 0x08000000 (Cortex-M)
+#   C2000: 24 位地址, Flash 从 0x080000 (C28x, 非 ARM!)
+
+# ============================================================
+# STM32F334 (64KB Flash, 16KB 页) — 直流处理
+# ============================================================
+stm32f334:
+  flash_base: 0x08000000
+  flash_size: 64K
+  page_size: 16K
+  partitions:
+    bootloader: { addr: 0x08000000, size: 8K  }   # 2 页前一半 (实际 1 页=16K, 用 8K 需页内对齐注意)
+    app:        { addr: 0x08002000, size: 56K }
+    param:      { addr: 0x0800E000, size: 8K  }   # Database (升级标志/版本) — 最后一页
+
+# ============================================================
+# STM32G474 (512KB Flash, 2KB 页) — 直流/交流处理
+# ============================================================
+stm32g474:
+  flash_base: 0x08000000
+  flash_size: 512K
+  page_size: 2K
+  partitions:
+    bootloader: { addr: 0x08000000, size: 32K }   # 16 页
+    app:        { addr: 0x08008000, size: 480K }
+    param:      { addr: 0x0807C000, size: 16K }   # Database — 尾部
+    fw_stage:   { addr: 0x08040000, size: 240K }  # 固件暂存 (可选, A/B 升级)
+
+# ============================================================
+# TMS320F280049C (256KB Flash, 2 Bank × 16 Sector × 8KB)
+#   修正自 TI 官方示例 (flash_programming_f28004x.h / F021 Flash API):
+#   - 2 Bank × 16 Sector × 8KB = 256KB (非 4KB sector!)
+#   - Bank0: 0x80000..0x8FFFF, Bank1: 0x90000..0x9FFFF
+#   - C2000 是 16-bit word 编址, 256KB = 0x20000 words
+#   - 擦除粒度 8KB (B_8KSector), 编程最小 64-bit (ECC)
+#   注意: 分区均按 8KB sector 对齐 (C2000 只能按 sector 擦除)。
+#   布局: boot 8K (Bank0 SEC0) + app 232K (Bank0 SEC2..Bank1 SEC14)
+#   + param 8K (Bank1 SEC15); Bank0 SEC1 (word 0x081000..0x081FFF) 为预留空闲区.
+#   起始 0x080000 到末尾 0x0A0000 恰好覆盖全 256KB (0x20000 words).
+# ============================================================
+c2000_f280049:
+  flash_base: 0x080000
+  flash_size: 256K
+  sector_size: 8K
+  partitions:
+    bootloader: { addr: 0x080000, size: 8K  }   # 1 sector (Bank0 SEC0)
+    app:        { addr: 0x082000, size: 232K }  # 29 sector (Bank0 SEC2..Bank1 SEC14)
+    param:      { addr: 0x09F000, size: 8K  }   # 1 sector (Bank1 SEC15 最后 sector) — Database, 8KB 满 sector

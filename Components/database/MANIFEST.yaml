@@ -1,0 +1,9 @@
+id: components/database
+layer: Components
+description: 闪存键值数据库 — 主备双块 + 顺序写入 (纯C, 零 malloc, FlashOps 访问, 对标 LibXR DatabaseRawSequential)
+ctx: main
+files:
+  - comp_database.h
+  - comp_database.c
+depends:
+  - components/contract  # comp_error_code.h (ErrorCode)

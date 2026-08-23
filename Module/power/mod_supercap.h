@@ -1,16 +1,17 @@
 // 超级电容功率控制模块 — PowerStage 派生, 三相并联 (Module 层, ctx fast)
 //
-// 职责 (每 FAST tick, 28.3kHz):
-//   功率环级联 (WEILAI 超电 PowerCtrl_Control):
+// 职责 (每 FAST tick, 28.3kHz; 采样+保护所有状态每周期执行, 与 buck A6 对齐):
+//   功率环级联 (WEILAI 超电 PowerCtrl_Control, PST_RUN 内):
 //     p_referee = LPF(power_lpf, va × i_chassis)      # 实测母线功率 (正=负载消耗)
 //     p_setpoint = PI(pid_p, sp=referee_power, fbk=p_referee)   # 期望功率
 //     p_setpoint 限幅 [p_lim_lo, p_lim_hi] (PI 输出限幅实现 → 抗积分饱和)
 //     taper 近满压 → i_side = p_setpoint / va
-//   保护:
+//   保护 (所有状态):
 //     charge_ok Hysteresis (28.6/28.0): 满电停充 (p_lim_hi=0)
 //     discharge_ok Hysteresis (18/19): 低压切除 (p_lim_lo=0)
 //     short_deb / unbalance_deb Debounce → FAULT (0x08/0x40) → 急停
-//   均流注入 (mod_current_share):
+//     (IDLE/FAULT 下外部母线短路/意外输出仍被检出; Debounce 内置上升沿确认, 不重复急停)
+//   均流注入 (mod_current_share, PST_RUN 内):
 //     mod_share_set_voltages/paside/currents → mod_share_tick (写 PwmBuckBoost)
 //
 // 采样契约: 本模块每 tick 读 adc_dc_sampler_get_value(ch) — App FAST ISR 须在每
@@ -40,7 +41,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "comp_power_stage.h"
-#include "comp_pi_reg4.h"
+#include "pid_reg4.h"      // 功率环 PI (PidReg4 = TI pi_reg4, 复刻原 PidLinear aw=CLAMP)
 #include "comp_filter.h"      // LowPassFilter
 #include "comp_protection.h"  // Hysteresis / Debounce
 #include "comp_math.h"        // math_clamp_f / math_abs_f
@@ -69,6 +70,7 @@ typedef struct {
 
   // --- 非槽位 (supercap_3ph.yaml adc/保护段) ---
   float power_lpf_fc;                   // 裁判功率低通截止频率 (Hz, 120)
+  float control_freq_hz;               // 控制环频率 (Hz, 缺省 28333; 决定 PID dt / LPF 时间基准)
   float short_ilim;                     // 短路去抖阈值 (A, 默认 2×i_lim_a)
   float unbalance_thr;                  // 三相失平衡阈值 (A, 默认 0.5×i_lim_a)
   uint8_t num_phases;                   // 并联相数 (1..3)
@@ -101,8 +103,8 @@ typedef struct {
 
   // --- 级联元件 ---
   LowPassFilter power_lpf;  // 裁判功率低通 (120Hz)
-  PiReg4Cfg pid_p_cfg;      // 功率环 PI 配置 (sync_cfg 派生, 输出限幅 = 功率边界)
-  PiReg4State pid_p;        // 功率环 PI 状态
+  PidReg4Cfg pid_p_cfg;      // 功率环 PI 配置 (sync_cfg 派生, 输出限幅 = 功率边界)
+  PidReg4 pid_p;        // 功率环 PI 状态
 
   // --- 保护 ---
   Hysteresis charge_ok;     // 满电停充迟滞: state=true=允许充电 (进 28.0, 出 28.6)
@@ -126,6 +128,7 @@ typedef struct {
   Mailbox cmd;          // Command 邮箱 (MAIN→FAST): referee_power
   Ring evt;             // SPSC 环 (FAST→MAIN): 保护事件, 单生产者 = FAST 故障路径
   uint8_t evt_buf[16];  // evt 环缓冲 (容量 15 事件, 满则丢不阻塞 FAST)
+  uint32_t evt_overflow_cnt;  // evt 环满丢弃计数 (A5: 不静默 — MAIN 可查, 关键跳闸已由 emergency 硬件封波兜底)
 } ModSuperCap;
 
 // ======== API ========
@@ -156,6 +159,11 @@ static inline void mod_supercap_set_referee_power(ModSuperCap *me, float w) {
 // MAIN 上下文: 消费保护事件流 (SPSC 环排空); 返回 false = 无事件
 static inline bool mod_supercap_evt_pop(ModSuperCap *me, uint8_t *ev) {
   return ring_pop(&me->evt, ev);
+}
+
+// 诊断: evt 环满丢弃计数 (A5 — 环满不阻塞 FAST, 丢弃不静默). 读后由调用方对比快照
+static inline uint32_t mod_supercap_evt_overflow(const ModSuperCap *me) {
+  return me->evt_overflow_cnt;
 }
 
 // 0xFB 调参: coef[10] 槽位 → cfg (与 supercap_3ph.yaml params.slot 一致)

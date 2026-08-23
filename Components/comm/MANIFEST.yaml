@@ -4,5 +4,7 @@ description: 通信契约身份基类 — CommBase 契约身份 + 生命周期 +
 files:
   - comp_comm.h
   - comp_comm.c
+  - comp_dma_rx.h         # 位置式循环 DMA 接收模型 (对标 libxr UartCircularDmaRxModel)
+  - comp_dma_tx.h         # 双缓冲+队列+单发 DMA 发送模型 (对标 libxr UartDmaTxModel, 单抢占简化)
 depends:
   - components/contract

@@ -17,6 +17,7 @@ void hmi_init(Hmi *me, CmdDispatcher *disp) {
   me->oled_page = 0;
   me->oled_dirty = false;
   me->tick      = 0;
+  hmi_set_timebase(me, 100);  // 默认 100Hz (未调用者按 CTX_HMI 实际频率重设)
 
   me->out.can.on_event = NULL;
   me->out.can.ctx = NULL;
@@ -37,6 +38,15 @@ void hmi_init(Hmi *me, CmdDispatcher *disp) {
   }
 }
 
+
+// 设置 tick 时间基准 (Hz): 换算去抖阈值为 tick 数 (保持毫秒语义)
+void hmi_set_timebase(Hmi *me, uint16_t tick_hz) {
+  if (tick_hz == 0) { tick_hz = 100; }
+  // 长按 800ms / 双击窗口 300ms → tick 数 (向上取整, 防 0)
+  me->long_tick_th   = (uint16_t) ((800u * tick_hz + 999u) / 1000u);
+  me->double_tick_th = (uint16_t) ((300u * tick_hz + 999u) / 1000u);
+}
+
 void hmi_add_key(Hmi *me, uint8_t key_index, uint8_t initial_state) {
   if (key_index >= HMI_MAX_KEYS) return;
   me->keys[key_index].pin_state  = initial_state;
@@ -49,7 +59,7 @@ void hmi_add_key(Hmi *me, uint8_t key_index, uint8_t initial_state) {
 
 // ======== 单按键去抖 ========
 
-static void key_debounce_tick(KeyDebounce *kd) {
+static void key_debounce_tick(Hmi *me, KeyDebounce *kd) {
   // 读取当前引脚状态 (由应用层在 hmi_tick 前通过读 GPIO 刷新到 key_pin_states)
   uint8_t raw = kd->pin_state;
 
@@ -60,7 +70,7 @@ static void key_debounce_tick(KeyDebounce *kd) {
 
   if (falling) {
     // 按下: 如果释放后在双击窗口内, 递增单击计数
-    if (kd->release_ticks > 0 && kd->release_ticks <= HMI_DOUBLE_TICKS) {
+    if (kd->release_ticks > 0 && kd->release_ticks <= me->double_tick_th) {
       kd->click_count++;
     } else {
       kd->click_count = 1;
@@ -74,7 +84,7 @@ static void key_debounce_tick(KeyDebounce *kd) {
     // 正在按下: 计时
     kd->press_ticks++;
     // 长按检测: 达到阈值时触发
-    if (kd->press_ticks == HMI_LONG_TICKS) {
+    if (kd->press_ticks == me->long_tick_th) {
       kd->event_pending = true;
       kd->pending_event = HMI_KEY_EVENT_LONG;
     }
@@ -111,7 +121,7 @@ void hmi_tick(Hmi *me) {
     // 应用层刷新引脚电平
     me->keys[i].pin_state = me->key_pin_states[i];
 
-    key_debounce_tick(&me->keys[i]);
+    key_debounce_tick(me, &me->keys[i]);
 
     // 消费待处理事件 → CarCmd → dispatch
     if (me->keys[i].event_pending) {

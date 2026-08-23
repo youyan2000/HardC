@@ -16,5 +16,9 @@ depends:
   - components/comm
   - components/contract
   - BSP/container_of.h
+  - BSP/bsp_irq.h
   - BSP/bsp_gpio.h
-  - BSP/bsp_stm32_hal.h
+  - BSP/bsp_i2c.h
+  - BSP/bsp_spi.h
+  - BSP/bsp_can.h
+  - BSP/bsp_uart.h

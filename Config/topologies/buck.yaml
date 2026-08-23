@@ -50,3 +50,13 @@ tune:
   frame_len: 48
   check_code: 3.1415927
   slots: 10
+# ---- Bootloader (可选, 阶段 6) ----
+# enable: true → YmaC 额外生成 bootloader_main.c/h (scaffold 双固件 + merge_firmware 合并)
+#   mcu:       flash_map.yaml 里对应分区段名 (flash_map_gen gen --mcu); 缺省用 project.mcu
+#   up_port:   uart|can  升级传输 (当前为注释提示; 具体接线随后续扩展)
+#   flash_dir: 链接脚本所在子目录 (相对 build/gen/<project>; 缺省为 . → flash_map_gen 生成到该目录)
+bootloader:
+  enable: false
+  mcu: stm32f334
+  up_port: uart
+  flash_dir: .

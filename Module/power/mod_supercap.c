@@ -1,8 +1,9 @@
 // 超级电容功率控制模块 — PowerStage 派生 (实现)
 //
-// 每 FAST tick (PST_RUN):
-//   采样(va/vb/i_phase/icap/ichassis) → 保护(短路/失平衡去抖→急停; 满电/低压迟滞削边界)
-//   → 级联功率环(LPF→PI→限幅→taper→i_side) → 注入均流 + 驱动 share tick → PWM
+// 每 FAST tick (所有状态):
+//   采样(va/vb/i_phase/icap/ichassis) → 保护(短路/失平衡去抖→急停; 满电/低压迟滞削边界;
+//   与 buck A6 对齐: 所有状态每周期检查 — IDLE/FAULT 下外部母线短路/意外输出仍被检出)
+//   PST_RUN 内: 级联功率环(LPF→PI→限幅→taper→i_side) → 注入均流 + 驱动 share tick → PWM
 //
 // 状态机: INIT → IDLE → RUN ⇄ FAULT (start 恢复重新软启)
 //   级联绕过 base.loop[2] (per-phase PI 归 mod_current_share), vref/iref 重解释见 header
@@ -11,8 +12,7 @@
 #include "container_of.h"
 #include <string.h>
 
-// 控制周期 (秒) — 28.3kHz, 须与 App_OnControlTick 调用频率一致 (与 mod_current_share 同源)
-#define MOD_SC_DT (1.0f / 28333.0f)
+// 控制周期由 cfg.control_freq_hz 派生 (见 mod_sc_dt) — 不再硬编码 28333
 
 // 故障去抖确认次数 (短路/失平衡连续 N tick 触发才急停, 防噪声误报)
 #define MOD_SC_FAULT_DEBOUNCE_N 8u
@@ -21,6 +21,16 @@
 #define MOD_SC_VA_MIN 1.0f
 
 // ======== 内部辅助 ========
+
+// 控制周期 (秒) — 由 cfg.control_freq_hz 派生; 缺省 28333Hz (须与 App_OnControlTick 实际频率一致)
+static float mod_sc_dt(const ModSuperCap *me) {
+  float f = me->cfg.control_freq_hz;
+  if (f <= 0.0f) {
+    f = 28333.0f;
+  }
+  return 1.0f / f;
+}
+
 
 static inline float sc_min(float a, float b) {
   return a < b ? a : b;
@@ -65,7 +75,10 @@ static bool sc_protect(ModSuperCap *me) {
   if (Debounce_Update(&me->short_deb, short_trig)) {
     power_stage_emergency(&me->base);
     mod_share_emergency(me->share);
-    ring_push(&me->evt, MOD_SC_EVT_FAULT_SHORT);
+    // 事件流 (SPSC 环 fire-and-forget = IO_NONE): 满则计数丢弃, 不阻塞 FAST (A5)
+    if (!ring_push(&me->evt, MOD_SC_EVT_FAULT_SHORT)) {
+      me->evt_overflow_cnt++;
+    }
     return true;
   }
 
@@ -88,7 +101,10 @@ static bool sc_protect(ModSuperCap *me) {
   if (Debounce_Update(&me->unbalance_deb, unbal_trig)) {
     power_stage_emergency(&me->base);
     mod_share_emergency(me->share);
-    ring_push(&me->evt, MOD_SC_EVT_FAULT_UNBALANCE);
+    // 事件流 (SPSC 环 fire-and-forget = IO_NONE): 满则计数丢弃, 不阻塞 FAST (A5)
+    if (!ring_push(&me->evt, MOD_SC_EVT_FAULT_UNBALANCE)) {
+      me->evt_overflow_cnt++;
+    }
     return true;
   }
 
@@ -109,7 +125,7 @@ static bool sc_protect(ModSuperCap *me) {
   return false;
 }
 
-// 级联功率环 + 均流驱动 (PST_RUN 内)
+// 级联功率环 + 均流驱动 (PST_RUN 内; 采样/保护已由 sc_tick 全状态执行, A6 对齐)
 static void sc_run(ModSuperCap *me) {
   if (!me->adc || !me->share) {
     me->base.st = PST_FAULT;
@@ -125,18 +141,9 @@ static void sc_run(ModSuperCap *me) {
     }
   }
 
-  // 1. 采样 + 健康度遥测
-  sc_sample(me);
-  me->cap_health = (me->cfg.charge_stop_v > 0.0f) ? (me->vb / me->cfg.charge_stop_v) : 0.0f;
-
-  // 2. 保护: 故障确认 → 急停并返回 (本周期不再驱动均流/PWM); 健康 → 计算功率边界
-  if (sc_protect(me)) {
-    return;
-  }
-
-  // 3. 功率环级联
+  // 1. 功率环级联
   //    p_referee = LPF(va × i_chassis) — 实测母线功率 (正=负载消耗)
-  me->p_referee = LowPassFilter_Update(&me->power_lpf, me->va * me->ichassis, MOD_SC_DT);
+  me->p_referee = LowPassFilter_Update(&me->power_lpf, me->va * me->ichassis, mod_sc_dt(me));
 
   //    PI 输出限幅 = 功率边界 (PidReg4 base 限幅, 抗积分饱和, 等价于外部 clamp — 不二次限幅)
   me->pid_p.base.out_max = me->p_lim_hi;
@@ -149,7 +156,7 @@ static void sc_run(ModSuperCap *me) {
   me->base.iref = me->referee_power / va;   // 裁判电流参考 (派生, 重解释见 header)
   latch_write(&me->telemetry, me->i_side);  // FAST→SLOW 遥测
 
-  // 4. 注入均流 + 驱动 share tick (写 PWM)
+  // 2. 注入均流 + 驱动 share tick (写 PWM)
   mod_share_set_voltages(me->share, me->va, me->vb);
   mod_share_set_paside(me->share, me->i_side);
   mod_share_set_currents(me->share, me->i_phase);
@@ -179,6 +186,17 @@ static void sc_init(PowerStage *base) {
 
 static void sc_tick(PowerStage *base) {
   ModSuperCap *me = container_of(base, ModSuperCap, base);
+
+  // 采样 + 保护: 所有状态每周期执行 (A6 对齐, 同 buck) — IDLE/FAULT 下外部母线短路/意外输出仍被检出
+  // 设备未绑定 (adc/share) 则无从采样 (board_init 绑定; 未绑定保持 0 值不误报)
+  // 注: 短路/失平衡 Debounce 内置上升沿确认 (confirmed 标志), 持续故障不会重复急停/推事件 — 无需额外锁
+  if (me->adc != NULL && me->share != NULL) {
+    sc_sample(me);
+    me->cap_health = (me->cfg.charge_stop_v > 0.0f) ? (me->vb / me->cfg.charge_stop_v) : 0.0f;
+    if (sc_protect(me)) {
+      return;  // 故障已确认 (FAULT): 本周期不推进状态机输出
+    }
+  }
 
   switch (me->base.st) {
   case PST_INIT:
@@ -304,6 +322,9 @@ void mod_supercap_init(ModSuperCap *me, const ModSuperCapCfg *cfg) {
   if (me->cfg.power_lpf_fc <= 0.0f) {
     me->cfg.power_lpf_fc = 120.0f;
   }
+  if (me->cfg.control_freq_hz <= 0.0f) {
+    me->cfg.control_freq_hz = 28333.0f;  // 缺省 28.3kHz
+  }
   if (me->cfg.num_phases == 0u) {
     me->cfg.num_phases = 1u;
   }
@@ -324,7 +345,7 @@ void mod_supercap_init(ModSuperCap *me, const ModSuperCapCfg *cfg) {
   LowPassFilter_Init(&me->power_lpf, me->cfg.power_lpf_fc);
   // 功率环 PI (PidReg4 = TI pi_reg4, 复刻原 PidLinear aw=CLAMP); 增益/限幅由下方 sync_cfg 派生
   PidReg4Cfg r4 = { 0.0f, 0.0f, 0.0f, 0.0f };  // kp, ki, kff, sp_fc (sync_cfg 填)
-  pid_reg4_init(&me->pid_p, MOD_SC_DT, -1e6f, 1e6f, &r4);  // 初值宽限, sync_cfg 收窄
+  pid_reg4_init(&me->pid_p, mod_sc_dt(me), -1e6f, 1e6f, &r4);  // 初值宽限, sync_cfg 收窄
   Debounce_Init(&me->short_deb, MOD_SC_FAULT_DEBOUNCE_N);
   Debounce_Init(&me->unbalance_deb, MOD_SC_FAULT_DEBOUNCE_N);
 
@@ -343,7 +364,7 @@ void mod_supercap_sync_cfg(ModSuperCap *me) {
   me->pid_p.cfg.ki  = me->cfg.pid_p_ki;
   me->pid_p.cfg.kff = 0.0f;
   me->pid_p.cfg.sp_fc = 0.0f;
-  me->pid_p.base.dt = MOD_SC_DT;
+  me->pid_p.base.dt = mod_sc_dt(me);
   me->pid_p.base.out_max = 1e6f;
   me->pid_p.base.out_min = -1e6f;
 

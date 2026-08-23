@@ -65,7 +65,6 @@
 
 // --- Power-OOP: 电源控制 (PowerStage 集成模块示例: Buck 降压) ---
 #include "comp_power_stage.h"   // PowerStage 父类接口 (ops 虚表 + 状态机)
-#include "comp_pi_reg4.h"       // PiReg4 四态 PI (双环值包含)
 #include "pwm_buckboost.h"      // PwmBuckBoost — 单路 Buck/Boost PWM
 #include "adc_dc_sampler.h"     // AdcDcSampler — 直流采样器
 #include "mod_buck.h"           // ModBuck — Buck 降压控制模块
@@ -222,6 +221,11 @@ void App_OnControlTick(void);
 // 与 App_OnControlTick 分离: FAST 只做确定的事; SLOW 允许轻微抖动, 但确认问题即关断
 // 由独立监控定时器驱动 (如 1ms/1kHz), 或在 FAST ISR 末尾降频调用
 void App_OnSlowTick(void);
+
+// HMI 定时器/通信中断 ISR — CTX_HMI (软实时, 抢优先 2, 低于 FAST=0 / SLOW=1):
+// 按键扫描去抖 / 命令分发 / 收包入队。绝不触碰 FAST 控制环 (严格三档 FAST>SLOW>HMI)。
+// 由独立 HMI 中断源驱动 (如 CAN/UART RX 中断或专用 HMI 定时器)。
+void App_OnHmiTick(void);
 
 // HAL_UART_RxCpltCallback — 串口接收完成
 void App_OnUartRx(uint8_t byte);

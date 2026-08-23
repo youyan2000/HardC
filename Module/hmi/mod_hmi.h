@@ -42,17 +42,15 @@ typedef struct {
 
 // 最大按键数
 #define HMI_MAX_KEYS   4
-// 长按阈值 (tick 数 @ 100Hz)
-#define HMI_LONG_TICKS     80   // 0.8 秒
-// 双击间隔阈值 (tick 数)
-#define HMI_DOUBLE_TICKS   30   // 0.3 秒
+// 去抖阈值已字段化: Hmi.long_tick_th (800ms) / double_tick_th (300ms),
+// 由 hmi_set_timebase(tick_hz) 按实际 tick 频率换算。旧宏 HMI_LONG_TICKS/HMI_DOUBLE_TICKS 已删。
 
 // ======== 输出端口 (路由决策点) ========
 // HMI 是唯一路由决策点: 按键事件按路由策略经这些端口发出 (用 CAN 发 / UART 发 / LED 指示 / 同时多路)
 // 外部独立 (CAN 帧/字节流/电平各有语义), 内部统一 (事件回调), 路由只在 HMI 决定
 
 // 端口事件回调 — App 在 board_init 写适配函数: can→mod_can_send_fn 包装, uart→proto_send_fn 包装, led→output_on/off
-// 回调经 hmi_report 在 hmi_tick 调用者上下文 (控制 ISR/CTX_FAST) 执行, 必须非阻塞:
+// 回调经 hmi_report 在 hmi_tick 调用者上下文 (CTX_HMI 中断, 优先 2) 执行, 必须非阻塞:
 //   只做入队/置标志 (comp_ring/comp_latch), 真实 I/O 由 CTX_MAIN (BackgroundTask) 完成
 typedef void (*HmiPortFn)(void *ctx, HmiKeyEvent evt);
 
@@ -82,6 +80,8 @@ typedef struct {
 
   HmiPorts      out;              // 输出端口表 (路由决策点, hmi_report fan-out)
 
+  uint16_t      long_tick_th;    // 长按阈值 (tick 数, 按实际 tick Hz 换算 = 800ms)
+  uint16_t      double_tick_th;  // 双击窗口阈值 (tick 数, 按实际 tick Hz 换算 = 300ms)
   uint32_t      tick;             // 运行 tick 计数 (调试用)
 } Hmi;
 
@@ -89,6 +89,10 @@ typedef struct {
 
 // 初始化: 绑定命令分发器
 void hmi_init(Hmi *me, CmdDispatcher *disp);
+
+// 设置 HMI tick 时间基准 (Hz) — CTX_HMI 中断频率; 未调用默认 100Hz
+// 按 Hz 换算去抖阈值: 长按 800ms / 双击窗口 300ms (保持真实毫秒语义, 与 tick 频率无关)
+void hmi_set_timebase(Hmi *me, uint16_t tick_hz);
 
 // 注册按键: 在 init 后调用, key_index=0..3, 初始电平 (1=释放)
 void hmi_add_key(Hmi *me, uint8_t key_index, uint8_t initial_state);
@@ -106,7 +110,7 @@ void hmi_oled_set_dirty(Hmi *me);
 void hmi_port_bind(HmiPort *port, void *ctx, HmiPortFn cb);
 
 // 报告事件 — 唯一路由决策点: 按端口绑定 fan-out (三路各可空, 全绑=同时多路)
-// 调用上下文 = hmi_tick 调用者 (控制 ISR/CTX_FAST): 回调必须非阻塞, 只入队/置标志
+// 调用上下文 = hmi_tick 调用者 (CTX_HMI 中断, 优先 2): 回调必须非阻塞, 只入队/置标志
 void hmi_report(Hmi *me, HmiKeyEvent evt);
 
 #endif

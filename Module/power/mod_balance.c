@@ -9,6 +9,7 @@
 // 注意: 球板控制是相对调节 — 不设绝对位置, 每次只调整偏差量
 
 #include "mod_balance.h"
+#include "comp_pid.h"      // pid_compute — balance 调用 PidBase 计算
 #include "comp_step_motor.h"
 #include "comp_math.h"   // math_clamp_f, math_deadzone_f
 

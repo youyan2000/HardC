@@ -142,18 +142,18 @@ static void svpwm_set_freq(PwmBase *base, uint32_t freq_hz) {
   if (!me->bsph) return;
 
   // 三相同步更新频率
-  bsp_set_freq(me->bsph, me->timer_a, freq_hz);
-  bsp_set_freq(me->bsph, me->timer_b, freq_hz);
-  bsp_set_freq(me->bsph, me->timer_c, freq_hz);
+  bsp_pwm_set_freq_hz(me->bsph, me->timer_a, freq_hz);
+  bsp_pwm_set_freq_hz(me->bsph, me->timer_b, freq_hz);
+  bsp_pwm_set_freq_hz(me->bsph, me->timer_c, freq_hz);
 }
 
 static void svpwm_set_deadtime(PwmBase *base, uint32_t deadtime_ns) {
   PwmSvpwm *me = container_of(base, PwmSvpwm, base);
   if (!me->bsph) return;
 
-  bsp_set_deadtime(me->bsph, me->timer_a, deadtime_ns);
-  bsp_set_deadtime(me->bsph, me->timer_b, deadtime_ns);
-  bsp_set_deadtime(me->bsph, me->timer_c, deadtime_ns);
+  bsp_pwm_set_deadtime_ns(me->bsph, me->timer_a, deadtime_ns);
+  bsp_pwm_set_deadtime_ns(me->bsph, me->timer_b, deadtime_ns);
+  bsp_pwm_set_deadtime_ns(me->bsph, me->timer_c, deadtime_ns);
 }
 
 static void svpwm_set_phase(PwmBase *base, uint8_t ch, float phase_deg) {

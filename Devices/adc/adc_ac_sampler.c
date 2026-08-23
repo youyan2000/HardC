@@ -40,9 +40,9 @@ static const float isensor_gain_default  = 9.60f;   // 电流传感器增益 (A/
 // ====== 工具函数 =============================================================
 
 // 差分通道: int16_t → 工程量
-// raw = ADC 差分結果 (IN_P - IN_N), -4095 ~ +4095 對應 ±3.3V
+// raw = ADC 差分结果 (IN_P - IN_N), -4095 ~ +4095 对应 ±3.3V
 static float diff_to_eng(int16_t raw, float gain) {
-  float v = (float)raw * adc_vref / adc_res;  // 有符號電壓 (±3.3V)
+  float v = (float)raw * adc_vref / adc_res;  // 有符号电压 (±3.3V)
   return v * gain;                              // → 工程量 (±A 或 ±V)
 }
 
@@ -80,8 +80,9 @@ static float adc_ac_rms_sample(RmsWindow *w, float inst, uint16_t win) {
 // 启动 ADC DMA 循环扫描
 static void start_dma_impl(AdcBase *base) {
   AdcAcSampler *me = container_of(base, AdcAcSampler, base);
+  // PingPong: 从非活动块起步 (DMA 总写非活动块, FAST 只读活动块; init 后 active=0 → 写 buf[1])
   // 统一走 BSP 抽象 (STM32: HAL_ADC_Start_DMA; C2000: 触发源 + 缓冲注册) — 跨平台
-  bsp_adc_start_dma(me->hadc, me->hdma, (uint16_t *)base->raw, me->num_ch);
+  bsp_adc_start_dma(me->hadc, me->hdma, (uint16_t *) double_buffer_pending(&me->dbuf), me->num_ch);
 }
 
 // 读取通道 i 的原始 ADC 值
@@ -154,9 +155,12 @@ static void process_impl(AdcBase *base) {
   if (me->num_v >= 2) {
     float vab = me->v_val[0];
     float vbc = me->v_val[1];
-    float vline_peak = MATH_SQRT(vab * vab + vbc * vbc) * 0.8165f; // ≈ sqrt(2/3)
-    // 一阶低通: alpha = 2*PI*fc*Ts = 2*PI*10Hz*25us ≈ 0.00157
-    me->vdc += 0.00157f * (vline_peak * 1.414f - me->vdc);
+    // 三相平衡: 母线电压 ≈ 线电压瞬时合成幅值 (两相 120° 差)
+    //   |Vab + Vbc∠120°| = sqrt(Vab² + Vbc² + Vab·Vbc) — 正确三相合成, 非 90° 假设
+    float vline_inst = MATH_SQRT(vab * vab + vbc * vbc + vab * vbc);
+    // 一阶低通平滑: alpha = 2π·fc·Ts (fc=10Hz, Ts=1/FAST_FREQ)
+    const float vdc_lp_alpha = 0.00157f;  // 10Hz 低通 @ ~10kHz 采样
+    me->vdc += vdc_lp_alpha * (vline_inst - me->vdc);
   }
 
   // ---- 第5步: 滑动窗 RMS (window = ADC_AC_RMS_WIN) -----------------------
@@ -174,6 +178,8 @@ static void process_impl(AdcBase *base) {
     me->irms1 = adc_ac_rms_sample(&me->i_rms, i_rms_inst, ADC_AC_RMS_WIN);
   }
 
+  // A11: 屏障 — 确保上述 raw 派生写入在 data_ready 置位前完成 (编译器不得重排到置位之后)
+  ADC_AC_MEM_BARRIER();
   me->data_ready = true;
 }
 
@@ -202,7 +208,10 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
   // 调用基类构造器
   adc_base_init(&me->base);
   me->base.name    = AdcAcSamplerSensor;
-  me->base.raw     = me->raw_buf;
+  // PingPong 双缓冲 (A7): 双倍 raw_buf 对半切分, 两块各 num_ch 个 16bit 采样.
+  // base.raw 绑活动块 (FAST/fetch 读); DMA 写非活动块, 完成回调标 pending 后由 fetch 切换
+  double_buffer_init(&me->dbuf, me->raw_buf, (uint16_t) (2u * ADC_AC_MAX_CH * sizeof(uint16_t)));
+  me->base.raw     = (uint16_t *) double_buffer_active(&me->dbuf);
   me->base.raw_cap = ADC_AC_MAX_CH;
   me->base.ops     = &sampler_ops;
 
@@ -263,6 +272,12 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
   me->vrms = 0;
   me->irms1 = 0;
   me->vref_measured = 0.0f;
+  me->freq_hz = 0.0f;
+  me->freq_timebase_hz = 10000.0f;  // fast_fetch 调用频率缺省 10kHz (工程按实际控制频率覆盖)
+  me->freq_prev_va = 0.0f;
+  me->freq_period_ticks = 0u;
+  me->freq_last_period = 0u;
+  me->freq_cross_cnt = 0u;
   me->data_ready = false;
 
   // 初始化滑动窗 RMS 状态 (per-ring: V/I 各自独立, 零初始化)
@@ -278,10 +293,19 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
 
 // ====== 数据获取 =============================================================
 
-// ADC 转换完成回调 — 在 HAL_ADC_ConvCpltCallback 中调用
+// ADC 转换完成回调 — 在 HAL_ADC_ConvCpltCallback (STM32 DMA 完成) / ePWM ISR (C2000) 中调用
+// PingPong 快照交接 (A7, 与 AdcDcSampler 同款语义): DMA 刚写满非活动块 →
+//   ① 重装目标在 enable 之前捕获 (完成时活动块 = 下轮写目标; 防 STM32 上 FAST 抢占
+//      切快照后重装到刚写满/正在读的块 — A4 同款原子性) ② 标 pending → 切快照
+//   ③ 重装 DMA 到捕获块 ④ process (工程量转换 + 三相重构 + RMS)
 void adc_ac_sampler_fetch(AdcAcSampler *me) {
   // 契约: 生产者置 data_ready 标志 (IO_ASYNC_FLAG) — init 声明不符即配置错误不可静默
   assert(me->completion == IO_ASYNC_FLAG);
+  uint8_t *next = double_buffer_active(&me->dbuf);
+  double_buffer_enable_pending(&me->dbuf);
+  double_buffer_switch(&me->dbuf);
+  me->base.raw = (uint16_t *) double_buffer_active(&me->dbuf);
+  bsp_adc_restart_dma(me->hadc, me->hdma, (uint16_t *) next, me->num_ch);
   adc_process(&me->base);
 }
 
@@ -323,6 +347,26 @@ void adc_ac_sampler_fast_fetch(AdcAcSampler *me) {
     me->ib2 = -(ia + ic);
     me->ic2 =  ic;
   }
+
+  // 频率过零检测 (真测): Va 正过零计数, 2 次正过零 = 1 完整周期 → freq = ticks/秒
+  //   带死区 (±ADC_AC_FREQ_HYST_V) 抑制 0 附近噪声抖动产生伪过零; 频率未知时返回 0 (不造假数据)
+  if (me->num_v >= 2) {
+    me->freq_period_ticks++;
+    if (me->freq_prev_va <= ADC_AC_FREQ_HYST_V && me->va > ADC_AC_FREQ_HYST_V) {
+      me->freq_cross_cnt++;
+      if (me->freq_cross_cnt >= 2u) {
+        // 两个连续正过零 = 一个完整周期; freq = 1 / (period_ticks × dt)
+        if (me->freq_last_period > 0u) {
+          float dt = 1.0f / (me->freq_timebase_hz > 0.0f ? me->freq_timebase_hz : 10000.0f);  // fast_fetch 调用频率 (init 注入)
+          me->freq_hz = 1.0f / ((float) me->freq_last_period * dt);
+        }
+        me->freq_last_period = me->freq_period_ticks;
+        me->freq_cross_cnt = 0u;
+      }
+      me->freq_period_ticks = 0u;
+    }
+    me->freq_prev_va = me->va;
+  }
 }
 
 // ====== 查询接口 =============================================================
@@ -340,7 +384,7 @@ void adc_ac_sampler_deinit(AdcAcSampler *me) {
 float adc_ac_sampler_get_vrms(const AdcAcSampler *me) { return me->vrms; }
 float adc_ac_sampler_get_irms(const AdcAcSampler *me) { return me->irms1; }
 float adc_ac_sampler_get_vdc(const AdcAcSampler *me)  { return me->vdc; }
-float adc_ac_sampler_get_freq(const AdcAcSampler *me) { (void)me; return 50.0f; }
+float adc_ac_sampler_get_freq(const AdcAcSampler *me) { return me->freq_hz; }
 float adc_ac_sampler_get_vref(const AdcAcSampler *me) { return me->vref_measured; }
 
 float adc_ac_sampler_get_v(const AdcAcSampler *me, uint8_t idx) {

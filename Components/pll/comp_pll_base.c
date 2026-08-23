@@ -3,6 +3,7 @@
 // 与 PID 的 PidBase 分工对应: PidBase 管 dt/限幅/抗饱和调度, PllBase 管 LF+VCO 反馈调度。
 
 #include "comp_pll_base.h"
+#include "bsp_dsp.h"      // bsp_sin_f32/cos_f32/atan2_f32 — 硬件加速 (CLAmath) / math.h 回退
 #include <stddef.h>
 
 // 基类默认构造: 只设默认时钟 1ms、标称频率 50Hz、不限频、未绑定 ops
@@ -50,8 +51,8 @@ void pll_base_lf_vco(PllBase *base, float v_q) {
 
   if (base->vco_mode == PllVcoPrecise) {
     // 精确离散时间振荡器: 三角加法公式 + 幅值归一化 (防幅值漂移)
-    float cos_delta = cosf(delta_theta);
-    float sin_delta = sinf(delta_theta);
+    float cos_delta = bsp_cos_f32(delta_theta);
+    float sin_delta = bsp_sin_f32(delta_theta);
     float cos_new = base->cos_val * cos_delta - base->sin_val * sin_delta;
     float sin_new = base->sin_val * cos_delta + base->cos_val * sin_delta;
 
@@ -64,7 +65,7 @@ void pll_base_lf_vco(PllBase *base, float v_q) {
 
     base->cos_val = cos_new;
     base->sin_val = sin_new;
-    base->theta   = atan2f(sin_new, cos_new);   // [-π, π]
+    base->theta   = bsp_atan2_f32(sin_new, cos_new);   // [-π, π]
     if (base->theta < 0.0f) {
       base->theta += M_2PI;                     // 折叠到 [0, 2π)
     }
@@ -77,8 +78,8 @@ void pll_base_lf_vco(PllBase *base, float v_q) {
     if (base->theta < 0.0f) {
       base->theta += M_2PI;
     }
-    base->sin_val = sinf(base->theta);
-    base->cos_val = cosf(base->theta);
+    base->sin_val = bsp_sin_f32(base->theta);
+    base->cos_val = bsp_cos_f32(base->theta);
   }
 }
 

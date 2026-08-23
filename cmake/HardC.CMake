@@ -51,7 +51,7 @@ set(HARDC_BSP_SOURCES "")
 if(HARDC_DRIVER STREQUAL "st")
   # bsp_watchdog_stm32.c 内部以 HAL_IWDG_MODULE_ENABLED 自门控 (LibXR 同款):
   # 未启用 IWDG 的工程编译为空体, 不引入依赖
-  foreach(_bsp_f bsp_delay.c bsp_hrtim.c bsp_adc_stm32.c bsp_watchdog_stm32.c)
+  foreach(_bsp_f bsp_delay.c bsp_hrtim.c bsp_adc_stm32.c bsp_gpio_stm32.c bsp_watchdog_stm32.c bsp_uart_stm32.c bsp_i2c_stm32.c bsp_spi_stm32.c bsp_can_stm32.c bsp_flash_stm32.c bsp_jump_stm32.c)
     if(EXISTS "${HARDC_DIR}/BSP/${_bsp_f}")
       list(APPEND HARDC_BSP_SOURCES "${HARDC_DIR}/BSP/${_bsp_f}")
     endif()
@@ -59,7 +59,7 @@ if(HARDC_DRIVER STREQUAL "st")
 elseif(HARDC_DRIVER STREQUAL "c2000")
   # bsp_watchdog_c2000.c 直接 include driverlib.h (F28004x 无 WdtRegs 全局),
   # 由下方 c2000 include 目录 + --preinclude=driverlib.h 提供 — 与 epwm/adc 后端同约定
-  foreach(_bsp_f bsp_c2000_epwm.c bsp_c2000_adc.c bsp_watchdog_c2000.c)
+  foreach(_bsp_f bsp_c2000_epwm.c bsp_c2000_adc.c bsp_watchdog_c2000.c bsp_uart_c2000.c bsp_spi_c2000.c bsp_can_c2000.c bsp_flash_c2000_fixed.c bsp_jump_c2000.c)
     if(EXISTS "${HARDC_DIR}/BSP/${_bsp_f}")
       list(APPEND HARDC_BSP_SOURCES "${HARDC_DIR}/BSP/${_bsp_f}")
     endif()
@@ -121,7 +121,8 @@ elseif(HARDC_DRIVER STREQUAL "c2000")
   target_include_directories(hardc PUBLIC
     "${C2000_SDK_DIR}/driverlib/f28004x/driverlib"
     "${C2000_SDK_DIR}/device_support/f28004x/common/include"
-    "${C2000_SDK_DIR}/device_support/f28004x/headers/include")
+    "${C2000_SDK_DIR}/device_support/f28004x/headers/include"
+    "${C2000_SDK_DIR}/libraries/flash_api/f28004x/include/FlashAPI")
   # 预编译库实际位置 (C2000Ware 26.x 布局):
   #   driverlib: driverlib/f28004x/driverlib/ccs/Release/driverlib_eabi.lib
   #   CLAmath/FPUfastRTS: libraries/math/<名>/c28/lib/*.lib
@@ -133,6 +134,18 @@ elseif(HARDC_DRIVER STREQUAL "c2000")
       target_link_libraries(hardc PRIVATE "${_lib}")
     endif()
   endforeach()
+
+  # F021 Flash API (bsp_flash_c2000_fixed.c 依赖). 只链 eabi+fpu32 变体 (匹配上方
+  # --abi=eabi --float_support=fpu32); lib/ 下还含 FPU32(非 eabi) / ROM API 等互斥变体,
+  # 不能 GLOB 全链. 头在 include/FlashAPI/ 下, 见上方 include 目录.
+  set(C2000_F021_LIB
+    "${C2000_SDK_DIR}/libraries/flash_api/f28004x/lib/F021_API_F28004x_FPU32_EABI.lib")
+  if(EXISTS "${C2000_F021_LIB}")
+    target_link_libraries(hardc PRIVATE "${C2000_F021_LIB}")
+    # 链接了 F021 库 → 定义 C2000_FLASH_HAS_F021=1, 使 bsp_flash_c2000_fixed.c
+    # 的 F021 初始化路径真正编译进来 (未定义时宏默认 0, 初始化被 #if 跳过).
+    target_compile_definitions(hardc PRIVATE C2000_FLASH_HAS_F021=1)
+  endif()
 
   # cl2000 编译选项 (学自 CCS gmake: -v28 -ml -mt --abi=eabi --float_support=fpu32 ...)
   # --preinclude=driverlib.h 为库 TU 注入 uint8_t (C28x 字寻址, CGT <stdint.h> 不定义 uint8_t,

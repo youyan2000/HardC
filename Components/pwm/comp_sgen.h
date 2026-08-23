@@ -18,6 +18,7 @@
 
 #include <math.h>
 #include "comp_math.h"
+#include "bsp_dsp.h"      // bsp_sin_f32/cos_f32 — 硬件加速 (CLAmath) / math.h 回退 (与 comp_filter 同款)
 
 // ======================= SgenFixed (固定频率信号发生器) =======================
 
@@ -72,9 +73,9 @@ static inline float sgen_fixed_tick(SgenFixed *me, float new_freq_hz) {
     me->phase -= M_2PI;
   }
 
-  // sin/cos (硬件加速: 如果有 CMSIS-DSP 或 C2000 TMU, 编译器自动优化)
-  me->sin_val = sinf(me->phase);
-  me->cos_val = cosf(me->phase);
+  // sin/cos (硬件加速: bsp_dsp 走 CLAmath, 非 CLA 平台回退 math.h — 与 comp_filter 同款)
+  me->sin_val = bsp_sin_f32(me->phase);
+  me->cos_val = bsp_cos_f32(me->phase);
 
   // 输出
   me->out = me->amplitude * me->sin_val + me->offset;
@@ -160,8 +161,8 @@ static inline float sgen_sweep_tick(SgenSweep *me) {
     me->phase -= M_2PI;
   }
 
-  me->sin_val = sinf(me->phase);
-  me->cos_val = cosf(me->phase);
+  me->sin_val = bsp_sin_f32(me->phase);
+  me->cos_val = bsp_cos_f32(me->phase);
 
   me->out = me->amplitude * me->sin_val + me->offset;
   me->step++;
@@ -242,9 +243,9 @@ static inline float sgen_hp1_run(SgenHp1 *me) {
     me->phase -= M_2PI;
   }
 
-  // sin/cos 计算 (硬件加速: CMSIS-DSP / C2000 TMU)
-  me->sin_val = sinf(me->phase);
-  me->cos_val = cosf(me->phase);
+  // sin/cos 计算 (硬件加速: bsp_dsp CLAmath / math.h 回退)
+  me->sin_val = bsp_sin_f32(me->phase);
+  me->cos_val = bsp_cos_f32(me->phase);
 
   // 输出: 幅值 × sin + DC 偏移
   me->out = me->amplitude * me->sin_val + me->offset;
@@ -328,8 +329,8 @@ static inline float sgen_hp2_run(SgenHp2 *me) {
   }
 
   // 分别计算正弦值 (保留分量供外部解调)
-  me->sin_val1 = sinf(me->phase1);
-  me->sin_val2 = sinf(me->phase2);
+  me->sin_val1 = bsp_sin_f32(me->phase1);
+  me->sin_val2 = bsp_sin_f32(me->phase2);
 
   // 合成输出: 双频叠加 + DC 偏移
   me->out = me->amplitude1 * me->sin_val1
@@ -420,7 +421,7 @@ static inline float sgen_t3d_run(SgenT3D *me) {
     }
 
     // 正弦输出: sin(phase + phase_offset) 注: 初始时 phase = offset, 此后独立累加
-    me->tone_out[i] = me->amplitude[i] * sinf(me->phase[i]);
+    me->tone_out[i] = me->amplitude[i] * bsp_sin_f32(me->phase[i]);
 
     sum += me->tone_out[i];
   }

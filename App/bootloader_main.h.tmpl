@@ -1,0 +1,55 @@
+// Bootloader 独立 App — 头文件模板 (bootloader_main.h)
+//
+// 定位: Bootloader 是独立于主应用 (app_main) 的简化固件, 只做:
+//   1. 初始化升级传输 (UART/CAN) + Flash + Database
+//   2. 判断: 有升级请求 → 进入升级循环; 否则 → 校验 App 有效 → 跳转 App
+//   3. 升级循环: BackgroundTask 处理 mod_bootloader_poll (收包/写 Flash/跳转)
+//
+// 与 app_main 的关系:
+//   - Bootloader 和 App 是两个独立固件, 链接脚本起始地址不同
+//     (Bootloader 在 Flash 基址, App 在 Bootloader 之后)
+//   - Bootloader 极简: 不复用控制环 (CTX_FAST 不开), 只跑通信 + Flash
+//   - App 收到升级命令 → 写 Database 升级标志 → 软复位 → Bootloader 接管升级
+//
+// 本模板是 Bootloader 固件的 App 层骨架, 由 YmaC 按 bootloader 拓扑生成.
+// 与 app_main.h.tmpl 平行, 但内容极简化 (无 FAST 控制环).
+
+#ifndef BOOTLOADER_MAIN_H
+#define BOOTLOADER_MAIN_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "mod_bootloader.h"
+#include "com_uart.h"
+#include "com_can.h"
+#include "bsp_flash.h"
+
+// Bootloader 根结构体 (值包含, 零 malloc)
+typedef struct {
+  // --- 升级传输 (按 bootloader 拓扑 YAML 选择 UART 或 CAN) ---
+  // Uart drv_up_uart;      // 若用 UART 升级
+  // Can  drv_up_can;       // 若用 CAN 升级
+
+  // --- Bootloader 模块 ---
+  ModBootloader bootloader;
+  // 配置 POD (由 YmaC 注入)
+  struct {
+    ModBootloaderCfg bootloader_cfg;
+    uint8_t db_buf[64];         // Database 缓冲 (升级标志)
+    uint8_t rx_ring_buf[256];   // 收包环缓冲
+  } config;
+} BootloaderRoot;
+
+// 全局根实例
+extern BootloaderRoot g_boot_root;
+
+// Bootloader 板级初始化 — 在 CubeMX MX_*_Init() 之后调用
+//   完成: 绑定升级传输 + Flash + Database → 初始化 Bootloader 模块
+void bootloader_board_init(void);
+
+// Bootloader 主循环 (在 main() 的 while(1) 中调用)
+//   BackgroundTask 语义: 处理升级协议 (收包/写 Flash/跳转)
+void bootloader_background(void);
+
+#endif  // BOOTLOADER_MAIN_H

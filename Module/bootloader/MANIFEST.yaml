@@ -1,0 +1,14 @@
+id: module/bootloader
+layer: Module
+description: 引导加载模块 — 固件升级 (UART/CAN 传输 + CRC 校验 + bsp_flash 写 + bsp_jump 跳转) + 升级标志持久化 (comp_database)
+ctx: main
+files:
+  - mod_bootloader.h
+  - mod_bootloader.c
+depends:
+  - components/contract      # comp_ring / comp_io / comp_error_code
+  - components/codec         # comp_crc (CRC-32)
+  - components/database      # comp_database (升级标志持久化)
+  - devices/comm             # com_uart / com_can (升级传输)
+  - BSP/bsp_flash.h          # Flash 抽象
+  - BSP/bsp_jump.h           # 跳转抽象

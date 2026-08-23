@@ -1,120 +1,176 @@
-// SPI 传输类实现 —— CommBase 子类 (Devices/comm, 阶段1 重构)
+// SPI 传输类实现 —— CommBase 子类 (Devices/comm, 中断事务接入版)
 //
-// 传输语义: 全双工 + 寄存器. CS 经 bsp_gpio 管理, 不再直接碰 HAL GPIO.
-// 阻塞 HAL 传输 (100ms 超时) 只允许在 MAIN 上下文调用 — comm 线本就是第三优先级,
-//   事务短 (寄存器级), 忙等可接受; comp 参数为接口统一而保留, 阻塞下 IO_SYNC 天然成立.
+// 传输经 bsp_spi.h 中断事务 (非阻塞, 完成回调收 ec); CS 经 bsp_gpio 管理.
+//   CS 在完成回调里释放 (异步安全: CS 全程保持到事务真正完成, 不从机截断).
+//   spi_write/read/transfer 保持签名; spi_read_reg 用单段全双工 (天然异步安全).
+//   comp=IO_SYNC 时轮询完成 (仅 MAIN).
 
 #include "com_spi.h"
-#include "container_of.h"
+#include <stddef.h>
 
-// HAL 状态 → ErrorCode 映射
-static ErrorCode hal_to_ec(HAL_StatusTypeDef st) {
-  switch (st) {
-  case HAL_OK:
-    return ERR_OK;
-  case HAL_TIMEOUT:
-    return ERR_TIMEOUT;
-  case HAL_BUSY:
-    return ERR_BUSY;
-  default:
-    return ERR_FAILED;
+// bsp_spi 完成回调: 记录 ec + 释放 CS + 清 busy (中断上下文, 非阻塞)
+static void spi_on_done(BspSpi *port, int ec, void *ctx) {
+  (void) port;
+  Spi *me = (Spi *) ctx;
+  me->last_ec = ec;
+  if (me->cs_active) {
+    bsp_gpio_write(&me->cs, true);  // 事务真正完成才释放 CS
+    me->cs_active = 0;
   }
+  me->tx_busy = 0;  // 释放在途 (单事务)
 }
 
-// CS 拉低 (使能从设备)
-static void cs_low(Spi *me) {
-  bsp_gpio_write(&me->cs, false);
-}
-
-// CS 拉高 (释放从设备)
-static void cs_high(Spi *me) {
-  bsp_gpio_write(&me->cs, true);
-}
-
-// 自检: 句柄已绑定且已初始化
-static int self_check_impl(CommBase *base) {
-  Spi *me = container_of(base, Spi, base);
-  if (me->hspi == NULL || base->inited == 0) {
-    return -1;
+// 完成等待辅助: IO_SYNC 时轮询 (仅 CTX_MAIN 允许)
+static ErrorCode spi_wait_done(Spi *me, IoCompletion comp) {
+  if (comp == IO_SYNC) {
+    while (me->tx_busy) {}
+    return (me->last_ec == 0) ? ERR_OK : ERR_FAILED;
   }
-  return 0;
+  return ERR_OK;  // 异步: 完成由回调记录 last_ec + 释放 CS
 }
 
-// 诊断虚表 — 数据面 (句柄/CS) 不进虚表
-static const CommOps spi_ops = {
-    .self_check = self_check_impl,
-    .reset = NULL,
-};
+// ======== 构造 / 析构 / 配置 ========
 
-// -------- 构造 / 析构 / 配置 --------
-
-// 初始化: 契约身份 + 句柄/CS + CS 配置为输出并拉高 (空闲)
-void spi_init(Spi *me, const SpiConfig *cfg) {
+ErrorCode spi_init(Spi *me, const SpiConfig *cfg) {
+  if (me == NULL || cfg == NULL || cfg->port == NULL) {
+    return ERR_ARG;
+  }
   comm_base_init(&me->base, "spi");
-  me->hspi = cfg->hspi;
+  me->port = cfg->port;
   me->cs = cfg->cs;
   me->completion = IO_ASYNC_FLAG;
-  me->base.ops = &spi_ops;
+  me->tx_busy = 0;
+  me->last_ec = 0;
+  me->cs_active = 0;
   bsp_gpio_cfg_output(&me->cs);
-  bsp_gpio_write(&me->cs, true);
+  bsp_gpio_write(&me->cs, true);  // CS 空闲拉高
+  return ERR_OK;
 }
 
-// 重配: 换句柄/CS (不改变契约身份)
-void spi_set_config(Spi *me, const SpiConfig *cfg) {
-  me->hspi = cfg->hspi;
+ErrorCode spi_set_config(Spi *me, const SpiConfig *cfg) {
+  if (me == NULL || cfg == NULL || cfg->port == NULL) {
+    return ERR_ARG;
+  }
+  me->port = cfg->port;
   me->cs = cfg->cs;
   bsp_gpio_cfg_output(&me->cs);
   bsp_gpio_write(&me->cs, true);
+  return ERR_OK;
 }
 
-// 反初始化: CS 拉高释放 + 清状态
 void spi_deinit(Spi *me) {
+  if (me == NULL) {
+    return;
+  }
   bsp_gpio_write(&me->cs, true);
-  me->base.ops = NULL;
-  me->hspi = NULL;
+  me->port = NULL;
   comm_base_deinit(&me->base);
 }
 
-// -------- 数据操作 (MAIN 上下文, 阻塞) --------
+// ======== 数据操作 (MAIN 上下文, 中断事务) ========
 
-// 写: CS 低→发送→CS 高
+// 写: CS 低 → 异步发 → 完成回调释放 CS
 ErrorCode spi_write(Spi *me, CommConstData data, IoCompletion comp) {
-  (void) comp;  // 阻塞传输, 无需异步完成处理
-  cs_low(me);
-  HAL_StatusTypeDef st = HAL_SPI_Transmit(me->hspi, (uint8_t *) data.ptr, data.len, 100);
-  cs_high(me);
-  return hal_to_ec(st);
+  if (me == NULL || me->port == NULL || data.ptr == NULL) {
+    return ERR_ARG;
+  }
+  if (me->tx_busy) {
+    return ERR_BUSY;  // 已有在途事务
+  }
+  bsp_gpio_write(&me->cs, false);
+  me->cs_active = 1;
+  me->tx_busy = 1;  // 先置忙再启动 (防完成回调先到)
+  if (!bsp_spi_write_async(me->port, data.ptr, data.len, spi_on_done, me)) {
+    me->tx_busy = 0;
+    me->cs_active = 0;
+    bsp_gpio_write(&me->cs, true);
+    return ERR_BUSY;
+  }
+  return spi_wait_done(me, comp);
 }
 
-// 读: CS 低→接收→CS 高
+// 读: CS 低 → 异步收 → 完成回调释放 CS
 ErrorCode spi_read(Spi *me, CommData data, IoCompletion comp) {
-  (void) comp;
-  cs_low(me);
-  HAL_StatusTypeDef st = HAL_SPI_Receive(me->hspi, data.ptr, data.len, 100);
-  cs_high(me);
-  return hal_to_ec(st);
+  if (me == NULL || me->port == NULL || data.ptr == NULL) {
+    return ERR_ARG;
+  }
+  if (me->tx_busy) {
+    return ERR_BUSY;
+  }
+  bsp_gpio_write(&me->cs, false);
+  me->cs_active = 1;
+  me->tx_busy = 1;
+  if (!bsp_spi_read_async(me->port, data.ptr, data.len, spi_on_done, me)) {
+    me->tx_busy = 0;
+    me->cs_active = 0;
+    bsp_gpio_write(&me->cs, true);
+    return ERR_BUSY;
+  }
+  return spi_wait_done(me, comp);
 }
 
-// 全双工: 同时收发 (rx.len 需 ≥ tx.len)
+// 全双工: 同时收发
 ErrorCode spi_transfer(Spi *me, CommConstData tx, CommData rx, IoCompletion comp) {
-  (void) comp;
+  if (me == NULL || me->port == NULL || tx.ptr == NULL || rx.ptr == NULL) {
+    return ERR_ARG;
+  }
   if (rx.len < tx.len) {
     return ERR_SIZE;
   }
-  cs_low(me);
-  HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(me->hspi, (uint8_t *) tx.ptr, rx.ptr, tx.len, 100);
-  cs_high(me);
-  return hal_to_ec(st);
+  if (me->tx_busy) {
+    return ERR_BUSY;
+  }
+  bsp_gpio_write(&me->cs, false);
+  me->cs_active = 1;
+  me->tx_busy = 1;
+  if (!bsp_spi_transfer_async(me->port, tx.ptr, rx.ptr, tx.len, spi_on_done, me)) {
+    me->tx_busy = 0;
+    me->cs_active = 0;
+    bsp_gpio_write(&me->cs, true);
+    return ERR_BUSY;
+  }
+  return spi_wait_done(me, comp);
 }
 
-// 寄存器读: 发 reg 地址 → 收 len 字节
+// 寄存器读: 单段全双工 (tx=[reg,0..0] len+1, rx=[dummy,data] len+1) — 天然异步安全
 ErrorCode spi_read_reg(Spi *me, uint8_t reg, uint8_t *dat, uint16_t len, IoCompletion comp) {
-  (void) comp;
-  cs_low(me);
-  HAL_StatusTypeDef st = HAL_SPI_Transmit(me->hspi, &reg, 1, 100);
-  if (st == HAL_OK) {
-    st = HAL_SPI_Receive(me->hspi, dat, len, 100);
+  if (me == NULL || me->port == NULL || dat == NULL) {
+    return ERR_ARG;
   }
-  cs_high(me);
-  return hal_to_ec(st);
+  if (me->tx_busy) {
+    return ERR_BUSY;
+  }
+  // 栈上组 tx (reg + len 个 0xFF 驱动时钟) 与 rx (dummy + 数据)
+  // 注: tx 需在事务期间保持有效 — 中断事务是异步的, 栈缓冲在 spi_wait_done(IO_SYNC)
+  //     返回前有效; 异步模式 (comp != IO_SYNC) 下栈缓冲会在函数返回后失效 → 风险.
+  // 因此: IO_SYNC 用栈缓冲; 异步模式暂不支持 read_reg (返回 ERR_NOT_SUPPORT),
+  //       避免悬垂指针 (见头文件注释).
+  if (comp != IO_SYNC) {
+    return ERR_NOT_SUPPORT;  // 异步 read_reg 需调用方持有缓冲, 暂不支持
+  }
+  uint8_t tx[2 + 64];
+  uint8_t rx[2 + 64];
+  if (len > 64u) {
+    return ERR_SIZE;  // 栈缓冲上限 (传感器寄存器访问通常 ≤ 8)
+  }
+  tx[0] = reg;
+  for (uint16_t i = 1; i <= len; i++) {
+    tx[i] = 0xFFu;  // 驱动时钟
+  }
+  bsp_gpio_write(&me->cs, false);
+  me->cs_active = 1;
+  me->tx_busy = 1;
+  if (!bsp_spi_transfer_async(me->port, tx, rx, (uint16_t) (len + 1u), spi_on_done, me)) {
+    me->tx_busy = 0;
+    me->cs_active = 0;
+    bsp_gpio_write(&me->cs, true);
+    return ERR_BUSY;
+  }
+  ErrorCode ec = spi_wait_done(me, comp);
+  if (ec == ERR_OK) {
+    for (uint16_t i = 0; i < len; i++) {
+      dat[i] = rx[i + 1];  // 跳过 dummy 字节
+    }
+  }
+  return ec;
 }

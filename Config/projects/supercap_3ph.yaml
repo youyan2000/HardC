@@ -1,0 +1,16 @@
+project: supercap_3ph
+mcu: STM32G474RET6
+description: 三相并联超级电容功率管理 — 裁判功率级联 (LPF 120Hz → 功率 PI) + 充放限幅 + taper 满电渐入 + 三相均流 + 短路/失平衡保护, 驱动 PwmBuckBoost 三相并联
+modules:
+  - components/pwm
+  - components/adc
+  - components/pid
+  - components/power
+  - components/math
+  - components/dsp
+  - components/protection
+  - components/contract
+  - devices/pwm
+  - devices/adc
+  - module/power
+  - module/comm

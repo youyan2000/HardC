@@ -113,17 +113,21 @@ void adc_dc_sampler_deinit(AdcDcSampler *me) {
 }
 
 // ADC DMA 完成 ISR — 生产侧交接 (PingPong, 见 agent.md §1.2 / comp_double_buffer.h)
-// 不变量: DMA 总被重装到"当前活动块"; 该块被 fetch 切走后即非活动块 → 完成时写满的正是非活动块
-//   ① 标 pending (IO_ASYNC_FLAG) 供 FAST 消费; ② 重装到当前活动块 (下轮写目标)
+// 不变量: DMA 总被重装到"完成时活动块"; 该块被 fetch 切走后即非活动块 → 完成时写满的正是非活动块
+//   ① 标 pending (IO_ASYNC_FLAG) 供 FAST 消费; ② 重装到完成时活动块 (下轮写目标)
 // 安全前提: ADC 由控制定时器触发 (单转换源, 每控制周期恰好一次完成), 重装生效在下一次触发,
 //   FAST 的 fetch 在周期首部切快照 → DMA 从不写 FAST 正在读的活动块 (撕裂读消除)
 // 违反前提 (触发率 > 控制率, 一周期多次完成) → pending/活动块映射错乱, 属配置错误不可静默
 void adc_dc_sampler_on_dma_complete(AdcDcSampler *me) {
   // 契约: 生产者置标志 (IO_ASYNC_FLAG) — init 声明不符即配置错误不可静默
   assert(me->completion == IO_ASYNC_FLAG);
+  // A4 原子性: 重装目标必须在 enable_pending 之前捕获. 完成时活动块 = 下轮 DMA 写目标
+  // (FAST fetch 切走后它即非活动块). 若在 enable 之后才求值, STM32 上 FAST 可抢占本 ISR
+  // 先切快照 → active 翻转, 重装就会落到刚写满/FAST 正在读的块 → 撕裂 (C2000 PIE 不嵌套无此窗口)
+  uint8_t *next = double_buffer_active(&me->dbuf);
   double_buffer_set_pending_len(&me->dbuf, (uint16_t) (2u * me->num_ch));  // 16bit × N 通道
   double_buffer_enable_pending(&me->dbuf);                                 // 快照就绪
-  bsp_adc_restart_dma(me->hadc, me->hdma, (uint16_t *) double_buffer_active(&me->dbuf), me->num_ch);
+  bsp_adc_restart_dma(me->hadc, me->hdma, (uint16_t *) next, me->num_ch);
 }
 
 // FAST 上下文: 切快照 + 只碰活动块 (fetch/process 分离)

@@ -1,136 +1,98 @@
-// UART 字节流传输类实现 —— CommBase 子类 (Devices/comm, 阶段1 重构)
+// UART 字节流传输类实现 — DMA model 接入版 (Devices/comm)
 //
 // 数据流:
-//   RX: HAL UART ISR (HAL_UART_RxCpltCallback) → uart_rx_push → SPSC 环 → MAIN uart_read
-//   TX: MAIN uart_write 入环 → HAL_UART_Transmit_IT 逐字节发 → TxCplt → uart_tx_complete 续发
-//
-// 静态单例注册表 (UART_MAX 条) 把 HAL 弱回调分发到对应实例;
-// 重写的 HAL_UART_RxCpltCallback / HAL_UART_TxCpltCallback 是本类对全局弱符号的唯一所有者.
-//
-// TX 忙等说明: uart_write 先入环再检查 tx_busy, 只有 ISR 消费端会清 tx_busy;
-//   uart_tx_complete 采用"先清标志再续发"顺序, 消除"MAIN 恰好入环后被 ISR 清忙"的丢字节窗口
-//   (ISR 对 MAIN 是原子抢占, 清忙→再取 期间 MAIN 不可能看到忙=0 而重复启动).
+//   RX: 后端循环 DMA 写 rxm 缓冲 → uart_rx_event (RxEventCallback/SCIRXINT 调)
+//       用 bsp_uart_dma_rx_remaining 喂 dma_rx_model_update → 推 rxq → MAIN uart_read
+//   TX: MAIN uart_write 入 txq → dma_tx_model_submit (空闲则取队首装 active 并启动 DMA)
+//       → 完成中断 uart_tx_complete → dma_tx_model_on_done → 续发下一段
+// 平台: 全走 BSP/bsp_uart.h, BSP 之上零 HAL.
 
 #include "com_uart.h"
 #include "container_of.h"
 
-#define UART_MAX 4
+// BSP 回调适配前向声明 (定义在文件后部)
+static void uart_tx_done_cb(BspUart *port, void *ctx);
+static void uart_rx_event_cb(BspUart *port, void *ctx);
+#include <string.h>
 
-// 静态单例注册表: HAL 弱回调按 huart 匹配到实例
-static Uart *s_uarts[UART_MAX];
+// ======== 构造 / 析构 / 配置 ========
 
-// 注册实例 (幂等)
-static void reg(Uart *me) {
-  for (int i = 0; i < UART_MAX; i++) {
-    if (s_uarts[i] == me) {
-      return;
-    }
+ErrorCode uart_init(Uart *me, const UartConfig *cfg) {
+  if (me == NULL || cfg == NULL || cfg->port == NULL) {
+    return ERR_ARG;
   }
-  for (int i = 0; i < UART_MAX; i++) {
-    if (s_uarts[i] == NULL) {
-      s_uarts[i] = me;
-      return;
-    }
+  if (cfg->rx_dma_buf == NULL || cfg->rxq_buf == NULL || cfg->tx_storage == NULL || cfg->txq_buf == NULL) {
+    return ERR_ARG;  // 缓冲未提供 (零 malloc 契约)
   }
-}
-
-// 注销实例
-static void unreg(Uart *me) {
-  for (int i = 0; i < UART_MAX; i++) {
-    if (s_uarts[i] == me) {
-      s_uarts[i] = NULL;
-      return;
-    }
-  }
-}
-
-// 从 TX 环取一字节发起单字节中断发送 (环空则不动作)
-static void start_tx(Uart *me) {
-  uint8_t b;
-  if (ring_pop(&me->tx, &b)) {
-    me->tx_byte = b;
-    me->tx_busy = 1;
-    HAL_UART_Transmit_IT(me->huart, &me->tx_byte, 1);
-  }
-}
-
-// 自检: 句柄已绑定且已初始化
-static int self_check_impl(CommBase *base) {
-  Uart *me = container_of(base, Uart, base);
-  if (me->huart == NULL || base->inited == 0) {
-    return -1;
-  }
-  return 0;
-}
-
-// 诊断虚表 — 数据面 (环/收发) 不进虚表
-static const CommOps uart_ops = {
-    .self_check = self_check_impl,
-    .reset = NULL,
-};
-
-// -------- 构造 / 析构 / 配置 --------
-
-// 初始化: 契约身份 + 环绑定 + 注册单例 + 启动首段单字节接收
-void uart_init(Uart *me, const UartConfig *cfg) {
   comm_base_init(&me->base, "uart");
-  me->huart = cfg->huart;
-  ring_init(&me->rx, cfg->rx_buf, cfg->rx_size);
-  ring_init(&me->tx, cfg->tx_buf, cfg->tx_size);
+  me->port = cfg->port;
   me->completion = IO_ASYNC_FLAG;
-  me->tx_busy = 0;
-  me->rx_byte = 0;
-  me->tx_byte = 0;
-  me->base.ops = &uart_ops;
-  reg(me);
-  // 先启动接收再发: 避免先发后收漏掉首个字节
-  HAL_UART_Receive_IT(me->huart, &me->rx_byte, 1);
-}
 
-// 重配: 换句柄/环缓冲并重启接收 (不改变契约身份)
-void uart_set_config(Uart *me, const UartConfig *cfg) {
-  me->huart = cfg->huart;
-  ring_init(&me->rx, cfg->rx_buf, cfg->rx_size);
-  ring_init(&me->tx, cfg->tx_buf, cfg->tx_size);
-  me->tx_busy = 0;
-  me->rx_byte = 0;
-  me->tx_byte = 0;
-  reg(me);
-  HAL_UART_Receive_IT(me->huart, &me->rx_byte, 1);
-}
+  // RX: 装配位置式循环 DMA model + 软件队列
+  dma_rx_model_init(&me->rxm, cfg->rx_dma_buf, cfg->rx_dma_cap);
+  ring_init(&me->rxq, cfg->rxq_buf, cfg->rxq_size);
 
-// 反初始化: 注销单例 + 清状态
-void uart_deinit(Uart *me) {
-  unreg(me);
-  me->base.ops = NULL;
-  me->huart = NULL;
-  comm_base_deinit(&me->base);
-}
+  // TX: 装配双缓冲+队列 model (backend = bsp_uart_dma_tx_start)
+  ring_init(&me->txq, cfg->txq_buf, cfg->txq_size);
+  dma_tx_model_init(&me->txm, &me->txq, &me->db, cfg->tx_storage, cfg->tx_storage_size, me->port,
+                    bsp_uart_dma_tx_start);
 
-// -------- 数据操作 (MAIN 上下文调用) --------
+  // 启动 RX 循环 DMA
+  bsp_uart_dma_rx_start(me->port, cfg->rx_dma_buf, cfg->rx_dma_cap);
+  dma_rx_model_reset_position(&me->rxm);
 
-// 写: 入 TX 环, 空闲则启动发送; IO_SYNC 忙等全部发完
-ErrorCode uart_write(Uart *me, CommConstData data, IoCompletion comp) {
-  uint16_t n = ring_write(&me->tx, data.ptr, data.len);
-  if (n < data.len) {
-    return ERR_NO_BUFF;
-  }
-  if (!me->tx_busy) {
-    start_tx(me);
-  }
-  if (comp == IO_SYNC) {
-    // 忙等 TX 结束 (仅 CTX_MAIN 调用, IO_SYNC 语义)
-    while (me->tx_busy) {
-      // 空转: 等 ISR 消费 TX 环
-    }
-  }
+  // 注册 TX 完成回调: DMA 发送完成 → dma_tx_model_on_done 续发下一段
+  bsp_uart_set_tx_done_cb(me->port, uart_tx_done_cb, me);
+
+  // 注册 RX 事件回调: 后端有新字节 → uart_rx_event (model update → rxq)
+  bsp_uart_set_rx_event_cb(me->port, uart_rx_event_cb, me);
   return ERR_OK;
 }
 
-// 读: 从 RX 环读出, 实际读出数写回 data->len (空 → ERR_EMPTY)
+ErrorCode uart_set_config(Uart *me, const UartConfig *cfg) {
+  if (me == NULL || cfg == NULL || cfg->port == NULL) {
+    return ERR_ARG;
+  }
+  bsp_uart_dma_rx_stop(me->port);
+  me->port = cfg->port;
+  dma_rx_model_init(&me->rxm, cfg->rx_dma_buf, cfg->rx_dma_cap);
+  ring_init(&me->rxq, cfg->rxq_buf, cfg->rxq_size);
+  ring_init(&me->txq, cfg->txq_buf, cfg->txq_size);
+  dma_tx_model_init(&me->txm, &me->txq, &me->db, cfg->tx_storage, cfg->tx_storage_size, me->port,
+                    bsp_uart_dma_tx_start);
+  bsp_uart_dma_rx_start(me->port, cfg->rx_dma_buf, cfg->rx_dma_cap);
+  dma_rx_model_reset_position(&me->rxm);
+  return ERR_OK;
+}
+
+void uart_deinit(Uart *me) {
+  if (me == NULL) {
+    return;
+  }
+  bsp_uart_dma_rx_stop(me->port);
+  me->port = NULL;
+  comm_base_deinit(&me->base);
+}
+
+// ======== 数据操作 (MAIN 上下文) ========
+
+// 写: 入 TX 队列并启动 DMA (永不阻塞; 队列满只入能装下的)
+ErrorCode uart_write(Uart *me, CommConstData data, IoCompletion comp) {
+  if (me == NULL || data.ptr == NULL) {
+    return ERR_ARG;
+  }
+  (void) comp;  // DMA model 天然异步 (IO_ASYNC_FLAG 语义)
+  uint16_t n = dma_tx_model_submit(&me->txm, data.ptr, data.len);
+  return (n == data.len) ? ERR_OK : ERR_NO_BUFF;
+}
+
+// 读: 从 RX 软件队列读出 (空 → ERR_EMPTY)
 ErrorCode uart_read(Uart *me, CommData *data, IoCompletion comp) {
-  (void) comp;  // 环读是即时消费, 无异步完成
-  uint16_t n = ring_read(&me->rx, data->ptr, data->len);
+  if (me == NULL || data == NULL || data->ptr == NULL) {
+    return ERR_ARG;
+  }
+  (void) comp;
+  uint16_t n = ring_read(&me->rxq, data->ptr, data->len);
   if (n == 0u) {
     return ERR_EMPTY;
   }
@@ -138,38 +100,43 @@ ErrorCode uart_read(Uart *me, CommData *data, IoCompletion comp) {
   return ERR_OK;
 }
 
-// -------- ISR / 回调入口 --------
+// ======== ISR / 回调入口 ========
 
-// ISR 入口: 入 RX 环, 满则丢弃 (ring_push 返回 false, 不覆盖)
+// 旧逐字节入口保留兼容 (直接入 rxq; DMA 模式优先走 uart_rx_event)
 void uart_rx_push(Uart *me, uint8_t byte) {
-  (void) ring_push(&me->rx, byte);
+  if (me == NULL) {
+    return;
+  }
+  (void) ring_push(&me->rxq, byte);
 }
 
-// TX 完成回调: 先清忙 (释放给 MAIN 重新触发), 环非空则续发下一字节
+// RX DMA 事件: 用后端 remaining 喂 DmaRxModel → 推 rxq (非阻塞)
+void uart_rx_event(Uart *me) {
+  if (me == NULL || me->port == NULL) {
+    return;
+  }
+  uint16_t remaining = bsp_uart_dma_rx_remaining(me->port);
+  (void) dma_rx_model_update(&me->rxm, remaining, &me->rxq);
+}
+
+// BSP RX 事件回调 (中断上下文): 转 uart_rx_event (model update -> rxq)
+static void uart_rx_event_cb(BspUart *port, void *ctx) {
+  (void) port;
+  Uart *me = (Uart *) ctx;
+  uart_rx_event(me);
+}
+
+// BSP TX 完成回调 (中断上下文): 转 model on_done 续发
+static void uart_tx_done_cb(BspUart *port, void *ctx) {
+  (void) port;
+  Uart *me = (Uart *) ctx;
+  dma_tx_model_on_done(&me->txm);
+}
+
+// TX DMA 完成: model on_done → 续发下一段
 void uart_tx_complete(Uart *me) {
-  me->tx_busy = 0;
-  start_tx(me);
-}
-
-// HAL 弱回调重写 — RX 完成: 入环并重启接收
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  for (int i = 0; i < UART_MAX; i++) {
-    Uart *me = s_uarts[i];
-    if (me != NULL && me->huart == huart) {
-      uart_rx_push(me, me->rx_byte);
-      HAL_UART_Receive_IT(huart, &me->rx_byte, 1);
-      break;
-    }
+  if (me == NULL) {
+    return;
   }
-}
-
-// HAL 弱回调重写 — TX 完成: 续发下一字节
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-  for (int i = 0; i < UART_MAX; i++) {
-    Uart *me = s_uarts[i];
-    if (me != NULL && me->huart == huart) {
-      uart_tx_complete(me);
-      break;
-    }
-  }
+  dma_tx_model_on_done(&me->txm);
 }

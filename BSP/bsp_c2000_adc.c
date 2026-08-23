@@ -92,6 +92,10 @@ void bsp_adc_start_dma(void *hadc, void *hdma, uint16_t *buf, int num_ch) {
   uint32_t vec = adc_int((uint32_t) hadc);
   if (!vec)
     return;
+  // A10: 单 ADC 约束显式化 — 已有其他 ADC 采样器注册时拒绝第二个 (防 s_base/s_target
+  // 被覆盖导致前采样器静默错乱; 多 ADC (ADCA+ADCB 并行) 需按 PIE 向量索引扩展状态表)
+  if (s_isr_registered && s_base != 0u && s_base != (uint32_t) hadc)
+    return;
   s_base = (uint32_t) hadc;
   s_target = buf;
   s_num_ch = (uint16_t) num_ch;
@@ -128,6 +132,9 @@ void bsp_adc_restart_dma(void *hadc, void *hdma, uint16_t *buf, int num_ch) {
     return;
   uint32_t vec = adc_int((uint32_t) hadc);
   if (!vec)
+    return;
+  // A10: 与 start_dma 同款单 ADC 约束 (restart 只服务于已注册采样器)
+  if (s_isr_registered && s_base != 0u && s_base != (uint32_t) hadc)
     return;
   s_base = (uint32_t) hadc;
   s_target = buf;

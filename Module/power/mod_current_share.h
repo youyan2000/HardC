@@ -24,7 +24,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "comp_pi_reg4.h"
+#include "pid_reg4.h"      // 相电流 PI (PidReg4 = TI pi_reg4)
 #include "comp_protection.h"  // Hysteresis / ModeSync
 #include "comp_math.h"        // math_clamp_f
 #include "pwm_buckboost.h"
@@ -49,7 +49,7 @@ typedef struct {
 
 // ======== 运行时相位状态 (public, host 测试可读) ========
 typedef struct {
-  PiReg4State pi;     // 相电流 PI (输出 u, alpha = 1 + u)
+  PidReg4 pi;     // 相电流 PI (输出 u, alpha = 1 + u)
   float share_error;  // 均流修正 (clamp 后)
   float alpha;        // 调制指数 (1 + PI 输出)
 } ModSharePhase;

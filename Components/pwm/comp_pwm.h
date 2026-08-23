@@ -91,10 +91,12 @@ struct PwmBase {
 void pwm_base_init(PwmBase *me);
 
 // ======== 统一对外接口 (static inline, 零开销) ========
+// A8: 全部包装函数先判 me->ops 非空再解引用 — 未 init (ops=NULL) 的实例调用任一
+// 包装必须安全空转, 不得解引用空指针崩溃 (与 pwm_set_duty 同款缺陷一并修复)
 
 // 启动 PWM 输出
 static inline void pwm_start(PwmBase *me) {
-  if (me->ops->start) {
+  if (me->ops && me->ops->start) {
     me->ops->start(me);
     me->running = true;
   }
@@ -102,7 +104,7 @@ static inline void pwm_start(PwmBase *me) {
 
 // 停止 PWM 输出
 static inline void pwm_stop(PwmBase *me) {
-  if (me->ops->stop) {
+  if (me->ops && me->ops->stop) {
     me->ops->stop(me);
     me->running = false;
   }
@@ -114,14 +116,14 @@ static inline void pwm_set_duty(PwmBase *me, uint8_t ch, float duty) {
   if (duty > me->duty_max) duty = me->duty_max;
   else if (duty < me->duty_min) duty = me->duty_min;
 
-  if (me->ops->set_duty) {
+  if (me->ops && me->ops->set_duty) {
     me->ops->set_duty(me, ch, duty);
   }
 }
 
 // 设置开关频率: 委托子类重配时基
 static inline void pwm_set_freq(PwmBase *me, uint32_t freq_hz) {
-  if (me->ops->set_freq && freq_hz > 0) {
+  if (me->ops && me->ops->set_freq && freq_hz > 0) {
     me->freq_hz = freq_hz;
     me->ops->set_freq(me, freq_hz);
   }
@@ -129,21 +131,21 @@ static inline void pwm_set_freq(PwmBase *me, uint32_t freq_hz) {
 
 // 设置死区: 委托子类更新硬件死区寄存器
 static inline void pwm_set_deadtime(PwmBase *me, uint32_t deadtime_ns) {
-  if (me->ops->set_deadtime) {
+  if (me->ops && me->ops->set_deadtime) {
     me->ops->set_deadtime(me, deadtime_ns);
   }
 }
 
 // 设置相位: 委托子类配置通道间移相
 static inline void pwm_set_phase(PwmBase *me, uint8_t ch, float phase_deg) {
-  if (me->ops->set_phase) {
+  if (me->ops && me->ops->set_phase) {
     me->ops->set_phase(me, ch, phase_deg);
   }
 }
 
 // 紧急停机: 委托子类硬件急停
 static inline void pwm_emergency_stop(PwmBase *me) {
-  if (me->ops->emergency_stop) {
+  if (me->ops && me->ops->emergency_stop) {
     me->ops->emergency_stop(me);
     me->running = false;
   }

@@ -85,12 +85,14 @@ typedef struct {
   float duty_pi;         // 电流环 PI 输出 (占空比分量)
   float duty;            // 最终占空比 (PI + 前馈, 已限幅)
   float soft_start_ref;  // 软启动当前参考电压 (V)
+  bool fault_latched;    // 故障已确认并上报 (A6: 全状态保护下持续故障不重复推事件/重复急停; 故障消失复位)
 
   // --- 跨上下文交接 (五原语, 见 agent.md §1.2) ---
   Latch telemetry;      // Latest 锁存 (FAST→SLOW): 每周期写 vout, SLOW 读最新值
   Mailbox cmd;          // Command 邮箱 (MAIN→FAST): set_vref 周期边界生效
   Ring evt;             // SPSC 环 (FAST→MAIN): 保护事件流, 单生产者 = FAST 故障路径, MAIN 排空
   uint8_t evt_buf[16];  // evt 环缓冲 (容量 15 事件, 满则丢不阻塞 FAST)
+  uint32_t evt_overflow_cnt;  // evt 环满丢弃计数 (A5: 不静默 — MAIN 可查, 关键跳闸已由 emergency 硬件封波兜底)
 } ModBuck;
 
 // ======== API ========
@@ -128,6 +130,11 @@ static inline void mod_buck_set_vref(ModBuck *me, float vref) {
 // MAIN 上下文: 消费保护事件流 (SPSC 环排空); 返回 false = 无事件
 static inline bool mod_buck_evt_pop(ModBuck *me, uint8_t *ev) {
   return ring_pop(&me->evt, ev);
+}
+
+// 诊断: evt 环满丢弃计数 (A5 — 环满不阻塞 FAST, 丢弃不静默). 读后由调用方对比快照
+static inline uint32_t mod_buck_evt_overflow(const ModBuck *me) {
+  return me->evt_overflow_cnt;
 }
 
 // 0xFB 调参: coef[10] 槽位 → cfg (与 buck.yaml params.slot 一致)

@@ -17,6 +17,14 @@
 
 #include "app_main.h"
 #include "pid_tune.h"  // 0xFB 串口调参 (槽位 → PowerCfg)
+#include "bsp_irq.h"   // 中断优先级分层 (FAST>SLOW>HMI): 保证 FAST 最高优先
+
+// ======== 中断优先级三档 (工程须定义, 库级强制) ========
+// 严格三档 FAST > SLOW > HMI: board_init 调 bsp_irq_apply 强制写优先级, 失败停机.
+// 工程须在编译期定义以下三宏 (STM32: HAL IRQn 枚举; C2000: PIE 组号占位):
+//   #define FAST_CTRL_IRQN   HRTIM1_IRQn    // 控制定时器 (FAST, 强制抢优先 0)
+//   #define SLOW_CTRL_IRQN  TIM3_IRQn      // 监控定时器 (SLOW, 强制抢优先 1)
+//   #define HMI_IRQN        CAN1_RX0_IRQn  // HMI/通信中断 (强制抢优先 2)
 
 // 0xFB 调参回调 (定义见文件末尾; 槽位映射委托给 MODULES 锚点 modules_apply_tune, 拓扑 params.slot 驱动)
 static void on_pid_tune_received(const float coef[10]);
@@ -50,6 +58,9 @@ static void modules_board_init(void) {
 }
 
 static void modules_fast_tick(void) {
+  // 第1层 采样: 先切 PingPong 快照再控制 (fetch/process 分离, 撕裂读消除).
+  // 缺少此步 = 采样链路断裂: mod_buck_tick 读到的 value[] 恒为 init 值 (P0, A1).
+  adc_dc_sampler_fetch(&g_root.drv_dc_adc);
   // 电源控制: Buck 降压 (采样→双环→PWM, 内部状态机, 未 start 时为空转)
   mod_buck_tick(&g_root.buck);
 }
@@ -175,6 +186,17 @@ void apply_config(void) {
 // 这是唯一创建和绑定实例的地方 — 所有指针在此解析, 此后不变
 
 void board_init(void) {
+  // === 0. 中断优先级分层 (库级默认强制): 严格三档 FAST > SLOW > HMI ===
+  // 硬约束: FAST(控制定时器)抢优先=0最高 / SLOW(监控)=1 / HMI(通信)=2.
+  // bsp_irq_apply 强制写三档优先级并全量读回校验; 返回 false = 误配, 必须停机 (不允许带病运行).
+  // 工程填三个中断号: STM32=HAL IRQn (如 HRTIM1_IRQn / TIMx_IRQn / CANx_RX0_IRQn); C2000=PIE 组(占位).
+  BspIrqCfg irq_cfg = { .fast_irqn = FAST_CTRL_IRQN,
+                     .slow_irqn = SLOW_CTRL_IRQN,
+                     .hmi_irqn  = HMI_IRQN };
+  if (!bsp_irq_apply(&irq_cfg)) {
+    // 三档优先级配置失败 (FAST 非 0 或 SLOW/HMI 未低于 FAST) → 停机, 不得进入控制环
+    for (;;) { /* 停机: 保持封波 + 看门狗复位兜底 */ }
+  }
   // --- 3a. Device 实例化 (每个子类调自己的 _init) ---
   // 电机/循迹/步进等示例见 app_main.h.tmpl 注释 (本模板聚焦电力电子 Buck).
   // 通用模式: <dev>_init(&g_root.drv_xxx, <句柄/引脚>...) 绑定底层资源.
@@ -232,10 +254,11 @@ void App_OnControlTick(void) {
   Heartbeat_Tick(&g_root.heartbeat);  // 快通道心跳 (SLOW 判死锁 → 停止喂狗 → IWDG 复位)
 
   // === 第1层: 传感器采样 ===
-  // adc_dc_sampler_fetch(&g_root.drv_dc_adc);  // PingPong 切快照 + 只碰活动块 (DMA 完成 ISR 已标 pending)
+  // 采样层在 modules_fast_tick 首部统一执行 (adc_dc_sampler_fetch 切快照, 见 MODULES 锚点);
+  // 勿在此重复调用 — 重复 fetch 会双倍切换快照, 破坏 PingPong 映射 (DMA 写目标错乱)
 
   // === 第2层: HMI + 命令分发 ===
-  // hmi_tick(&g_root.hmi);
+  // === 第2层注: HMI 已迁至 CTX_HMI (App_OnHmiTick, 抢优先 2) — FAST 绝不碰 HMI, 严格三档 FAST>SLOW>HMI ===
 
   // === 第3层: 控制算法 (状态机 tick) — 模块接线 (拓扑驱动, 见 MODULES 锚点) ===
   modules_fast_tick();
@@ -274,6 +297,18 @@ void App_OnSlowTick(void) {
   // }
 }
 
+
+// HMI/通信中断 ISR — CTX_HMI (抢优先 2, 低于 FAST=0 / SLOW=1): 按键扫描去抖 + 命令分发
+// 严格三档: FAST > SLOW > HMI。HMI 绝不触碰 FAST 控制环 (控制 ISR 不调本函数)。
+// 由独立 HMI 中断源驱动 (如 CAN/UART RX 中断或专用 HMI 定时器), 抢占优先级须为 2 (见 bsp_irq.h)。
+void App_OnHmiTick(void) {
+  // HMI 按键去抖 / 事件 → 命令分发 / 端口 fan-out (回调非阻塞, 只入队/置标志)
+  // hmi_tick(&g_root.hmi);  // 工程启用 HMI 时打开 (CTX_HMI 每周期调用)
+
+  // 通信收包入队 (RX 中断 → SPSC 环, 协议解析留后台 BackgroundTask)
+  // can_poll(&g_root.can_proto.transport);  // 或 uart 收包入队 (按工程)
+}
+
 // 串口接收 ISR — 逐字节喂入协议栈
 void App_OnUartRx(uint8_t byte) {
   // 路由顺序: PID调参 → 控制命令 → 传感器查询 → 校准 → 直控 → 电机数据
@@ -301,6 +336,40 @@ void App_OnGpioExti(uint16_t pin) {
 void BackgroundTask(void) {
   // --- 模块主循环钩子 (拓扑驱动, 见 MODULES 锚点): CAN 轮询 / 事件排空 ---
   modules_main_loop();
+
+  // ========================================================================
+  // HMI 用户区 — 在此写你的 HMI 需求 (YmaC 模板预留, 不要删 BEGIN/END 标记)
+  // ========================================================================
+  // 你的 HMI 属于 CTX_MAIN (后台主循环), 只做耗时 I/O; 控制仍走 FAST ISR.
+  /* YMAC HMI USER AREA BEGIN */
+  //  ▸ 按键 / 旋钮: 调输出波形或频率 (经命令邮箱 MAIN→FAST 周期边界生效)
+  //    if (btn_short(USER_BTN_Pin)) {
+  //      g_cfg.power.vref += 0.5f;                   // 回写配置 (下次 YAML 注入保持一致)
+  //      mod_buck_set_vref(&g_root.buck, g_cfg.power.vref);   // 热调参考
+  //    }
+  //    if (enc_moved(&g_root.drv_enc)) { ... }       // 旋钮调 PWM 频率 → pwm_bb_set_freq
+  //  ▸ 屏幕显示状态: 读 FAST 的 Latest latch (监控面, 不抢控制)
+  //    float vout = latch_peek(&g_root.buck.telemetry);
+  //    oled_printf(0, "%d.%02dV", (int)vout, (int)(fabsf(vout) * 100.0f) % 100);
+  //  ▸ 串口调参: 0xFB 已有; 自定义命令帧在 App_OnUartRx 路由
+  //  ▸ CAN 反馈给其他芯片: 模块化遥测见 modules_slow_tick; 自定义帧:
+  //    CommConstData d = { .ptr = data, .len = len };
+  //    can_send(&g_root.drv_can, 0x123, d, IO_ASYNC_FLAG);
+  /* YMAC HMI USER AREA END */
+  // ========================================================================
+
+  // --- OTA 升级命令 / 参数固化 (可选; 依赖 mod_bootloader + comp_database) ---
+  /* YMAC OTA AREA BEGIN */
+  // 收到 OTA 升级命令 (串口/CAN 帧 → 置 g_root.ota.armed) → 写升级标志 → 软复位 → Bootloader 接管
+  //   if (g_root.ota.armed) {
+  //     // mod_bootloader_request_upgrade(&g_root.bootloader);  // 置 Database 升级标志
+  //     // NVIC_SystemReset();                                  // 软复位 → bootloader_main 引导段
+  //   }
+  // 收到参数保存命令 → 写 Database (标定/调参持久化, 不重启)
+  //   // uint8_t cfg_buf[64]; /* 填入要固化的标定/调参数据 */;
+  //   // comp_database_set(&g_root.database, "param", cfg_buf, sizeof(cfg_buf));
+  //   // comp_database_save(&g_root.database);   // 写 Flash (先备份块再主块)
+  /* YMAC OTA AREA END */
 
   // --- 软件 I2C (阻塞操作, 不能放 ISR) ---
   // mpu6050_drv_poll_gyro_z(&g_root.drv_mpu);

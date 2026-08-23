@@ -18,7 +18,7 @@ BSP/ → Components/ → Devices/ → Module/ → App/
 | L4 Module | `Module/` | `mod_*` | 业务模块，只通过 Base* 句柄操作 |
 | L5 App | `App/` | `app_main.*` | 应用入口：根结构体、ISR、配置同步 |
 
-> 44 Components, 35+ Devices, 13 Modules, 8 BSP 文件
+> 45 Components, 35+ Devices, 13 Modules, 8 BSP 文件
 
 ## 子系统
 
@@ -35,6 +35,8 @@ BSP/ → Components/ → Devices/ → Module/ → App/
 | DSP | `comp_dlog`, `comp_vector`, `comp_bldc_instaspin` | — | `mod_sfra` |
 
 独立 Component（单头文件，无 Devices 层）覆盖 PFC、坐标变换、PLL、MPPT、滤波器、FFT 窗函数、信号发生器、速度估计等算法领域，详见 [agent.md](agent.md) 独立 Component 表。
+
+> **系统层原语（新增）**：`Components/database/comp_database.{h,c}` 闪存键值数据库（主备双块 + 顺序写入，对标 LibXR Database，PLAN §2.1），经 `CompFlashOps` 访问 Flash（可 host 单测），用于参数/校准持久化与 Bootloader 升级标志。
 
 ## 快速开始
 
@@ -71,10 +73,10 @@ cmake --build build/out/<name> -j
 
 | 文档 | 内容 |
 |------|------|
+| [docs/concept.md](docs/concept.md) | **设计原则（唯一思想权威）**：定位、三上下文、五层、系统层原语、复用 libxr 边界、远程注册表 |
 | [CLAUDE.md](CLAUDE.md) | 共同约定：Git 约定、代码生成规则、App 架构（人与 AI 共读） |
 | [agent.md](agent.md) | AI 行为准则 + OOP 方法论：虚函数表、继承/多态、6 子系统参考 |
-| [docs/debug/LESSONS.md](docs/debug/LESSONS.md) | 70 条调参教训 |
-| [docs/debug/history/](docs/debug/history/README.md) | 项目完整历程 |
-| [docs/debug/ROADMAP.md](docs/debug/ROADMAP.md) | 多拓扑构建系统路线图 |
+| [docs/history/lessons.md](docs/history/lessons.md) | 70 条调参教训 |
+| [docs/history/](docs/history/README.md) | 项目完整历程 |
 | [docs/learning/](docs/learning/) | 学习总结资料（外部项目学习报告 + 架构原则） |
-| [docs/debug/](docs/debug/) | 记录和计划（历史、教训、路线图、设计文档） |
+| [docs/](docs/README.md) | 记录和计划（历史、教训、路线图、设计文档） |

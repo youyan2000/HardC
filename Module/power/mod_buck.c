@@ -1,8 +1,9 @@
 // Buck 降压控制模块 — PowerStage 具体实现
 //
-// 每 tick 流程 (PST_RUN):
-//   采样(vout/iout/vin = AdcDcSampler 工程量, 校准在采样器内) → 保护(vout>ovp / iout>ocp 去抖 → 急停)
-//   → 软启动(vref 从 0 每 tick +soft_start_step) → 电压环(err=vref-vout → 电流指令)
+// 每 tick 流程 (所有状态):
+//   采样(vout/iout/vin = AdcDcSampler 工程量, 校准在采样器内) → 保护(vout>ovp / iout>ocp
+//   去抖 → 急停; A6: 所有状态每周期检查, 防 IDLE/FAULT 下 PWM 意外输出无保护)
+//   PST_RUN 内: 软启动(vref 从 0 每 tick +soft_start_step) → 电压环(err=vref-vout → 电流指令)
 //   → 电流环(err=电流指令-iout → duty_pi) → 前馈(duty = clamp(duty_pi + ff·vref/vin))
 //   → pwm_set_duty(ch_drive, duty)
 //
@@ -46,7 +47,40 @@ static inline float buck_soft_start(ModBuck *me, float target) {
   return me->soft_start_ref;
 }
 
-// 运行态主控制循环: 采样 → 保护 → 软启 → 双环 → 前馈 → PWM
+// 保护: OVP/OCP 去抖确认 → 急停 (A6: 所有状态每周期检查 — 防 IDLE/FAULT 下 PWM 意外输出无保护)
+// 返回 true = 故障 (含去抖期): 调用方本周期不推进状态机输出 (不刷新 PWM)
+// 事件只在新确认上升沿推一次 (fault_latched 防重复): power_stage_emergency 会清 debounce_cnt,
+//   持续故障若不加锁会每 N tick 重复急停/重复推事件; 故障消失后锁复位, 允许下次重新上报
+static bool buck_protect(ModBuck *me) {
+  // 阈值读 PowerStage 基类 (base.ovp/ocp, 由 sync_cfg 从 cfg 同步)
+  bool fault = (me->vout > me->base.ovp) || (me->iout > me->base.ocp);
+  if (!fault) {
+    me->base.debounce_cnt = 0;
+    me->fault_latched = false;
+    return false;
+  }
+  if (me->base.debounce_cnt < MOD_BUCK_FAULT_DEBOUNCE_N) {
+    me->base.debounce_cnt++;
+  }
+  if (me->base.debounce_cnt >= MOD_BUCK_FAULT_DEBOUNCE_N && !me->fault_latched) {
+    // 首次确认 (上升沿): 急停 + 事件流 (SPSC 环 fire-and-forget = IO_NONE; 满则计数丢弃, 不阻塞 FAST)
+    power_stage_emergency(&me->base);  // 置 PST_FAULT + pwm_emergency_stop + 清 debounce_cnt
+    me->fault_latched = true;
+    if (me->vout > me->base.ovp) {
+      if (!ring_push(&me->evt, MOD_BUCK_EVT_FAULT_OVP)) {
+        me->evt_overflow_cnt++;
+      }
+    }
+    if (me->iout > me->base.ocp) {
+      if (!ring_push(&me->evt, MOD_BUCK_EVT_FAULT_OCP)) {
+        me->evt_overflow_cnt++;
+      }
+    }
+  }
+  return true;  // 故障期间不刷新 PWM
+}
+
+// 运行态主控制循环: 软启 → 双环 → 前馈 → PWM (采样/保护已由 buck_tick 全状态执行)
 static void buck_run(ModBuck *me) {
   // 设备未绑定则拒绝运行
   if (!me->pwm_buck || !me->adc) {
@@ -54,44 +88,20 @@ static void buck_run(ModBuck *me) {
     return;
   }
 
-  // 1. 采样
-  buck_sample(me);
-
-  // 2. 保护: OVP/OCP 去抖确认 → 急停 (置 FAULT + pwm_emergency_stop)
-  //    阈值读 PowerStage 基类 (base.ovp/ocp, 由 sync_cfg 从 cfg 同步)
-  bool fault = (me->vout > me->base.ovp) || (me->iout > me->base.ocp);
-  if (fault) {
-    if (me->base.debounce_cnt < MOD_BUCK_FAULT_DEBOUNCE_N) {
-      me->base.debounce_cnt++;
-    }
-    if (me->base.debounce_cnt >= MOD_BUCK_FAULT_DEBOUNCE_N) {
-      power_stage_emergency(&me->base);
-      // 事件流 (SPSC 环, fire-and-forget = IO_NONE): 满则丢, 关键跳闸已由 emergency 硬件封波兜底
-      if (me->vout > me->base.ovp) {
-        ring_push(&me->evt, MOD_BUCK_EVT_FAULT_OVP);
-      }
-      if (me->iout > me->base.ocp) {
-        ring_push(&me->evt, MOD_BUCK_EVT_FAULT_OCP);
-      }
-    }
-    return;  // 故障期间不刷新 PWM
-  }
-  me->base.debounce_cnt = 0;
-
-  // 3. 软启动参考 (从 0 斜坡到基类 vref, 由 sync_cfg 从 cfg.vref 同步)
+  // 1. 软启动参考 (从 0 斜坡到基类 vref, 由 sync_cfg 从 cfg.vref 同步)
   float vref = buck_soft_start(me, me->base.vref);
 
-  // 4. 电压环: err = vref - vout → 电流指令 (输出限幅 [0, iref])
+  // 2. 电压环: err = vref - vout → 电流指令 (输出限幅 [0, iref])
   me->i_ref = pid_compute(&me->pid_v.base, vref, me->vout);
 
-  // 5. 电流环: err = 电流指令 - iout → 占空比分量 (输出限幅 [0, 1])
+  // 3. 电流环: err = 电流指令 - iout → 占空比分量 (输出限幅 [0, 1])
   me->duty_pi = pid_compute(&me->pid_i.base, me->i_ref, me->iout);
 
-  // 6. 前馈混合: D = duty_pi + ff_weight·(vref/vin), 钳到 [duty_min, duty_max]
+  // 4. 前馈混合: D = duty_pi + ff_weight·(vref/vin), 钳到 [duty_min, duty_max]
   float ff = me->cfg.ff_weight * (vref / me->vin);
   me->duty = math_clamp_f(me->duty_pi + ff, me->cfg.duty_min, me->cfg.duty_max);
 
-  // 7. PWM 输出 (pwm_set_duty 内部二次限幅到 base.duty_min/max)
+  // 5. PWM 输出 (pwm_set_duty 内部二次限幅到 base.duty_min/max)
   pwm_set_duty(&me->pwm_buck->base, me->cfg.ch_drive, me->duty);
 }
 
@@ -105,6 +115,7 @@ static void buck_init(PowerStage *base) {
   me->vout = me->iout = me->vin = 0.0f;
   me->i_ref = me->duty_pi = me->duty = 0.0f;
   me->base.debounce_cnt = 0;
+  me->fault_latched = false;
   me->base.st = PST_INIT;
 }
 
@@ -119,6 +130,15 @@ static void buck_tick(PowerStage *base) {
       me->cfg.vref = a;
       mod_buck_sync_cfg(me);
     }
+  }
+
+  // 采样 + 保护: 所有状态每周期执行 (A6) — IDLE/FAULT 下若 PWM 意外输出, OVP/OCP 仍生效
+  // 设备未绑定则无从采样 (init 后 board_init 已绑定; 未绑定保持 0 值不误报)
+  if (me->adc != NULL) {
+    buck_sample(me);
+  }
+  if (buck_protect(me)) {
+    return;  // 故障 (含去抖期): 不推进状态机输出
   }
 
   switch (me->base.st) {
@@ -154,6 +174,7 @@ static void buck_start(PowerStage *base) {
   if (me->base.st == PST_IDLE || me->base.st == PST_FAULT || me->base.st == PST_RECOVER) {
     me->soft_start_ref = 0.0f;  // 重新软启动
     me->base.debounce_cnt = 0;
+    me->fault_latched = false;  // 允许新故障再次上报 (恢复后故障仍在 → 去抖重新确认即再跳闸)
     // 清双环积分器 — FAULT 急停后残留的饱和积分会顶满电流指令, 破坏软启动
     pid_reset(&me->pid_v.base);
     pid_reset(&me->pid_i.base);
