@@ -556,7 +556,7 @@ static int mpu_read_fifo_stream(unsigned short length,
 // 自检辅助函数
 // ============================================================
 
-static int mpu_get_gyro_sens(float *sens)
+__attribute__((unused)) static int mpu_get_gyro_sens(float *sens)
 {
   switch (g_gyro_fsr) {
   case INV_FSR_250DPS:  sens[0] = 131.f;  break;
@@ -1162,7 +1162,7 @@ static int dmp_set_orientation(unsigned short orient)
 // DMP 偏置设置（写入 DMP 内存）
 // ============================================================
 
-static int dmp_set_gyro_bias(long *bias)
+__attribute__((unused)) static int dmp_set_gyro_bias(long *bias)
 {
   long gyro_bias_body[3];
   unsigned char regs[4];
@@ -1197,7 +1197,7 @@ static int dmp_set_gyro_bias(long *bias)
   return mpu_write_mem(D_EXT_GYRO_BIAS_Z, 4, regs);
 }
 
-static int dmp_set_accel_bias(long *bias)
+__attribute__((unused)) static int dmp_set_accel_bias(long *bias)
 {
   long accel_bias_body[3];
   unsigned char regs[12];
