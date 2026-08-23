@@ -41,12 +41,41 @@ endif()
 
 # ---- 1. 源聚合 ----
 # 核心层 (HAL-free): Components + Module + App/pid_tune (App 的 app_main 由外部工程生成)
-# 裁剪: 默认不编 Module/bootloader (Bootloader 是独立固件/Opt-in; Buck 等 App 工程不需要,
-#   且其 mod_bootloader.c 依赖 mod_bootloader 专用环境). 需要时外部工程 set(HARDC_ENABLE_BOOTLOADER ON).
+#
+# 裁剪 (对标 precise-select): 库默认全量 glob 编译 (Components+Module 通编, 保目录全集
+#   供未来任意拓扑选用). 需要按拓扑裁剪时可显式给出允许子目录白名单:
+#     set(HARDC_MODULES     "motor;power"   )  # Module/ 下子目录, ; 或空格分隔
+#     set(HARDC_COMPONENTS  "pid;adc;pwm"   )  # Components/ 下子目录
+#   未定义 → 保持全量 (后向兼容). 二者独立, 只裁设置了的那一层.
+#   Bootloader: 默认不编，是独立固件/Opt-in (Buck 等 App 工程不需要). 需要时
+#   外部工程 set(HARDC_ENABLE_BOOTLOADER ON) 显式打开.
 file(GLOB_RECURSE HARDC_CORE_SOURCES
   "${HARDC_DIR}/Components/**/*.c"
   "${HARDC_DIR}/Module/**/*.c"
   "${HARDC_DIR}/App/pid_tune.c")
+
+# Module/ + Components/ 子目录白名单裁剪.
+#   HARDC_MODULES="motor;power"    → 只编 Module/motor + Module/power
+#   HARDC_COMPONENTS="pid;adc;pwm" → 只编 Components/pid + Components/adc + Components/pwm
+#   未定义某一层 → 该层保持全量; App/pid_tune.c 恒保留.
+if(DEFINED HARDC_MODULES OR DEFINED HARDC_COMPONENTS)
+  set(_hardc_core_keep "(.*/App/pid_tune\\.c)")
+  if(DEFINED HARDC_MODULES)
+    foreach(_m IN LISTS HARDC_MODULES)
+      list(APPEND _hardc_core_keep "^${HARDC_DIR}/[Mm]odule/${_m}/")
+    endforeach()
+  endif()
+  if(DEFINED HARDC_COMPONENTS)
+    foreach(_c IN LISTS HARDC_COMPONENTS)
+      list(APPEND _hardc_core_keep "^${HARDC_DIR}/[Cc]omponents/${_c}/")
+    endforeach()
+  endif()
+  # 拼接成正则轮询 (用 |) 后 INCLUDE(任一匹配即保留)
+  string(JOIN "|" _hardc_keep_regex ${_hardc_core_keep})
+  list(FILTER HARDC_CORE_SOURCES INCLUDE REGEX "${_hardc_keep_regex}")
+endif()
+
+# Bootloader 独立固件: 默认裁剪 (需 HARDC_ENABLE_BOOTLOADER=ON 才编)
 if(NOT HARDC_ENABLE_BOOTLOADER)
   list(FILTER HARDC_CORE_SOURCES EXCLUDE REGEX ".*/[Mm]odule/[Bb]ootloader/.*")
 endif()
@@ -106,6 +135,38 @@ add_library(hardc STATIC
 file(GLOB HARDC_COMPONENT_DIRS "${HARDC_DIR}/Components/*")
 file(GLOB HARDC_DEVICE_DIRS     "${HARDC_DIR}/Devices/*")
 file(GLOB HARDC_MODULE_DIRS     "${HARDC_DIR}/Module/*")
+# 与 HARDC_COMPONENTS / HARDC_MODULES 白名单保持一致 (避免被裁剪模块的头泄漏到 include 搜索路径)
+if(DEFINED HARDC_COMPONENTS)
+  foreach(_c IN LISTS HARDC_COMPONENTS)
+    list(APPEND _hardc_comp_keep_dir "${HARDC_DIR}/Components/${_c}")
+  endforeach()
+  if(_hardc_comp_keep_dir)
+    # 只保留白名单列出的子目录; 未列出的全部移除
+    set(_hardc_comp_all "${HARDC_COMPONENT_DIRS}")
+    set(HARDC_COMPONENT_DIRS "")
+    foreach(_dir IN LISTS _hardc_comp_all)
+      list(FIND _hardc_comp_keep_dir "${_dir}" _idx)
+      if(NOT _idx EQUAL -1)
+        list(APPEND HARDC_COMPONENT_DIRS "${_dir}")
+      endif()
+    endforeach()
+  endif()
+endif()
+if(DEFINED HARDC_MODULES)
+  foreach(_m IN LISTS HARDC_MODULES)
+    list(APPEND _hardc_mod_keep_dir "${HARDC_DIR}/Module/${_m}")
+  endforeach()
+  if(_hardc_mod_keep_dir)
+    set(_hardc_mod_all "${HARDC_MODULE_DIRS}")
+    set(HARDC_MODULE_DIRS "")
+    foreach(_dir IN LISTS _hardc_mod_all)
+      list(FIND _hardc_mod_keep_dir "${_dir}" _idx)
+      if(NOT _idx EQUAL -1)
+        list(APPEND HARDC_MODULE_DIRS "${_dir}")
+      endif()
+    endforeach()
+  endif()
+endif()
 target_include_directories(hardc PUBLIC
   "${HARDC_DIR}/BSP"
   ${HARDC_COMPONENT_DIRS}
