@@ -21,10 +21,15 @@
 
 // ======== 中断优先级三档 (工程须定义, 库级强制) ========
 // 严格三档 FAST > SLOW > HMI: board_init 调 bsp_irq_apply 强制写优先级, 失败停机.
-// 工程须在编译期定义以下三宏 (STM32: HAL IRQn 枚举; C2000: PIE 组号占位):
+// 工程须在编译期定义三宏 (STM32: HAL IRQn 枚举; C2000: PIE 组号占位):
 //   #define FAST_CTRL_IRQN   HRTIM1_IRQn    // 控制定时器 (FAST, 强制抢优先 0)
 //   #define SLOW_CTRL_IRQN  TIM3_IRQn      // 监控定时器 (SLOW, 强制抢优先 1)
 //   #define HMI_IRQN        CAN1_RX0_IRQn  // HMI/通信中断 (强制抢优先 2)
+// HMI 可同时有多个通信/按键来源 (UART / CAN / EXTI…): 每多一个就多定义一个
+// HMI_IRQN_2 / HMI_IRQN_3 / HMI_IRQN_4, board_init 会全部登记并统一钉到抢优 2.
+//   例: #define HMI_IRQN_2 USART2_IRQn  #define HMI_IRQN_3 EXTI2_IRQn
+//   YmaC 会从 .ioc 把所有通信类中断依次注入 HMI_IRQN / HMI_IRQN_2..4.
+//   未定义某档 → 不登记 (靠 #ifdef HMI_IRQN_N 判定).
 
 // 0xFB 调参回调 (定义见文件末尾; 槽位映射委托给 MODULES 锚点 modules_apply_tune, 拓扑 params.slot 驱动)
 static void on_pid_tune_received(const float coef[10]);
@@ -187,12 +192,23 @@ void apply_config(void) {
 
 void board_init(void) {
   // === 0. 中断优先级分层 (库级默认强制): 严格三档 FAST > SLOW > HMI ===
-  // 硬约束: FAST(控制定时器)抢优先=0最高 / SLOW(监控)=1 / HMI(通信)=2.
-  // bsp_irq_apply 强制写三档优先级并全量读回校验; 返回 false = 误配, 必须停机 (不允许带病运行).
-  // 工程填三个中断号: STM32=HAL IRQn (如 HRTIM1_IRQn / TIMx_IRQn / CANx_RX0_IRQn); C2000=PIE 组(占位).
-  BspIrqCfg irq_cfg = { .fast_irqn = FAST_CTRL_IRQN,
-                     .slow_irqn = SLOW_CTRL_IRQN,
-                     .hmi_irqn  = HMI_IRQN };
+  // 硬约束: FAST(控制定时器)抢优先=0最高 / SLOW(监控)=1 / HMI(通信/按键)=2.
+  // bsp_irq_apply 对**每档列出的所有中断**统一钉优先级并读回校验; 返回 false = 误配, 必须停机.
+  // 工程定义三宏: STM32=HAL IRQn (如 HRTIM1_IRQn / TIMx_IRQn / CANx_RX0_IRQn); C2000=PIE 组(占位).
+  // FAST/SLOW 各 1 个; HMI 可多个 (每个 UART/CAN/按键 EXTI 源一个, 见上方 HMI_IRQN_2..4).
+  BspIrqCfg irq_cfg = {0};
+  irq_cfg.fast_irqn[irq_cfg.fast_n++] = FAST_CTRL_IRQN;
+  irq_cfg.slow_irqn[irq_cfg.slow_n++] = SLOW_CTRL_IRQN;
+  irq_cfg.hmi_irqn[irq_cfg.hmi_n++] = HMI_IRQN;
+#ifdef HMI_IRQN_2
+  irq_cfg.hmi_irqn[irq_cfg.hmi_n++] = HMI_IRQN_2;
+#endif
+#ifdef HMI_IRQN_3
+  irq_cfg.hmi_irqn[irq_cfg.hmi_n++] = HMI_IRQN_3;
+#endif
+#ifdef HMI_IRQN_4
+  irq_cfg.hmi_irqn[irq_cfg.hmi_n++] = HMI_IRQN_4;
+#endif
   if (!bsp_irq_apply(&irq_cfg)) {
     // 三档优先级配置失败 (FAST 非 0 或 SLOW/HMI 未低于 FAST) → 停机, 不得进入控制环
     for (;;) { /* 停机: 保持封波 + 看门狗复位兜底 */ }
