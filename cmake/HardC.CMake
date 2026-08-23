@@ -41,25 +41,39 @@ endif()
 
 # ---- 1. 源聚合 ----
 # 核心层 (HAL-free): Components + Module + App/pid_tune (App 的 app_main 由外部工程生成)
+# 裁剪: 默认不编 Module/bootloader (Bootloader 是独立固件/Opt-in; Buck 等 App 工程不需要,
+#   且其 mod_bootloader.c 依赖 mod_bootloader 专用环境). 需要时外部工程 set(HARDC_ENABLE_BOOTLOADER ON).
 file(GLOB_RECURSE HARDC_CORE_SOURCES
   "${HARDC_DIR}/Components/**/*.c"
   "${HARDC_DIR}/Module/**/*.c"
   "${HARDC_DIR}/App/pid_tune.c")
+if(NOT HARDC_ENABLE_BOOTLOADER)
+  list(FILTER HARDC_CORE_SOURCES EXCLUDE REGEX ".*/[Mm]odule/[Bb]ootloader/.*")
+endif()
 
-# BSP 后端选择 (平台加速, 按 HARDC_DRIVER 编译对应实现)
+# BSP 后端选择 (平台加速, 按 HARDC_DRIVER + HARDC_BSP 编译对应实现)
+#
+# 裁剪原则 (对标 LibXR 精确选真): 不把整个 BSP 后端全量编进库, 只编拓扑/外设实际
+# 需要的那几个后端, 避免撞上 CubeMX 未启用外设 (CAN/SPI/UART/I2C 未在 .ioc 使能时,
+# 其 HAL 头如 CAN_HandleTypeDef 不存在 → 对应 bsp_*_stm32.c 编译失败)。
+# 外部工程通过 YmaC cmake_integrate 注入 `set(HARDC_BSP "...")` 指定要编的后端文件
+# (空格分隔, 相对 HARDC_DIR/BSP), 缺省回退到平台默认最小集 (保持后向兼容)。
 set(HARDC_BSP_SOURCES "")
 if(HARDC_DRIVER STREQUAL "st")
-  # bsp_watchdog_stm32.c 内部以 HAL_IWDG_MODULE_ENABLED 自门控 (LibXR 同款):
-  # 未启用 IWDG 的工程编译为空体, 不引入依赖
-  foreach(_bsp_f bsp_delay.c bsp_hrtim.c bsp_adc_stm32.c bsp_gpio_stm32.c bsp_watchdog_stm32.c bsp_uart_stm32.c bsp_i2c_stm32.c bsp_spi_stm32.c bsp_can_stm32.c bsp_flash_stm32.c bsp_jump_stm32.c)
+  if(NOT DEFINED HARDC_BSP)
+    # 缺省最小集: 通用 + 内建常用 (delay/irq/watchdog), 不含 comm/bootloader 后端 (按需由 HARDC_BSP 显式加)
+    set(HARDC_BSP "bsp_delay.c bsp_hrtim.c bsp_adc_stm32.c bsp_gpio_stm32.c bsp_irq_stm32.c bsp_watchdog_stm32.c")
+  endif()
+  foreach(_bsp_f ${HARDC_BSP})
     if(EXISTS "${HARDC_DIR}/BSP/${_bsp_f}")
       list(APPEND HARDC_BSP_SOURCES "${HARDC_DIR}/BSP/${_bsp_f}")
     endif()
   endforeach()
 elseif(HARDC_DRIVER STREQUAL "c2000")
-  # bsp_watchdog_c2000.c 直接 include driverlib.h (F28004x 无 WdtRegs 全局),
-  # 由下方 c2000 include 目录 + --preinclude=driverlib.h 提供 — 与 epwm/adc 后端同约定
-  foreach(_bsp_f bsp_c2000_epwm.c bsp_c2000_adc.c bsp_watchdog_c2000.c bsp_uart_c2000.c bsp_spi_c2000.c bsp_can_c2000.c bsp_flash_c2000_fixed.c bsp_jump_c2000.c)
+  if(NOT DEFINED HARDC_BSP)
+    set(HARDC_BSP "bsp_c2000_epwm.c bsp_c2000_adc.c bsp_watchdog_c2000.c")
+  endif()
+  foreach(_bsp_f ${HARDC_BSP})
     if(EXISTS "${HARDC_DIR}/BSP/${_bsp_f}")
       list(APPEND HARDC_BSP_SOURCES "${HARDC_DIR}/BSP/${_bsp_f}")
     endif()
