@@ -20,8 +20,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// 前向声明
-typedef struct MotApp MotApp;
+// 类型来源 (原 opaque 前向声明与 mod_motor.h 重复 → typedef redefinition)
+#include "mod_motor.h"   // MotApp (完整定义, 消除重复 typedef 告警)
 
 // 转弯类型
 typedef enum {

@@ -18,9 +18,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// 前向声明 — 实际类型在各自模块中定义
-typedef struct CmdDispatcher CmdDispatcher;
-typedef struct CommBase      CommBase;
+// 类型来源 (原 opaque 前向声明与 canonical 头重复 → typedef redefinition)
+#include "mod_cmd_dispatch.h"  // CmdDispatcher (完整定义)
+#include "comp_comm.h"         // CommBase      (权威定义头, 消除重复 typedef)
 
 // 按键事件类型 (HMI_KEY_EVENT_* 前缀防与外部工程旧枚举重名)
 typedef enum {

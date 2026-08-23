@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct AdcBase AdcBase;
+#include "comp_adc.h"   // AdcBase (权威定义头, 消除重复 typedef 告警)
 
 // ======== 采样器状态 ========
 typedef enum {

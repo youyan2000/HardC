@@ -18,9 +18,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// 前向声明
-typedef struct StepMotorBase StepMotorBase;
-typedef struct PidBase       PidBase;
+// 类型来源 (原 opaque 前向声明与 canonical 头重复 → typedef redefinition)
+#include "comp_step_motor.h"  // StepMotorBase (权威定义头, 消除重复 typedef)
+#include "comp_pid.h"         // PidBase       (权威定义头, 消除重复 typedef)
 
 // 球板状态
 typedef enum {

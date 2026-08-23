@@ -23,11 +23,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// 前向声明
-typedef struct MotApp   MotApp;
-typedef struct TurnCtrl TurnCtrl;
-typedef struct AdcBase  AdcBase;
-typedef struct PidBase  PidBase;
+// 类型来源 (原单行 opaque 前向声明与各 canonical 头重复触发 typedef redefinition;
+// 改为 include 权威定义, 消除 C99 重复 typedef 告警)
+#include "mod_motor.h"    // MotApp   (完整定义头)
+#include "mod_turn.h"     // TurnCtrl (完整定义头)
+#include "comp_adc.h"     // AdcBase  (权威定义头, 消除重复 typedef)
+#include "comp_pid.h"     // PidBase  (权威定义头, 消除重复 typedef)
 
 // 循迹状态
 typedef enum {

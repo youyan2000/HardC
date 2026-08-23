@@ -24,10 +24,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// 前向声明
-typedef struct PwmBase PwmBase;
-typedef struct PidBase PidBase;
-struct LowPassFilter;
+// 类型来源 (原 opaque 前向声明与 canonical 头重复 → typedef redefinition)
+#include "comp_pwm.h"   // PwmBase  (权威定义头, 消除重复 typedef)
+#include "comp_pid.h"   // PidBase  (权威定义头, 消除重复 typedef)
+struct LowPassFilter;   // 非 typedef, 保留原样
 
 // ======== 功率控制状态 ========
 typedef enum {
