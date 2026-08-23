@@ -11,3 +11,8 @@ modules:
 - devices/pwm
 - devices/adc
 - module/power
+bootloader:
+  enable: true
+  mcu: stm32f334
+  up_port: uart
+  flash_dir: .
