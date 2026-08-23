@@ -95,8 +95,8 @@ HardC/
 2. **SLOW**（监控定时器 ISR）抢优先 **1**——慢保护/心跳/喂狗。
 3. **CTX_HMI**（HMI/通信中断，`App_OnHmiTick`）抢优先 **2**——按键去抖/命令分发/收包入队。
 4. 后台（BackgroundTask）主循环——慢 I/O（printf/OLED/协议/Flash）。
-5. `bsp_irq_apply` 强制写 0/1/2 并全量读回校验；**返回 false = 误配，必须停机**，不允许带病运行。
-6. 工程必须定义 `FAST_CTRL_IRQN` / `SLOW_CTRL_IRQN` / `HMI_IRQN` 三宏（STM32 IRQn / C2000 PIE 组占位）。
+5. `bsp_irq_apply` 对**每一档列出的所有中断**强制写 0/1/2 并逐个读回校验；**返回 false = 误配，必须停机**，不允许带病运行。
+6. 工程必须定义 `FAST_CTRL_IRQN` / `SLOW_CTRL_IRQN` / `HMI_IRQN` 三宏（STM32 IRQn / C2000 PIE 组占位）。**HMI 可同挂多个通信/按键源**（每个 UART/CAN/FDCAN/EXTI 是独立 IRQn），用 `HMI_IRQN_2..4` 补充，YmaC 从 `.ioc` 探测全部并注入。
 7. **禁止**把任何通信/HMI 中断优先级设到与 FAST 同级（0）——三档必须严格分离。
 
 ## Git 管理约定
