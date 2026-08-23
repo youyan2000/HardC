@@ -77,6 +77,14 @@ HardC/
 5. **写-审双 Agent** — 任何代码生成走强制 `code-review-workflow`（Writer → Reviewer），Reviewer 不可跳过（纯 .md / YAML 修改例外，commit 注明 `no-review: <原因>`）。
 6. **库资产保护（误删库资产 = 最严重违规）** — HardC 是组件库不是可执行工程（见上方定位声明 + LESSONS.md #56）。未调用的组件/函数是**库存**，**禁止**以"无调用者 / 未被当前 App 或拓扑调用"为由删除、废弃或标注。删除/移动只允许两种情形：域归属重整（`git mv` 保留内容）或用户明确指令。Reviewer 不得把"未被调用"报为缺陷，检查清单见 code-review-workflow「库资产保护」节。
 
+7. **禁止仓库根破坏性操作（事故红线，见 stage-40）** — 任何 AI/工具**一律禁止**对仓库根 `F:\My_Projects\HardC`（或任何 git 仓库根）做以下操作，违者即最严重违规：
+   - **禁止把仓库路径当作任何 junction/符号链接的目标**（尤其不要用 `mklink /J <同名> <仓库根>` 这类结构——它会把源目录重定向成悬空链接，表现为"仓库全丢失"。接库到外部工程用 `git submodule add` 或 `xcopy` 拷贝，**禁用指向库根的同名 junction**）。
+   - **禁止脱离 git 的文件系统删除/移动**：删除、目录重整必须经 `git rm`/`git mv` 保留历史；**禁止 `rm -rf`、`shutil.rmtree` 等批量删除指向仓库内目录的写法**（尤其脚本里清理临时目录时，必须先 `resolve()` 确认路径、绝不传相对/父级路径）。
+   - **禁止"跑测试/清理脚本时波及仓库内容"**：凡脚本含 `rmtree`/`rm -rf`/`os.remove` 必须显式断言目标只是预期构建产物目录（如 `build/`），且路径 `resolve()` 后仍严格在预期子树内。
+   - **数据兜底优先级**：git commit + push >> zip 备份 >> 无备份。任何开发改动**及时 commit 并 push 到 origin**，禁止长期滞留大量未提交改动（历史教训：未 commit + 目录事故 = 零兜底）。
+
+   当目录"突然变空/异常"时：**先**用 `fsutil reparsepoint query`（看是否 junction 重定向）+ `git ls-files --deleted`（看是否真有跟踪文件丢失）判定性质，**再**决定恢复；不许凭表象恐慌重建或删除。
+
 
 ## 中断优先级三档（库级强制约定）
 
