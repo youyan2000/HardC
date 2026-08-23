@@ -31,18 +31,24 @@ bool bsp_irq_assert_order(int irqn, uint8_t expect_preempt);
 
 // ======== 库级强制入口 (默认调用) ========
 
-// 三档中断配置 — 工程在 board_init 填三个中断号 (STM32: IRQn; C2000: PIE 组, 占位)
+// 每档最多可登记的中断数 (STM32 通常 FAST/SLOW 各 1, HMI/通信可 2~4)
+#define BSP_IRQ_MAX 4
+
+// 三档中断配置 — 工程在 board_init 填各档中断号列表 (STM32: IRQn; C2000: PIE 组, 占位).
+//   一档可有多个中断 (尤其 HMI/通信: 每个按键 EXTI / UART / CAN 都是独立 IRQn),
+//   bsp_irq_apply 会把每档列出的**所有**中断统一钉到抢优先 0/1/2 并读回校验 —
+//   保证多通信源时没有哪个 HMI 中断落低优先级从而可抢占 FAST/SLOW。
 typedef struct {
-  int fast_irqn;  // 控制定时器 ISR (FAST) 中断号 → 强制抢优先 0 (最高)
-  int slow_irqn;  // 监控定时器 ISR (SLOW) 中断号 → 强制抢优先 1
-  int hmi_irqn;   // HMI/通信中断号 → 强制抢优先 2
+  int fast_irqn[BSP_IRQ_MAX];  int fast_n;  // 控制定时器 ISR → 强制抢优先 0
+  int slow_irqn[BSP_IRQ_MAX];  int slow_n;  // 监控定时器 ISR → 强制抢优先 1
+  int hmi_irqn[BSP_IRQ_MAX];   int hmi_n;   // HMI/通信/按键中断 → 强制抢优先 2
 } BspIrqCfg;
 
-// 库级强制: 把三档中断优先级钉死 (FAST=0 / SLOW=1 / HMI=2), 不靠工程自觉。
-//   - 逐个强制写 NVIC 优先级 (STM32) / PIE 语义 (C2000)
-//   - 全部写完后读回校验: 任一不满足 (FAST!=0 或 SLOW<=FAST 或 HMI<=SLOW) → 返回 false
+// 库级强制: 把三档内**每一档列出的所有中断**优先级钉死 (FAST=0 / SLOW=1 / HMI=2), 不靠工程自觉.
+//   - 逐档逐个强制写 NVIC 优先级 (STM32) / PIE 语义 (C2000); 空档(!n)自动跳过.
+//   - 全部写完后逐个读回校验: 任一不满足 (FAST!=0 或 SLOW<=FAST 或 HMI<=SLOW) → 返回 false
 //   - 返回 false = 配置被改坏/不支持 → App 必须停机, 不允许带病运行
-// board_init 默认调用; 失败应进入停机处理 (强制语义, 不静默)。
+// board_init 默认调用; 失败应进入停机处理 (强制语义, 不静默).
 bool bsp_irq_apply(const BspIrqCfg *cfg);
 
 // ======== 采样类中断的附加约定 (A4) ========
