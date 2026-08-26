@@ -55,12 +55,12 @@ BSP → Components → Devices → Module → App
 | **PID** | `Components/pid` | 14 种子类：Standard/Parallel/DCL/PI/PR/QPR/P2PD/PID/级联…… 统一 `pid_compute(base, t, m)` 入口，输出限幅 + 抗积分饱和内建 |
 | **PWM** | `Devices/pwm` | 9 种拓扑：BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SEPIC/SPWM/SVPWM/WPT，含移相交错与死区管理 |
 | **PLL** | `Components/pll` | 5 种锁相环：SOGI/SRF/Notch/DDSRF/SOGI-FLL |
-| **Comm** | `Components/comm` | UART/SPI/I2C/CAN/GPIO 五传输，DMA 事务化，CAN 消息语义，串口协议栈 |
+| **Comm** | `Components/comm` + `Devices/comm` | 契约层（`comp_comm` CommBase + DMA 收发模型）与 UART/SPI/I2C/CAN/GPIO 五传输子类（`com_*`），DMA 事务化，CAN 消息语义 |
 | **Motor** | `Components/motor` | 电机控制域：InstaSPIN 移植、三电阻采样、无感观测器族、编码器 |
-| **Codec / Contract** | `Components/codec` / `contract` | CRC/校验和/端序/交织、邮箱/双缓冲/环形队列/闩锁 |
+| **Codec / Contract** | `Components/codec` / `contract` | CRC/校验和/端序/交织、邮箱/双缓冲/环形队列/闩锁（五原语） |
 | **Database** | `Components/database` | 闪存键值数据库（主备双块）、CRC/校验和、电量计量（Goertzel 逐谐波） |
 | **DSP / Math** | `Components/dsp` / `math` | 硬件加速 FFT/FIR（CMSIS-DSP / C2000Ware / 纯 C 三后端自动选择）、IQMath、向量/复数、数据记录 |
-| **Protection** | `Devices/protection` / `Module` | 硬件保护链：过压/过流/过温，三电平逆变器死区时间保护，事件日志 |
+| **Protection** | `Components/protection` + `Module/protect` | 保护原语（`comp_protection`：心跳看门狗/去抖/滞回/软启动；`comp_protection_3lvl`：三电平死区时间保护）+ 慢保护监控（`prot_monitor`：慢保护去抖/软关断/状态聚合，ctx slow） |
 
 每个子系统目录自带 `MANIFEST.yaml` 声明依赖，配网生成器据此自动接线。
 

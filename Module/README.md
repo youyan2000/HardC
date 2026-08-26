@@ -28,4 +28,4 @@ HardC 五层架构 L4。这一层是"一件件事"：控制策略、状态机、
 
 ---
 
-> 层级总览见 `../README.md`；跨上下文四档纪律见 `../docs/coding/concept.md`（本地根容器）。
+> 层级总览与五层职责、跨上下文规则（FAST/SLOW/HMI）见 `../README.md`。
