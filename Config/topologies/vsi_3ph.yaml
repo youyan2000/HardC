@@ -1,12 +1,13 @@
 # Config/topologies/vsi_3ph.yaml — 拓扑目录：三相六开关无源逆变器
-# 占位条目：仅目录收录，控制模块待实现（控制模块库暂缓，见计划）
-# 无源逆变器 = DC 母线 → 三相 AC 输出, 六开关桥臂, SVPWM 调制 + dq 电流环
+# 三相电压源逆变器 = DC 母线 → 三相 AC 输出, 六开关桥臂, SVPWM 调制 + dq 电流环
+# 控制模块: gen_vsi (Module/generate/gen_vsi.{h,c}) — PLL → dq 电流环 → 反Park → SVPWM 发波
+# 接线生成: gen_app _PWM_DEVICE_GEN[pwm_svpwm] + _MODULE_GEN[gen_vsi]
 
 name: vsi_3ph
 display: 三相六开关逆变器
 category: dc-ac
-description: 三相电压源逆变器 — Clarke/Park 坐标变换 + dq 电流环 + SVPWM 七段/五段调制, 母线电压环可选, 复用 pwm_svpwm/adc_ac_sampler/comp_pll
-status: planned
+description: 三相电压源逆变器 — Clarke/Park 坐标变换 + dq 电流环 + SVPWM 七段/五段调制 + SRF-PLL 锁相, 母线电压环可选, 复用 pwm_svpwm/adc_ac_sampler/pll_srf
+status: ready
 modules:
   - components/pwm
   - components/adc
@@ -14,10 +15,16 @@ modules:
   - components/power
   - components/math
   - components/dsp
+  - components/pll
+  - components/protection
+  - components/contract
   - devices/pwm
   - devices/adc
-  - module/power
-control_module: module/power/mod_vsi   # 待实现：三相 VSI 控制模块
+  - devices/pll
+  - devices/pid
+  - module/generate
+control_module: module/generate/gen_vsi
+grid_freq_hz: 50.0
 pwm:
   device: pwm_svpwm
   freq_hz: 20000

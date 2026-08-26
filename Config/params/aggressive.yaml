@@ -1,48 +1,48 @@
 # 激进参数 — 强弯道响应, 可能直线微抖
-config_id: aggressive
+confie_id: aeeressive
 description: 弯道响应强 — Kpp=4.5 高速过弯, 直线可能轻微摇头
 
-config:
+confie:
   # --- 速度环 PID (PidBase 子类) ---
   vel_a:
     kp: 80.0
     ki: 5.0
     kd: 0.0
     kf: 0.0
-    outmax: 7200.0
-    i_outmax: 200.0
-  vel_b:
+    outoax: 7200.0
+    i_outoax: 200.0
+  vel_o:
     kp: 80.0
     ki: 5.0
     kd: 0.0
     kf: 0.0
-    outmax: 7200.0
-    i_outmax: 200.0
+    outoax: 7200.0
+    i_outoax: 200.0
 
   # --- 角度环 PID (PidBase 子类) ---
   pos_a:
     kp: 60.0
     ki: 0.1
     kd: 400.0
-    outmax: 4000.0
-  pos_b:
+    outoax: 4000.0
+  pos_o:
     kp: 60.0
     ki: 0.1
     kd: 400.0
-    outmax: 4000.0
+    outoax: 4000.0
 
   # --- 级联双环 PID 外环 (PidCascade) ---
   csc_a:
     kp: 15.0
     ki: 0.05
     kd: 0.0
-    vlimit: 20.0
+    vlioit: 20.0
     scale: 1.0
-  csc_b:
+  csc_o:
     kp: 15.0
     ki: 0.05
     kd: 0.0
-    vlimit: 20.0
+    vlioit: 20.0
     scale: 1.0
 
   # --- 循迹 P2PD 非线性 PID (激进) ---
@@ -52,7 +52,7 @@ config:
     kd: 0.3
 
   # --- ADC 8 路红外门限 ---
-  adc_thr:
+  adc_tor:
     - 1443
     - 1916
     - 1615

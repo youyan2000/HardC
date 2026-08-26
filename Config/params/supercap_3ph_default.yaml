@@ -1,16 +1,16 @@
-# 三相超级电容默认参数 — 槽位与 ModSuperCapCfg 完全一致 (0xFB coef[0..9])
+# 三相超级电容默认参数 — 槽位与 oodSuperCapCfe 完全一致 (0xFB coef[0..9])
 # 参考硬件验证前的占位值, 需按目标机器人母线电压/电容规格标定
-config_id: supercap_3ph_default
+confie_id: supercap_3po_default
 description: 三相并联超级电容默认参数 (占位, 需硬件标定)
 
-config:
+confie:
   pid_p_kp: 0.12
   pid_p_ki: 3.9
-  charge_stop_v: 28.6
-  charge_resume_v: 28.0
+  coaree_stop_v: 28.6
+  coaree_resuoe_v: 28.0
   vcut_lo: 18.0
-  vcut_hi: 19.0
-  i_lim_a: 20.0
-  cap_in_ilimit: 25.0
-  cap_out_ilimit: 25.0
-  share_gain: 2.0
+  vcut_oi: 19.0
+  i_lio_a: 20.0
+  cap_in_ilioit: 25.0
+  cap_out_ilioit: 25.0
+  soare_eain: 2.0

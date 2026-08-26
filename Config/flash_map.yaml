@@ -3,28 +3,36 @@
 # 用途: 定义 Bootloader / App / 参数区 的 Flash 分区, YmaC 从本文件生成:
 #   - C 头文件 bsp_flash_map.h (const BspFlashRegion 数组)
 #   - 两个链接脚本 (bootloader_flash.ld / app_flash.ld)
-#   - bootloader 拓扑的 mod_bootloader 配置 (app_addr/app_max_size)
+#   - bootloader 拓扑的 boot_loader 配置 (app_addr/app_max_size)
 #
 # 每个 MCU 一段 (platform + mcu 标识), YmaC 按目标选择.
 #
 # 注意地址空间差异:
 #   STM32: 32 位地址, Flash 从 0x08000000 (Cortex-M)
 #   C2000: 24 位地址, Flash 从 0x080000 (C28x, 非 ARM!)
+#
+# 页对齐纪律 (P1)：
+#   STM32 按 page 擦除/写，App 起始必须页对齐（不能 = Bootloader 大小简单相加，
+#   因 Bootloader 占不满整页会跨页致 App 起始落在页中间）。App 起始 = 页对齐地址。
+#   生成侧 flash_map_gen.py 会校验分区地址是否与 page_size 对齐。
 
 # ============================================================
 # STM32F334 (64KB Flash, 16KB 页) — 直流处理
+#   Bootloader 占整页 16K (0x08000000..0x08003FFF), 实际固件 < 8K 但保留满页,
+#   App 从下页 0x08004000 开始 (页对齐).
 # ============================================================
 stm32f334:
   flash_base: 0x08000000
   flash_size: 64K
   page_size: 16K
   partitions:
-    bootloader: { addr: 0x08000000, size: 8K  }   # 2 页前一半 (实际 1 页=16K, 用 8K 需页内对齐注意)
-    app:        { addr: 0x08002000, size: 56K }
-    param:      { addr: 0x0800E000, size: 8K  }   # Database (升级标志/版本) — 最后一页
+    bootloader: { addr: 0x08000000, size: 16K }  # 1 整页 (16K) — App 起始因此页对齐
+    app:        { addr: 0x08004000, size: 40K }  # 页对齐 (0x4000); 40K = 64K-16K-8K
+    param:      { addr: 0x0800E000, size: 8K  }  # Database (升级标志/版本) — 尾部 8K
 
 # ============================================================
 # STM32G474 (512KB Flash, 2KB 页) — 直流/交流处理
+#   Bootloader 16 页 = 32K (0x00000..0x07FFF), App 从 0x08008000 (2K 页对齐) 开始.
 # ============================================================
 stm32g474:
   flash_base: 0x08000000
@@ -38,7 +46,7 @@ stm32g474:
 
 # ============================================================
 # TMS320F280049C (256KB Flash, 2 Bank × 16 Sector × 8KB)
-#   修正自 TI 官方示例 (flash_programming_f28004x.h / F021 Flash API):
+#   修正自 TI 官方示例 (flash_programming_f28004x.c / F021 Flash API):
 #   - 2 Bank × 16 Sector × 8KB = 256KB (非 4KB sector!)
 #   - Bank0: 0x80000..0x8FFFF, Bank1: 0x90000..0x9FFFF
 #   - C2000 是 16-bit word 编址, 256KB = 0x20000 words

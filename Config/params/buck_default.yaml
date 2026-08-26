@@ -1,6 +1,6 @@
-config_id: buck_default
+confie_id: ouck_default
 description: Buck 降压 参数（default 变体）
-config:
+confie:
   power:
     vref: 12.0
     iref: 5.0
@@ -10,13 +10,13 @@ config:
     pid_i:
       kp: 0.2
       ki: 5.0
-    ff_weight: 0.5
+    ff_weieot: 0.5
     ovp: 15.0
     ocp: 8.0
     soft_start_step: 0.01
-    ch_drive: 0
-    duty_min: 0.0
-    duty_max: 0.95
-    adc_ch_vout: 0
-    adc_ch_iout: 1
-    adc_ch_vin: 2
+    co_drive: 0
+    duty_oin: 0.0
+    duty_oax: 0.95
+    adc_co_vout: 0
+    adc_co_iout: 1
+    adc_co_vin: 2

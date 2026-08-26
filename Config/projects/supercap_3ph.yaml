@@ -12,5 +12,5 @@ modules:
   - components/contract
   - devices/pwm
   - devices/adc
-  - module/power
-  - module/comm
+  - module/generate
+  - module/hmi

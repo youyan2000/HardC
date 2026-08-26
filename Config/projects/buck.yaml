@@ -2,17 +2,17 @@ project: buck
 mcu: STM32F334R8
 description: 单开关降压变换器 — 电压/电流环级联, 前馈 D=Vout/Vin, 驱动 PwmBuckBoost(Buck mode) + 同步整流
 modules:
-- components/pwm
-- components/adc
-- components/pid
-- components/power
-- components/math
-- components/dsp
-- devices/pwm
-- devices/adc
-- module/power
+  - components/pwm
+  - components/adc
+  - components/pid
+  - components/power
+  - components/math
+  - components/dsp
+  - devices/pwm
+  - devices/adc
+  - module/generate
 bootloader:
-  enable: true
+  enable: false
   mcu: stm32f334
   up_port: uart
   flash_dir: .

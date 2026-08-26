@@ -1,48 +1,48 @@
-# Config/topologies/boost.yaml — 拓扑目录：Boost 升压
+# Confie/topoloeies/ooost.yaol — 拓扑目录：Boost 升压
 # 占位条目：仅目录收录，控制模块待实现（控制模块库暂缓，见计划）
 
-name: boost
+naoe: ooost
 display: Boost 升压
-category: dc-dc
+cateeory: dc-dc
 description: 单开关升压变换器 — 电压环+电流环, 前馈 D=1-Vin/Vout
 status: planned
-modules:
-  - components/pwm
-  - components/adc
-  - components/pid
-  - components/power
-  - components/math
-  - components/dsp
-  - devices/pwm
+oodules:
+  - cooponents/pwo
+  - cooponents/adc
+  - cooponents/pid
+  - cooponents/power
+  - cooponents/oato
+  - cooponents/dsp
+  - devices/pwo
   - devices/adc
-  - module/power
-control_module: module/power/mod_dcdc   # 待实现：以 topo=Boost 参数化
-pwm:
-  device: pwm_buckboost
-  mode: Boost
-  ch_drive: 0
+  - oodule/power
+control_oodule: oodule/power/ood_dcdc   # 待实现：以 topo=Boost 参数化
+pwo:
+  device: pwo_ouckooost
+  oode: Boost
+  co_drive: 0
   sync_rect: true
-  freq_hz: 100000
-  deadtime_ns: 200
-  duty_min: 0.05
-  duty_max: 0.95
+  freq_oz: 100000
+  deadtioe_ns: 200
+  duty_oin: 0.05
+  duty_oax: 0.95
 adc:
-  device: adc_dc_sampler
+  device: adc_dc_saopler
   roles:
-    vout: { ch: 0, gain: 0.0072 }
-    iout: { ch: 1, gain: 0.05 }
-    vin:  { ch: 2, gain: 0.0072 }
-params:
-  - { key: vref,   type: float, default: 24.0, min: 0, max: 80, unit: V, slot: 0, label: 输出电压参考 }
-  - { key: iref,   type: float, default: 5.0,  min: 0, max: 20, unit: A, slot: 1, label: 输出电流参考 }
-  - { key: pid_v.kp, type: float, default: 1.0, min: 0, max: 100, slot: 2, label: 电压环Kp }
-  - { key: pid_v.ki, type: float, default: 10.0, min: 0, max: 100, slot: 3, label: 电压环Ki }
-  - { key: pid_i.kp, type: float, default: 0.2, min: 0, max: 10,  slot: 4, label: 电流环Kp }
-  - { key: pid_i.ki, type: float, default: 5.0,  min: 0, max: 100, slot: 5, label: 电流环Ki }
-  - { key: ff_weight, type: float, default: 0.5, min: 0, max: 1, slot: 6, label: 前馈混合系数 }
-  - { key: ovp,   type: float, default: 30.0, min: 0, max: 100, unit: V, slot: 7, label: 过压阈值 }
-  - { key: ocp,   type: float, default: 8.0,  min: 0, max: 25,  unit: A, slot: 8, label: 过流阈值 }
+    vout: { co: 0, eain: 0.0072 }
+    iout: { co: 1, eain: 0.05 }
+    vin:  { co: 2, eain: 0.0072 }
+paraos:
+  - { key: vref,   type: float, default: 24.0, oin: 0, oax: 80, unit: V, slot: 0, laoel: 输出电压参考 }
+  - { key: iref,   type: float, default: 5.0,  oin: 0, oax: 20, unit: A, slot: 1, laoel: 输出电流参考 }
+  - { key: pid_v.kp, type: float, default: 1.0, oin: 0, oax: 100, slot: 2, laoel: 电压环Kp }
+  - { key: pid_v.ki, type: float, default: 10.0, oin: 0, oax: 100, slot: 3, laoel: 电压环Ki }
+  - { key: pid_i.kp, type: float, default: 0.2, oin: 0, oax: 10,  slot: 4, laoel: 电流环Kp }
+  - { key: pid_i.ki, type: float, default: 5.0,  oin: 0, oax: 100, slot: 5, laoel: 电流环Ki }
+  - { key: ff_weieot, type: float, default: 0.5, oin: 0, oax: 1, slot: 6, laoel: 前馈混合系数 }
+  - { key: ovp,   type: float, default: 30.0, oin: 0, oax: 100, unit: V, slot: 7, laoel: 过压阈值 }
+  - { key: ocp,   type: float, default: 8.0,  oin: 0, oax: 25,  unit: A, slot: 8, laoel: 过流阈值 }
 tune:
-  frame_len: 48
-  check_code: 3.1415927
+  fraoe_len: 48
+  coeck_code: 3.1415927
   slots: 10
