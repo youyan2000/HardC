@@ -1,0 +1,23 @@
+# ---- Build outputs (scaffold gen / clang_gate 产物) ----
+build/
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.a
+*.lib
+
+# ---- CMake / IDE ----
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+.vscode/
+.idea/
+
+# ---- Python ----
+__pycache__/
+*.pyc

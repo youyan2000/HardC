@@ -47,12 +47,12 @@ hardc/
 
 | 文档 | 内容 |
 |------|------|
-| [../docs/concept.md](../docs/concept.md) | **设计原则（唯一思想权威）**：定位、三上下文、五层、五原语、复用 libxr 边界 |
-| [../docs/PLAN.md](../docs/PLAN.md) | **唯一主线计划** — 已完成归档 + 未完成待办 |
+| [../docs/coding/concept.md](../docs/coding/concept.md) | **设计原则（唯一思想权威）**：定位、三上下文、五层、五原语、复用 libxr 边界 |
+| [../docs/coding/PLAN.md](../docs/coding/PLAN.md) | **唯一主线计划** — 已完成归档 + 未完成待办 |
 | [../docs/coding/oop.md](../docs/coding/oop.md) | OOP 方法论：分层架构、OOP 核心模式(虚表/container_of)、风格、复用 |
 | [../docs/subsystems/index.md](../docs/subsystems/index.md) | 子系统总览 + 按域导航（ADC/PID/PLL/PWM/Motor/… 各一文件） |
 | [../docs/coding/protection-hmi.md](../docs/coding/protection-hmi.md) | FAST>SLOW>HMI 三档 + HMI 线程设计 |
-| [../docs/history/lessons.md](../docs/history/lessons.md) | 调参教训库（78 条 + 经验模板），git 版本管理，禁止回退 |
+| [../docs/history/lessons.md](../docs/history/lessons.md) | 调参教训库（80 条 + 经验模板），git 版本管理，禁止回退 |
 | [../yamc/README.md](../yamc/README.md) | 工具手册 + 真实工程接入（含 §4 端到端） |
 
 > 本仓库为库本体；文档统一在本地根容器 `../docs/`（GitHub 上 HardC 不含 docs——按结构约定）。
