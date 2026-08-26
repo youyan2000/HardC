@@ -1,24 +1,36 @@
 # HardC
 
-**纯 C99 面向对象的电力电子 / 电机控制硬件驱动库** —— 覆盖采样、控制、驱动、保护全链路，一套代码同时跑 STM32 与 C2000，适配任意拓扑。
+> **纯 C99 面向对象的电力电子 / 电机控制驱动库** —— 采样、控制、驱动、保护全链路。`Components` 里是算法资产，`BSP` 一层薄的芯片适配，同一套代码同时跑 STM32 与 C2000。
 
-HardC 是一个**组件库**，不是一个工程。它把"控制算法"和"芯片平台"彻底分离：算法是一次写好的库资产，芯片差异被压缩进一层薄薄的 BSP；你要做的只是选拓扑、接外设、写 App 逻辑。
+![Language](https://img.shields.io/badge/language-C99-green)
+![Platforms](https://img.shields.io/badge/platform-STM32%20%7C%20C2000-blue)
+![license](https://img.shields.io/badge/license-MIT-blue)
+[![CI](https://github.com/youyan2000/HardC/actions/workflows/build.yml/badge.svg)](https://github.com/youyan2000/HardC/actions/workflows/build.yml)
+
+HardC 是**组件库**，不是一个工程。它把"控制算法"和"芯片平台"彻底分离：算法是一次写好的库资产，芯片差异被压缩进一层薄薄的 BSP；你要做的只是选拓扑、接外设、写 App 逻辑。配网装配请用 [**yamc**](https://github.com/youyan2000/YamC)。
 
 ---
 
-## 设计理念
+## ✨ 它解决什么问题
 
-### 1. 纯 C 完成面向对象
+传统嵌入式开发，每上一个新项目就要重写一遍采样、控制、保护、驱动。HardC 把这些沉淀成**可复用、跨平台、实时安全**的 C99 库：
 
-不用 C++、不用宏魔法，用 C99 自带的能力实现继承和多态：
+| | 不用 HardC | 用 HardC |
+|---|---|---|
+| 新项目 | 从零抄上次的控制代码 | 选拓扑 → 拉库 → 写 App 逻辑 |
+| 换芯片 | 重写外设驱动 | 只动 BSP 一层 |
+| 控制算法 | 和硬件耦合在一起 | 算法层与芯片彻底分离 |
 
-- **继承**：子类结构体以父类为第一成员，`container_of` 下溯取子类指针
-- **多态**：每个组件家族一张 ops 虚函数表（如 `PidOps`），由构造函数绑定，基类只管理物理契约，不假设任何状态
-- 代价为零：全部 `static inline` 分发，无虚表间接调用开销
+核心设计四句话：
 
-对嵌入式的意义：**任何 C 工具链都能编译**（ARM Clang / GCC / TI CGT），没有 C++ runtime 依赖，中断上下文里调用也安全。
+1. **纯 C 完成面向对象** —— 继承 + 虚函数表，全 `static inline` 分发，任何 C 工具链（ARM Clang / GCC / TI CGT）都能编译，中断上下文调用安全。
+2. **五层架构，职责单向** —— 下层永不反向依赖上层，换平台只动 BSP。
+3. **库是资产，拓扑是示例** —— 40+ 组件族是库存，具体拓扑只是从库选配的消费示例。
+4. **实时性优先，库级强制** —— 中断分 FAST > SLOW > HMI 三档，`bsp_irq_apply()` 启动时强制校验，配错直接停机。
 
-### 2. 五层架构，职责单向
+---
+
+## 🧱 五层架构
 
 ```
 BSP → Components → Devices → Module → App
@@ -34,49 +46,47 @@ BSP → Components → Devices → Module → App
 
 规则只有一条：**下层不能反向依赖上层**。算法层不知道芯片，业务层不知道寄存器，换平台只动 BSP。
 
-### 3. 库是资产，拓扑是示例
+---
 
-库中已沉淀 40+ 组件族（PID 14 个子类、PWM 9 种拓扑、PLL 5 种锁相环、通信 5 种传输、保护、数据库……），它们是**库存**，不是被某个工程捆绑的死代码。具体拓扑（buck、超级电容三相交错……）只是从库里选配的消费示例。你要新拓扑时，配 YAML 选组件即可，库本体不用裁剪。
+## 📦 库内容一览
 
-### 4. 实时性优先，库级强制
+| 域 | 目录 | 内容 |
+|----|------|------|
+| **ADC** | `Components/adc` | 直流/交流/Follower 三采样器，DMA 双缓冲，硬件加速抽象 |
+| **PID** | `Components/pid` | 14 种子类：Standard/Parallel/DCL/PI/PR/QPR/P2PD/PID/级联…… 统一 `pid_compute(base, t, m)` 入口，输出限幅 + 抗积分饱和内建 |
+| **PWM** | `Devices/pwm` | 9 种拓扑：BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SEPIC/SPWM/SVPWM/WPT，含移相交错与死区管理 |
+| **PLL** | `Components/pll` | 5 种锁相环：SOGI/SRF/Notch/DDSRF/SOGI-FLL |
+| **Comm** | `Components/comm` | UART/SPI/I2C/CAN/GPIO 五传输，DMA 事务化，CAN 消息语义，串口协议栈 |
+| **Motor** | `Components/motor` | 电机控制域：InstaSPIN 移植、三电阻采样、无感观测器族、编码器 |
+| **Codec / Contract** | `Components/codec` / `contract` | CRC/校验和/端序/交织、邮箱/双缓冲/环形队列/闩锁 |
+| **Database** | `Components/database` | 闪存键值数据库（主备双块）、CRC/校验和、电量计量（Goertzel 逐谐波） |
+| **DSP / Math** | `Components/dsp` / `math` | 硬件加速 FFT/FIR（CMSIS-DSP / C2000Ware / 纯 C 三后端自动选择）、IQMath、向量/复数、数据记录 |
+| **Protection** | `Devices/protection` / `Module` | 硬件保护链：过压/过流/过温，三电平逆变器死区时间保护，事件日志 |
 
-中断分成严格三档：**FAST（控制）> SLOW（监控）> HMI（通信/按键）**。采样 → 控制 → 发波 → 快保护在最高优先级一条链路走完；`bsp_irq_apply()` 启动时强制校验优先级配置，配错了直接停机，不允许带病运行。
+每个子系统目录自带 `MANIFEST.yaml` 声明依赖，配网生成器据此自动接线。
 
 ---
 
-## 库内容一览
+## 🚀 快速上手
 
-| 域 | 内容 |
-|----|------|
-| **ADC** | 直流/交流/Follower 三采样器，DMA 双缓冲，硬件加速抽象 |
-| **PID** | 14 种子类：Standard/Parallel/DCL/PI/PR/QPR/P2PD/PID/级联…… 统一 `pid_compute(base, t, m)` 入口，输出限幅 + 抗积分饱和内建 |
-| **PWM** | 9 种拓扑：BuckBoost/HalfBridge/FullBridge/Interleaved/Resonant/SEPIC/SPWM/SVPWM/WPT，含移相交错与死区管理 |
-| **PLL** | 5 种锁相环：SOGI/SRF/Notch/DDSRF/SOGI-FLL |
-| **Comm** | UART/SPI/I2C/CAN/GPIO 五传输，DMA 事务化，CAN 消息语义，串口协议栈 |
-| **Motor** | 电机控制域：InstaSPIN 移植、三电阻采样、无感观测器族、编码器 |
-| **Protection** | 硬件保护链：过压/过流/过温，三电平逆变器死区时间保护，事件日志 |
-| **存储** | 闪存键值数据库（主备双块）、CRC/校验和、电量计量（Goertzel 逐谐波） |
-| **DSP/Math** | 硬件加速 FFT/FIR（CMSIS-DSP / C2000Ware / 纯 C 三后端自动选择）、IQMath、向量/复数 |
+### 方式一：用 yamc 装配到你的工程（推荐）
 
-每个子系统目录自带 `MANIFEST.yaml` 声明依赖，生成器据此自动接线。
+配一份在售的 CubeMX / CCS 工程，用 [**yamc**](https://github.com/youyan2000/YamC) 一键做"库接入 + 外设探测 + 生成 App + CMake 集成 + 编译"：
 
----
-
-## 快速上手
-
-### 方式一：在你的 CubeMX / CCS 工程里用（推荐）
-
-配套工具链 **yamc** 一键完成"库接入 + 外设探测 + 编译集成"：
-
-1. 拉取仓库：`git clone https://github.com/youyan2000/HardC.git`
-2. 安装 yamc：见 [yamc](https://github.com/youyan2000/YamC)（YAML 调参 / GUI 配置 / CLI 二合一）
-3. 在你的工程上跑一条命令，指定拓扑，yamc 自动：做外设表 → 生成 App 骨架 → 注入 CMake → 编译出 `.elf/.hex`
+```bash
+# 1. 拉取本库
+git clone https://github.com/youyan2000/HardC.git
+# 2. 安装 yamc（GUI / CLI 二合一，见 yamc 仓库 README）
+pip install <path/to/YamC>
+# 3. 在你的工程上跑一条命令，指定拓扑
+yamc cfg_run -d D:/proj/my_psu --topology buck --hardc-path <本库路径> --no-build
+```
 
 之后你在 **App 层**写自己的 HMI：按键、OLED、串口命令、CAN 报文——模板里留好了接缝，不碰库内部。
 
 ### 方式二：直接用库
 
-把需要的子系统目录（`Components/<域>/` + `Devices/<域>/` + `Module/<域>/`，连同 `MANIFEST.yaml`）拷进工程即可；或用 `scaffold.py gen` 按拓扑生成。构建时引入 `cmake/HardC.CMake`（提供 `HARDC_DIR` / `HARDC_DRIVER` / 头文件路径），并指定 BSP 平台。
+把需要的子系统目录（`Components/<域>/` + `Devices/<域>/` + `Module/<域>/`，连同 `MANIFEST.yaml`）拷进工程即可；或用 `yamc scaffold gen` 按拓扑生成。构建时引入 `cmake/HardC.CMake`（提供 `HARDC_DIR` / `HARDC_DRIVER` / 头文件路径），并指定 BSP 平台。
 
 ### 写自己的控制组件
 
@@ -84,7 +94,7 @@ BSP → Components → Devices → Module → App
 
 ---
 
-## 平台支持
+## 🖥 平台支持
 
 | 平台 | 状态 |
 |------|------|
@@ -95,7 +105,19 @@ BSP → Components → Devices → Module → App
 
 ---
 
-## 相关仓库
+## 🧪 开发 / 验证
+
+仓库自带 `cmake/` 工具链文件（starm-clang / gcc-arm-none-eabi / c2000-ti-cgt），`.github/workflows/build.yml` 持续构建验证。配网、调参请用 [yamc](https://github.com/youyan2000/YamC)。
+
+---
+
+## 📚 相关
 
 - **[HardC](https://github.com/youyan2000/HardC)** —— 本库（零件库）
-- **[YamC](https://github.com/youyan2000/YamC)** —— 装配线：配置/接入/生成工具链
+- **[YamC](https://github.com/youyan2000/YamC)** —— 装配线：配置 / 接入 / 生成工具链 + GUI / CLI 调参
+
+---
+
+## License
+
+MIT
