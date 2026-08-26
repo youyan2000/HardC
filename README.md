@@ -53,7 +53,7 @@ hardc/
 | [../docs/subsystems/index.md](../docs/subsystems/index.md) | 子系统总览 + 按域导航（ADC/PID/PLL/PWM/Motor/… 各一文件） |
 | [../docs/coding/protection-hmi.md](../docs/coding/protection-hmi.md) | FAST>SLOW>HMI 三档 + HMI 线程设计 |
 | [../docs/history/lessons.md](../docs/history/lessons.md) | 调参教训库（78 条 + 经验模板），git 版本管理，禁止回退 |
-| [../docs/guides/external-project-integration.md](../docs/guides/external-project-integration.md) | 外部 CubeMX 工程接入入门 |
+| [../yamc/README.md](../yamc/README.md) | 工具手册 + 真实工程接入（含 §4 端到端） |
 
 > 本仓库为库本体；文档统一在本地根容器 `../docs/`（GitHub 上 HardC 不含 docs——按结构约定）。
 
