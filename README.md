@@ -1,11 +1,10 @@
 # HardC
 
-> **纯 C99 面向对象的电力电子 / 电机控制驱动库** —— 采样、控制、驱动、保护全链路。`Components` 里是算法资产，`BSP` 一层薄的芯片适配，同一套代码同时跑 STM32 与 C2000。
+> **纯 C99 面向对象的电力电子 / 电机控制驱动库** —— 采样、控制、驱动、保护全链路，同一套代码同时跑 STM32 与 C2000。
 
 ![Language](https://img.shields.io/badge/language-C99-green)
 ![Platforms](https://img.shields.io/badge/platform-STM32%20%7C%20C2000-blue)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-[![CI](https://github.com/youyan2000/HardC/actions/workflows/build.yml/badge.svg)](https://github.com/youyan2000/HardC/actions/workflows/build.yml)
 
 HardC 是**组件库**，不是一个工程。它把"控制算法"和"芯片平台"彻底分离：算法是一次写好的库资产，芯片差异被压缩进一层薄薄的 BSP；你要做的只是选拓扑、接外设、写 App 逻辑。配网装配请用 [**yamc**](https://github.com/youyan2000/YamC)。
 
