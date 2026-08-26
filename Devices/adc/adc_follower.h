@@ -6,13 +6,17 @@
 #define ADC_FOLLOWER_H
 
 #include "comp_adc.h"
-#include "bsp_adc.h"  // BspAdcHandle 不透明句柄 — 跨平台 (STM32/C2000), 去除 HAL 硬依赖
+#include "bsp_adc.h"               // BspAdcHandle 不透明句柄 — 跨平台 (STM32/C2000), 去除 HAL 硬依赖
+#include "comp_double_buffer.h"    // 五原语之 PingPong: DMA→FAST 采样快照 (撕裂读消除, 对齐 DC/AC)
+#include "comp_io.h"               // 运行时契约: I/O 完成方式 (DMA 完成 = IO_ASYNC_FLAG)
 
 typedef struct {
   AdcBase            base;        // 基类
-  uint16_t           raw_buf[8];  // [基类绑定] DMA 缓冲区 (8 通道)
+  uint16_t           raw_buf[2 * 8]; // [PingPong] 双倍缓冲: 对半切分为两个快照块 (8 通道)
+  DoubleBuffer       dbuf;        // PingPong 双缓冲状态 (active/pending 块翻转, 撕裂读消除)
   BspAdcHandle      *hadc;        // BSP ADC 句柄 (STM32: &hadc1; C2000: ADC 基址)
   BspAdcHandle      *hdma;        // BSP DMA/触发句柄 (STM32: &hdma_adc1; C2000: 触发源)
+  IoCompletion       completion;  // 完成契约: 发起时声明完成方式 (本设备固定 IO_ASYNC_FLAG)
   int16_t            threshold[8]; // 各通道门限值
   int16_t            ch_bin[8];   // 二值化结果 (0/1)
   int16_t            ch_val[8];   // 独热码值 (0 或 1<<i)
@@ -28,9 +32,19 @@ typedef struct {
   uint8_t            sns_send;    // ISR→主循环: 传感器查询发送 (1=ADC,2=超声,3=MPU)
 } AdcFollower;
 
-void adc_follower_init(AdcFollower *me, BspAdcHandle *hadc, BspAdcHandle *hdma,
+// 初始化循迹传感器 — completion: 完成契约 (本设备 DMA 完成→置 pending, 消费者 fetch 轮询; 固定 IO_ASYNC_FLAG)
+// hadc/hdma: BSP 句柄; threshold: 8 路门限数组
+void adc_follower_init(AdcFollower *me, IoCompletion completion, BspAdcHandle *hadc, BspAdcHandle *hdma,
                        const int16_t *threshold);
 void adc_follower_deinit(AdcFollower *me);
+
+// ADC DMA 完成回调 — 生产侧 (PingPong 快照交接), 在 HAL_ADC_ConvCpltCallback 中转发
+// 与 DC/AC 同款语义: 标 pending + 重装到完成时活动块 (下轮写目标); A4 原子性: 重装目标 enable 前捕获
+void adc_follower_on_dma_complete(AdcFollower *me);
+
+// FAST 消费侧 — 每控制周期调用: 有 pending 则切快照, 然后 process (二值化 + 位置偏差 pos)
+// mod_follower 每周期读 me->adc->pos (本函数是 pos 的更新源; 未调用则 pos 不刷新)
+void adc_follower_fetch(AdcFollower *me);
 
 // 校准三步协议 (前缀 EE, 与电机 EF 隔离):
 //   EE 01 → cal_white()       车放白纸上, 记录白值

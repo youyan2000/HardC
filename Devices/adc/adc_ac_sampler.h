@@ -25,8 +25,9 @@
 //   - 不用减 1.65V 偏置！差分对自动抵消共模
 //
 // 数据处理 (process):
-//   1. 原始 ADC → 工程量: v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
-//                         i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i])
+//   1. 原始 ADC → 工程量: v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i], v_offset[i])
+//                         i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i], i_offset[i])
+//                         差分电压 × gain + offset (差分共模已抵消, 默认 offset=0; G6 参数化)
 //   2. 三相电压重构: Vab,Vbc → Va,Vb,Vc (线电压→相电压)
 //   3. 三相电流重构: Ia,Ic → Ia,Ib,Ic (KCL: Ib=-(Ia+Ic))
 //   4. RMS 计算 (纯 C 滑动窗块 RMS, 见 adc_ac_rms; 原 arm_rms_f32 已替换, 跨平台)
@@ -49,7 +50,6 @@
 #define ADC_AC_MAX_CH  16  // 交流采样最大通道数 (STM32 ADC1 上限)
 #define ADC_AC_MAX_V   4   // 最多 4 路电压 (差分)
 #define ADC_AC_MAX_I   8   // 最多 8 路电流 (差分)
-#define ADC_AC_MAX_REF 1   // 1 路参考电压 (单端)
 
 // 滑动窗 RMS 窗口长度 (样本数)。原实现 arm_rms_f32 固定 800 (约 20ms @ 40kHz)。
 // 移入实例后窗口可配置, 默认保持 800 以对齐原行为。每路各占 ADC_AC_RMS_WIN 个 float 环形缓冲。
@@ -151,11 +151,16 @@ typedef struct {
 // i_ch:   电流通道在 raw 中的索引 [num_i] (传 NULL 则默认 0,1,2...)
 // v_ch:   电压通道在 raw 中的索引 [num_v] (传 NULL 则默认 num_i, num_i+1...)
 // vref_ch: 参考电压通道索引 (如 6 或 12)
+// v_gain / v_offset: 电压通道校准 [num_v] — 工程量 = 差分电压 × v_gain + v_offset (传 NULL 用默认: 15.15/0.0)
+// i_gain / i_offset: 电流通道校准 [num_i] — 工程量 = 差分电压 × i_gain + i_offset (传 NULL 用默认: 9.60/0.0)
+//   对齐 DC/Follower 与 YmaC ProjectConfig 注入 (G6 参数化); init 后仍可手工覆盖字段
 void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle *hadc,
                          BspAdcHandle *hdma,
                          uint8_t num_ch, uint8_t num_v, uint8_t num_i,
                          const uint8_t *i_ch, const uint8_t *v_ch,
-                         uint8_t vref_ch);
+                         uint8_t vref_ch,
+                         const float *v_gain, const float *v_offset,
+                         const float *i_gain, const float *i_offset);
 
 // 反初始化: 停止 DMA、清空 ops
 void adc_ac_sampler_deinit(AdcAcSampler *me);

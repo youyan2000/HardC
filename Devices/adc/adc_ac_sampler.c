@@ -8,8 +8,8 @@
 //   .process   → process_impl   (工程量转换 + 三相重构 + RMS + Vdc)
 //
 // 通道数灵活配置:
-//   - num_v 路电压 (差分, ≤4):  v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i])
-//   - num_i 路电流 (差分, ≤8):  i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i])
+//   - num_v 路电压 (差分, ≤4):  v_val[i] = diff_to_eng(raw[v_ch[i]], v_gain[i], v_offset[i])
+//   - num_i 路电流 (差分, ≤8):  i_val[i] = diff_to_eng(raw[i_ch[i]], i_gain[i], i_offset[i])
 //   - 1 路参考 (单端):          vref = se_to_voltage(raw[vref_ch])
 //
 // 三相重构 (process / fast_fetch 中调用):
@@ -41,9 +41,10 @@ static const float isensor_gain_default  = 9.60f;   // 电流传感器增益 (A/
 
 // 差分通道: int16_t → 工程量
 // raw = ADC 差分结果 (IN_P - IN_N), -4095 ~ +4095 对应 ±3.3V
-static float diff_to_eng(int16_t raw, float gain) {
+// 工程量 = 差分电压 × gain + offset — offset 为传感器/采样零偏校准 (差分共模已抵消, 通常 0)
+static float diff_to_eng(int16_t raw, float gain, float offset) {
   float v = (float)raw * adc_vref / adc_res;  // 有符号电压 (±3.3V)
-  return v * gain;                              // → 工程量 (±A 或 ±V)
+  return v * gain + offset;                     // → 工程量 (±A 或 ±V)
 }
 
 // 单端通道: 原始值 → 电压
@@ -121,14 +122,14 @@ static void process_impl(AdcBase *base) {
   AdcAcSampler *me = container_of(base, AdcAcSampler, base);
 
   // ---- 第1步: 原始 ADC → 工程量 (所有通道) --------------------------------
-  // 电压通道 (差分)
+  // 电压通道 (差分): 工程量 = 差分电压 × v_gain + v_offset
   for (uint8_t i = 0; i < me->num_v; i++) {
-    me->v_val[i] = diff_to_eng(base->raw[me->v_ch[i]], me->v_gain[i]);
+    me->v_val[i] = diff_to_eng(base->raw[me->v_ch[i]], me->v_gain[i], me->v_offset[i]);
   }
 
-  // 电流通道 (差分)
+  // 电流通道 (差分): 工程量 = 差分电压 × i_gain + i_offset
   for (uint8_t i = 0; i < me->num_i; i++) {
-    me->i_val[i] = diff_to_eng(base->raw[me->i_ch[i]], me->i_gain[i]);
+    me->i_val[i] = diff_to_eng(base->raw[me->i_ch[i]], me->i_gain[i], me->i_offset[i]);
   }
 
   // 参考电压 (单端)
@@ -199,7 +200,9 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
                          BspAdcHandle *hdma,
                          uint8_t num_ch, uint8_t num_v, uint8_t num_i,
                          const uint8_t *i_ch, const uint8_t *v_ch,
-                         uint8_t vref_ch) {
+                         uint8_t vref_ch,
+                         const float *v_gain, const float *v_offset,
+                         const float *i_gain, const float *i_offset) {
   assert(num_ch >= 1 && num_ch <= ADC_AC_MAX_CH);
   assert(num_v <= ADC_AC_MAX_V);
   assert(num_i <= ADC_AC_MAX_I);
@@ -241,10 +244,11 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
 
   me->vref_ch = vref_ch;
 
-  // 默认校准参数 (init 后可手动覆盖各通道; 工程可用 YmaC 注入覆盖 v_gain/i_gain)
+  // 校准参数注入 (G6: v_gain/v_offset/i_gain/i_offset 数组, 传 NULL 用默认; 对齐 DC/Follower 与 YmaC)
+  //   电压通道: 工程量 = 差分电压 × v_gain + v_offset (差分共模抵消, 默认 offset=0)
   for (uint8_t i = 0; i < num_v; i++) {
-    me->v_gain[i]   = vsensor_gain_default;
-    me->v_offset[i] = 0.0f;
+    me->v_gain[i]   = v_gain   ? v_gain[i]   : vsensor_gain_default;
+    me->v_offset[i] = v_offset ? v_offset[i] : 0.0f;
     me->v_val[i]    = 0.0f;
   }
   for (uint8_t i = num_v; i < ADC_AC_MAX_V; i++) {
@@ -253,9 +257,10 @@ void adc_ac_sampler_init(AdcAcSampler *me, IoCompletion completion, BspAdcHandle
     me->v_val[i]    = 0.0f;
   }
 
+  //   电流通道: 工程量 = 差分电压 × i_gain + i_offset
   for (uint8_t i = 0; i < num_i; i++) {
-    me->i_gain[i]   = isensor_gain_default;
-    me->i_offset[i] = 0.0f;
+    me->i_gain[i]   = i_gain   ? i_gain[i]   : isensor_gain_default;
+    me->i_offset[i] = i_offset ? i_offset[i] : 0.0f;
     me->i_val[i]    = 0.0f;
   }
   for (uint8_t i = num_i; i < ADC_AC_MAX_I; i++) {
@@ -313,12 +318,12 @@ void adc_ac_sampler_fetch(AdcAcSampler *me) {
 void adc_ac_sampler_fast_fetch(AdcAcSampler *me) {
   AdcBase *base = &me->base;
 
-  // 工程量转换 (所有通道, 标量浮点)
+  // 工程量转换 (所有通道, 标量浮点; 含 v_offset/i_offset 零偏校准)
   for (uint8_t i = 0; i < me->num_v; i++) {
-    me->v_val[i] = diff_to_eng(base->raw[me->v_ch[i]], me->v_gain[i]);
+    me->v_val[i] = diff_to_eng(base->raw[me->v_ch[i]], me->v_gain[i], me->v_offset[i]);
   }
   for (uint8_t i = 0; i < me->num_i; i++) {
-    me->i_val[i] = diff_to_eng(base->raw[me->i_ch[i]], me->i_gain[i]);
+    me->i_val[i] = diff_to_eng(base->raw[me->i_ch[i]], me->i_gain[i], me->i_offset[i]);
   }
 
   // 三相电压重构 (Vab=v_val[0], Vbc=v_val[1])

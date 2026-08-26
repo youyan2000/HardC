@@ -5,14 +5,17 @@
 
 #include "adc_follower.h"
 #include "container_of.h"
+#include <assert.h>
 #include <stdio.h>
 
 // -------- ops 实现 --------
 
+// 启动 ADC DMA 循环扫描 — 8 通道
+// PingPong: 从非活动块起步 (invariant: DMA 总写非活动块, FAST 只读活动块). init 后 active=0 → 写 buf[1]
 static void dma_impl(AdcBase *base) {
   AdcFollower *me = container_of(base, AdcFollower, base);
   // 统一走 BSP 抽象 (STM32: HAL_ADC_Start_DMA; C2000: 触发源 + 缓冲注册) — 跨平台
-  bsp_adc_start_dma(me->hadc, me->hdma, (uint16_t *)base->raw, 8);
+  bsp_adc_start_dma(me->hadc, me->hdma, (uint16_t *) double_buffer_pending(&me->dbuf), 8);
 }
 
 // 读取通道 i 原始 ADC 值 (用于串口查询, FC 01 协议)
@@ -98,17 +101,23 @@ static const AdcOps follower_ops = {
 
 // -------- 构造 / 析构 --------
 
-void adc_follower_init(AdcFollower *me, BspAdcHandle *hadc, BspAdcHandle *hdma,
+void adc_follower_init(AdcFollower *me, IoCompletion completion, BspAdcHandle *hadc, BspAdcHandle *hdma,
                        const int16_t *threshold) {
   adc_base_init(&me->base);
   me->base.name    = AdcFollowerSensor;
   me->base.ops     = &follower_ops;
-  me->base.raw     = me->raw_buf;  // 绑定子类 DMA 缓冲区
+  // PingPong 双缓冲: 双倍 raw_buf 对半切分, 两块各 8 通道 16bit 采样
+  // base.raw 绑活动块 (FAST 读); DMA 写非活动块, 完成回调标 pending 后由 fetch 切换
+  double_buffer_init(&me->dbuf, me->raw_buf, (uint16_t) (2u * 8u * sizeof(uint16_t)));
+  me->base.raw     = (uint16_t *) double_buffer_active(&me->dbuf);
   me->base.raw_cap = 8;              // 8 通道红外
   me->hadc         = hadc;
   me->hdma         = hdma;
+  // 完成契约: 本设备 DMA 完成→置 pending, 消费侧 fetch 轮询 — 只支持 IO_ASYNC_FLAG (声明其他值 = 违约)
+  me->completion = completion;
+  assert(me->completion == IO_ASYNC_FLAG);
   for (int i = 0; i < 8; i++) {
-    me->threshold[i] = threshold[i];
+    me->threshold[i] = threshold ? threshold[i] : 0;  // NULL → 门限 0 (需校准后使用; 对齐 DC k/b 缺省防御)
     me->ch_bin[i]    = 0;
     me->ch_val[i]    = 0;
     me->cal_white[i] = 0;
@@ -132,6 +141,32 @@ void adc_follower_deinit(AdcFollower *me) {
   me->hadc = NULL;
   me->hdma = NULL;
   adc_base_deinit(&me->base);
+}
+
+// ADC DMA 完成 ISR — 生产侧交接 (PingPong, 与 DC/AC 同款语义; A4 原子性)
+// 不变量: DMA 总被重装到"完成时活动块"; 该块被 fetch 切走后即非活动块 → 完成时写满的正是非活动块
+//   ① 重装目标在 enable 之前捕获 (完成时活动块 = 下轮写目标; 防 FAST 抢占后重装到刚写满/在读块)
+//   ② 标 pending 供 FAST 消费
+void adc_follower_on_dma_complete(AdcFollower *me) {
+  // 契约: 生产者置标志 (IO_ASYNC_FLAG) — init 声明不符即配置错误不可静默
+  assert(me->completion == IO_ASYNC_FLAG);
+  uint8_t *next = double_buffer_active(&me->dbuf);
+  double_buffer_set_pending_len(&me->dbuf, (uint16_t) (2u * 8u));  // 16bit × 8 通道
+  double_buffer_enable_pending(&me->dbuf);                         // 快照就绪
+  bsp_adc_restart_dma(me->hadc, me->hdma, (uint16_t *) next, 8);
+}
+
+// FAST 消费侧 — 每控制周期调用: 有 pending 则切快照, 然后 process (二值化 + 位置偏差 pos)
+// mod_follower 每周期读 me->adc->pos; 本函数是 pos 的更新源 (fetch/process 分离, 撕裂读消除)
+void adc_follower_fetch(AdcFollower *me) {
+  // 契约: 消费者轮询标志 (IO_ASYNC_FLAG) — init 声明不符即配置错误不可静默
+  assert(me->completion == IO_ASYNC_FLAG);
+  if (double_buffer_has_pending(&me->dbuf)) {
+    double_buffer_switch(&me->dbuf);
+    me->base.raw = (uint16_t *) double_buffer_active(&me->dbuf);
+  }
+  // 二值化 + 独热码 + 位置偏差 — 只读活动块, DMA 同时写另一块, 无撕裂读
+  adc_process(&me->base);
 }
 
 // -------- 校准 (三步协议: EE 01 / EE 02 / EE 03) --------
