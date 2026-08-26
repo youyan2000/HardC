@@ -1,0 +1,12 @@
+id: module/protect
+layer: Module
+ctx: slow
+description: 慢保护监控模块 — 心跳看门狗 / 慢保护去抖 / 软关断判决 / 状态聚合 (CTX_SLOW — App_OnSlowTick 每周期 tick; 参考 WEILAI Module_ErrChecker + Module_Status + HKUST 事件树)
+files:
+  - prot_monitor.h
+  - prot_monitor.c
+depends:
+  - components/contract      # comp_ring / comp_latch / comp_mailbox — 跨上下文五原语
+  - components/protection    # comp_protection (Heartbeat / Debounce)
+  - components/math          # comp_error (ERROR_* bitmask) / comp_math
+  - BSP/bsp_watchdog.h       # 心跳喂狗 (bsp_watchdog_feed)

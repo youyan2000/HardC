@@ -3,8 +3,9 @@ layer: Module
 description: 引导加载模块 — 固件升级 (UART/CAN 传输 + CRC 校验 + bsp_flash 写 + bsp_jump 跳转) + 升级标志持久化 (comp_database)
 ctx: main
 files:
-  - mod_bootloader.h
-  - mod_bootloader.c
+  - boot_loader.h
+  - boot_loader.c
+  - boot_loader_impl.c
 depends:
   - components/contract      # comp_ring / comp_io / comp_error_code
   - components/codec         # comp_crc (CRC-32)

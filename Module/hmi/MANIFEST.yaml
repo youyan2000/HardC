@@ -1,9 +1,20 @@
 id: module/hmi
 layer: Module
-ctx: main
-description: HMI 业务模块 — 按键去抖 + OLED 菜单 + 命令分发 (CTX_MAIN)
+ctx: hmi
+description: 通信 + 人机业务模块 — Comm 帧协议 / CmdDispatch 命令分发 / SerialProto 串口协议 / PMBus 协议栈 / CanProto 超级电容 CAN 协议(0x051/0x061) / HMI 按键去抖 + OLED 菜单 (CTX_HMI — 协议 RX 入队 + HMI 按键, 耗时 I/O 归 CTX_MAIN)
 files:
-  - mod_hmi.h
-  - mod_hmi.c
+  - hmi_comm.h
+  - hmi_comm.c
+  - hmi_cmd_dispatch.h
+  - hmi_cmd_dispatch.c
+  - hmi_serial_proto.h
+  - hmi_serial_proto.c
+  - hmi_pmbus.h
+  - hmi_pmbus.c
+  - hmi_can_proto.h
+  - hmi_can_proto.c
+  - hmi_ui.h
+  - hmi_ui.c
 depends:
-  - module/comm
+  - components/comm   # comp_comm.h (CommBase) — hmi_ui 权威定义头
+  - components/contract

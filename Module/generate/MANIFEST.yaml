@@ -1,0 +1,43 @@
+id: module/generate
+layer: Module
+ctx: fast
+description: 控制/生成业务模块 — MotApp 电机状态机 / TurnCtrl 转弯 / Follower 循迹 / FCL 快速电流环 / PowerCtrl 功率模板 / Buck 降压 / CurrentShare 三相均流 / SuperCap 超级电容 / SFRA 频响 / VSI 三相逆变 / Balance 球板平衡 (CTX_FAST — 全部在控制 ISR 中 tick)
+files:
+  - gen_motor.h
+  - gen_motor.c
+  - gen_turn.h
+  - gen_turn.c
+  - gen_follower.h
+  - gen_follower.c
+  - gen_fcl_ctrl.h
+  - gen_fcl_ctrl.c
+  - gen_powerctrl.h
+  - gen_powerctrl.c
+  - gen_buck.h
+  - gen_buck.c
+  - gen_sfra.h
+  - gen_sfra.c
+  - gen_balance.h
+  - gen_balance.c
+  - gen_supercap.h
+  - gen_supercap.c
+  - gen_current_share.h
+  - gen_current_share.c
+  - gen_vsi.h
+  - gen_vsi.c
+depends:
+  - components/motor
+  - components/pid
+  - components/power
+  - components/pwm
+  - components/adc
+  - components/math
+  - components/dsp
+  - components/pll       # PllSrf (SRF-PLL) — gen_vsi 三相锁相
+  - components/contract  # comp_ring/latch/mailbox — 跨上下文交接原语 (事件流/遥测/命令邮箱)
+  - components/protection # comp_protection (Hysteresis/Debounce/ModeSync) — 超级电容保护/均流
+  - devices/pwm
+  - devices/pll   # pll_srf (PllSrf) — gen_vsi SPLL 锁相
+  - devices/pid   # pid_reg4 — gen_buck/supercap/current_share 功率环; pid_standard — gen_balance
+  - devices/adc
+  - BSP/container_of.h   # gen_supercap/gen_vsi ops container_of 下溯
