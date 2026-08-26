@@ -1,16 +1,16 @@
 // Bootloader 独立 App — 实现模板 (bootloader_main.c)
 //
 // Bootloader 极简固件入口:
-//   bootloader_board_init(): 绑定升级传输 + Flash + Database → 初始化 mod_bootloader
-//   bootloader_background(): 升级协议主循环 (mod_bootloader_poll)
+//   bootloader_board_init(): 绑定升级传输 + Flash + Database → 初始化 boot_loader
+//   bootloader_background(): 升级协议主循环 (boot_loader_poll)
 //
 // 启动流程:
 //   1. main() 调 bootloader_board_init()
 //   2. init 内部:
 //      - 读 Database 升级标志
-//      - 有升级请求 → 进入升级模式 (mod_bootloader_poll 接管)
+//      - 有升级请求 → 进入升级模式 (boot_loader_poll 接管)
 //      - 无升级请求 → 校验 App 有效 → bsp_jump_to_app 跳转
-//   3. 升级模式: bootloader_background() 循环调 mod_bootloader_poll
+//   3. 升级模式: bootloader_background() 循环调 boot_loader_poll
 //
 // 注: Bootloader 不开控制环 (无 CTX_FAST), 只跑通信 + Flash 写.
 //   202508 阶段 4: 最小闭环骨架, 由 YmaC 按 bootloader 拓扑生成具体接线.
@@ -23,7 +23,7 @@
 #include "bsp_can.h"
 #include "com_uart.h"
 #include "com_can.h"
-#include "mod_bootloader.h"
+#include "boot_loader.h"
 #include <string.h>
 
 // ======== 全局根实例 ========
@@ -32,12 +32,12 @@ BootloaderRoot g_boot_root;
 // ======== 升级传输 (UART/CAN 二选一, 由 YmaC 注入) ========
 // 这里给 UART + CAN 两个蓝图, 由一个启用 (按 bootloader 拓扑 YAML)
 
-// UART 传输适配: com_uart 的 RX 完成 → mod_bootloader_rx
-//   (实际: UART RX 中断 → uart_rx_event → 从 rxq 读 → mod_bootloader_rx)
+// UART 传输适配: com_uart 的 RX 完成 → boot_loader_rx
+//   (实际: UART RX 中断 → uart_rx_event → 从 rxq 读 → boot_loader_rx)
 static Uart s_up_uart;
 static int up_rx_push(void *ctx, const uint8_t *data, uint16_t len) {
   (void) ctx;
-  return mod_bootloader_rx(&g_boot_root.bootloader, data, len);
+  return boot_loader_rx(&g_boot_root.bootloader, data, len);
 }
 static int up_tx_report(void *ctx, const uint8_t *data, uint16_t len) {
   (void) ctx;
@@ -46,15 +46,15 @@ static int up_tx_report(void *ctx, const uint8_t *data, uint16_t len) {
   return 0;  // 应答发送 (可接 uart_write)
 }
 
-// CAN 传输适配: com_can 订阅升级 ID → mod_bootloader_rx
+// CAN 传输适配: com_can 订阅升级 ID → boot_loader_rx
 static int up_can_rx_push(void *ctx, const uint8_t *data, uint16_t len) {
   (void) ctx;
-  return mod_bootloader_rx(&g_boot_root.bootloader, data, len);
+  return boot_loader_rx(&g_boot_root.bootloader, data, len);
 }
 
 // ======== Flash + Database 绑定 ========
 // Bootloader 管理的 Flash 区域 = App 区 (从 app_addr 起)
-//   (bsp_flash_set_region 后, mod_bootloader 通过 bsp_flash_* 写 App 区)
+//   (bsp_flash_set_region 后, boot_loader 通过 bsp_flash_* 写 App 区)
 
 // ======== 板级初始化 ========
 
@@ -79,7 +79,7 @@ void bootloader_board_init(void) {
   // UART: 需外部注入 BspUart 句柄 (bsp_uart_bind 结果)
   // UartConfig uart_cfg = { .port = ... };
   // uart_init(&s_up_uart, &uart_cfg);
-  ModBootloaderTransport transport = {
+  BootLoaderTransport transport = {
       .rx_push = up_rx_push,
       .tx_report = up_tx_report,
       .ctx = &s_up_uart,
@@ -87,7 +87,7 @@ void bootloader_board_init(void) {
 
   // --- 3. 初始化 Bootloader 模块 ---
   // 注: 声明必须在锚点外 (replace_anchored_block 会整体替换锚点 span), 否则注入会删掉声明
-  ModBootloaderCfg bl_cfg = g_boot_root.config.bootloader_cfg;
+  BootLoaderCfg bl_cfg = g_boot_root.config.bootloader_cfg;
   // YmaC 注入: 默认配置填充 (app_addr/app_max_size 来自 bsp_flash_map.h) + 升级传输选择
   /* YMAC BOOTLOADER_CFG BEGIN */
   /* YMAC BOOTLOADER_CFG END */
@@ -97,7 +97,7 @@ void bootloader_board_init(void) {
   if (bl_cfg.db_upgrade_key == 0) bl_cfg.db_upgrade_key = "upgrade";
   if (bl_cfg.crc_type == 0) bl_cfg.crc_type = CrcPoly_32;
 
-  int ret = mod_bootloader_init(&g_boot_root.bootloader, &transport, &bl_cfg,
+  int ret = boot_loader_init(&g_boot_root.bootloader, &transport, &bl_cfg,
                                 flash,
                                 g_boot_root.config.db_buf, sizeof(g_boot_root.config.db_buf),
                                 g_boot_root.config.rx_ring_buf);
@@ -108,7 +108,7 @@ void bootloader_board_init(void) {
   // --- 4. 判断: 无升级请求 → 校验 App 有效 → 跳转 ---
   if (!g_boot_root.bootloader.upgrade_requested &&
       bsp_jump_validate_app(bl_cfg.app_addr) == 0) {
-    mod_bootloader_jump(&g_boot_root.bootloader);  // 跳转不返回
+    boot_loader_jump(&g_boot_root.bootloader);  // 跳转不返回
   }
   // 有升级请求 或 App 无效 → 停在 bootloader_background() 升级
 }
@@ -118,7 +118,7 @@ void bootloader_board_init(void) {
 void bootloader_background(void) {
   // 升级协议主循环 (BackgroundTask 语义): 收包 → 写 Flash → 校验 → 跳转
   for (;;) {
-    mod_bootloader_poll(&g_boot_root.bootloader);
+    boot_loader_poll(&g_boot_root.bootloader);
     // 可加: 定期喂狗 / LED 指示 (可选)
   }
 }

@@ -47,35 +47,36 @@ ProjectRoot g_root;
 // ==== 生成: 拓扑=buck (参考) ====
 static void modules_apply_config(void) {
   // 电源: Buck 降压 (PowerStage 集成模块)
-  // PowerCfg == ModBuckCfg (typedef), 整体拷贝零漂移, 再派生 PI 限幅
+  // PowerCfg == GenBuckCfg (typedef), 整体拷贝零漂移, 再派生 PI 限幅
   g_root.buck.cfg = g_cfg.power;
-  mod_buck_sync_cfg(&g_root.buck);
+  gen_buck_sync_cfg(&g_root.buck);
 }
 
 static void modules_board_init(void) {
-  // ModBuck 实例化: 绑定 ops + 存 cfg (来自 g_cfg.power) + 初始化双环 PI
+  // GenBuck 实例化: 绑定 ops + 存 cfg (来自 g_cfg.power) + 初始化双环 PI
   // (init 内部已 sync_cfg 派生 PI 限幅; 末尾 apply_config() 会再同步一次)
-  mod_buck_init(&g_root.buck, &g_cfg.power);
-  // 指针注入: ModBuck 具体设备 + PowerStage 基类 pwm/adc (base 首成员下溯)
-  mod_buck_bind(&g_root.buck, &g_root.drv_buck_pwm, &g_root.drv_dc_adc);
+  gen_buck_init(&g_root.buck, &g_cfg.power);
+  // 指针注入: GenBuck 具体设备 + PowerStage 基类 pwm/adc (base 首成员下溯)
+  gen_buck_bind(&g_root.buck, &g_root.drv_buck_pwm, &g_root.drv_dc_adc);
   // 0xFB 串口调参: 槽位 0-9 → g_cfg.power → apply_config (见 modules_apply_tune)
   pid_tune_set_apply_cb(on_pid_tune_received);
 }
 
 static void modules_fast_tick(void) {
   // 第1层 采样: 先切 PingPong 快照再控制 (fetch/process 分离, 撕裂读消除).
-  // 缺少此步 = 采样链路断裂: mod_buck_tick 读到的 value[] 恒为 init 值 (P0, A1).
+  // 缺少此步 = 采样链路断裂: gen_buck_tick 读到的 value[] 恒为 init 值 (P0, A1).
   adc_dc_sampler_fetch(&g_root.drv_dc_adc);
   // 电源控制: Buck 降压 (采样→双环→PWM, 内部状态机, 未 start 时为空转)
-  mod_buck_tick(&g_root.buck);
+  gen_buck_tick(&g_root.buck);
 }
 
 static void modules_slow_tick(void) {
-  // Buck 参考: 无 SLOW 钩子 (supercap_3ph 生成器注入 1kHz 遥测发送)
+  // 慢保护监控 (CTX_SLOW): 心跳喂狗 / 保护去抖 / 软关断 / 状态聚合
+  //   prot_monitor_tick(&g_root.protect);  // 须在 board_init 里 prot_monitor_init 绑定通道后启用
 }
 
 static void modules_main_loop(void) {
-  // Buck 参考: 无 MAIN 钩子 (supercap_3ph 生成器注入 mod_can_poll + 事件排空)
+  // Buck 参考: 无 MAIN 钩子 (supercap_3ph 生成器注入 hmi_can_poll + 事件排空)
 }
 
 static void modules_apply_tune(const float coef[10]) {
@@ -253,6 +254,16 @@ void board_init(void) {
 
   // --- 3e. 初始配置加载 ---
   Heartbeat_Init(&g_root.heartbeat);  // 心跳看门狗清零 (全局零初始化本可, 模板显式化以防非零态根结构体)
+
+  // --- 3f. 慢保护监控 (CTX_SLOW): 绑定保护通道 + 心跳指针 ---
+  // 工程按需填充 ProtChannel 静态表 (channels[] / ch_count), 再启用 modules_slow_tick 钩子:
+  //   static ProtChannel kProtCh[] = {
+  //     { .latch = &g_root.buck.telemetry, .thresh_hi = 15.0f, .debounce_n = 8,
+  //       .error_bit = ERROR_OVER_VOLTAGE, .is_warning = false },
+  //   };
+  //   prot_monitor_init(&g_root.protect, kProtCh, sizeof(kProtCh)/sizeof(kProtCh[0]),
+  //                     &g_root.heartbeat);
+
   apply_config();
 }
 
@@ -281,7 +292,7 @@ void App_OnControlTick(void) {
   // 电机 tick (按需): motapp_tick(&g_root.mtr_a);  follower_tick(&g_root.flw);
 
   // === 第4层: 执行器输出 ===
-  // PWM 输出已在 mod_buck_tick 内部写入, 此处无需额外操作
+  // PWM 输出已在 gen_buck_tick 内部写入, 此处无需额外操作
 
   // === 第5层: 延迟标记 (ISR 中不执行, 标记后由 BackgroundTask 处理) ===
   // if (需要打印传感器数据)  DeferredAction_Set(&g_root.deferred, DEFER_LOG_SENSOR);
@@ -303,7 +314,7 @@ void App_OnSlowTick(void) {
   // if (Debounce_Update(&g_root.ovp_dbn, (vout > cfg.ovp)))  // 示例: 用户自加 Debounce ovp_dbn 字段
   //   g_root.fault.ovp = true;
 
-  // === 3. 状态聚合: 读 FAST 的 Latest latch (ModBuck telemetry), 供 HMI/日志 ===
+  // === 3. 状态聚合: 读 FAST 的 Latest latch (GenBuck telemetry), 供 HMI/日志 ===
   // float vout = latch_peek(&g_root.buck.telemetry);  // vout 最新值 (FAST 每周期写, Latest 锁存)
 
   // === 4. 软关断: 确认故障 → 置关断 + 通知 HMI ===
@@ -361,7 +372,7 @@ void BackgroundTask(void) {
   //  ▸ 按键 / 旋钮: 调输出波形或频率 (经命令邮箱 MAIN→FAST 周期边界生效)
   //    if (btn_short(USER_BTN_Pin)) {
   //      g_cfg.power.vref += 0.5f;                   // 回写配置 (下次 YAML 注入保持一致)
-  //      mod_buck_set_vref(&g_root.buck, g_cfg.power.vref);   // 热调参考
+  //      gen_buck_set_vref(&g_root.buck, g_cfg.power.vref);   // 热调参考
   //    }
   //    if (enc_moved(&g_root.drv_enc)) { ... }       // 旋钮调 PWM 频率 → pwm_bb_set_freq
   //  ▸ 屏幕显示状态: 读 FAST 的 Latest latch (监控面, 不抢控制)
@@ -374,11 +385,11 @@ void BackgroundTask(void) {
   /* YMAC HMI USER AREA END */
   // ========================================================================
 
-  // --- OTA 升级命令 / 参数固化 (可选; 依赖 mod_bootloader + comp_database) ---
+  // --- OTA 升级命令 / 参数固化 (可选; 依赖 boot_loader + comp_database) ---
   /* YMAC OTA AREA BEGIN */
   // 收到 OTA 升级命令 (串口/CAN 帧 → 置 g_root.ota.armed) → 写升级标志 → 软复位 → Bootloader 接管
   //   if (g_root.ota.armed) {
-  //     // mod_bootloader_request_upgrade(&g_root.bootloader);  // 置 Database 升级标志
+  //     // boot_loader_request_upgrade(&g_root.bootloader);  // 置 Database 升级标志
   //     // NVIC_SystemReset();                                  // 软复位 → bootloader_main 引导段
   //   }
   // 收到参数保存命令 → 写 Database (标定/调参持久化, 不重启)
@@ -405,10 +416,10 @@ void BackgroundTask(void) {
   // oled_flush();
 
   // --- 命令下发 (Command 邮箱, MAIN→FAST 周期边界生效) ---
-  // mod_buck_set_vref(&g_root.buck, 13.0f);  // 运行期热调输出电压参考
+  // gen_buck_set_vref(&g_root.buck, 13.0f);  // 运行期热调输出电压参考
 
-  // --- 事件日志输出: 排空 ModBuck 保护事件流 (SPSC 环, FAST 推 / MAIN 排空) ---
-  // uint8_t ev; while (mod_buck_evt_pop(&g_root.buck, &ev)) log_evt(ev);
+  // --- 事件日志输出: 排空 GenBuck 保护事件流 (SPSC 环, FAST 推 / MAIN 排空) ---
+  // uint8_t ev; while (gen_buck_evt_pop(&g_root.buck, &ev)) log_evt(ev);
 
   // --- 事件日志输出 ---
   // DeferredAction_Poll(&g_root.deferred, DEFER_LOG_SENSOR) → printf

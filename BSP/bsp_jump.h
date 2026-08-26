@@ -4,7 +4,7 @@
 //   STM32 (Cortex-M): 读 App 栈顶 + Reset_Handler → 重映射 VTOR → 设 MSP → 跳转
 //   C2000 (C28x):      [待验证] 跳 App 的 _c_int00 (codestartbranch.asm), 需真机 CCS 验证
 //
-// 上层 (mod_bootloader) 只调 bsp_jump_to_app / bsp_jump_validate_app,
+// 上层 (boot_loader) 只调 bsp_jump_to_app / bsp_jump_validate_app,
 // 不关心平台差异. 跳转前需关闭全部中断, 确保干净启动.
 
 #ifndef BSP_JUMP_H

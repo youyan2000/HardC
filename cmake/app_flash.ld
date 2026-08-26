@@ -6,19 +6,19 @@
  *
  * 两个独立固件 (共享 HardC 库, 不同入口 + 不同链接脚本):
  *   - Bootloader: 入口 bootloader_main, Flash 起始 = 0x08000000
- *   - App:        入口 app_main, Flash 起始 = 0x08000000 + BOOTLOADER_SIZE
+ *   - App:        入口 app_main, Flash 起始 = 页对齐地址 (P1: 页对齐而非 Bootloader 大小简单相加)
  *
  * 关键: App 链接脚本的 Flash 起始必须与 Bootloader 中 bsp_jump_to_app 的
- *       app_addr 一致 (mod_bootloader.cfg.app_addr).
+ *       app_addr 一致 (boot_loader.cfg.app_addr).
  *
- * 目标 MCU 差异 (由 YmaC 从 flash_map 生成具体值):
- *   - STM32F334:  Flash 0x08000000,  64KB, 页 16KB
- *   - STM32G474:  Flash 0x08000000, 512KB, 页 2KB
+ * 目标 MCU 差异 (由 YmaC 从 flash_map 生成具体值, 见 flash_map_gen.py 页对齐校验 P1):
+ *   - STM32F334:  Flash 0x08000000,  64KB, 页 16KB — App 起始 0x08004000 (Bootloader 16K 整页)
+ *   - STM32G474:  Flash 0x08000000, 512KB, 页 2KB  — App 起始 0x08008000
  */
 
-/* App 占用的 Flash (起始 = 基址 + BOOTLOADER_SIZE) */
-__FLASH_ORIGIN = 0x08002000;  /* F334: Bootloader 8KB 后; G474: 0x08008000 (32KB 后) */
-__FLASH_LENGTH = 56K;         /* F334: 64K-8K; G474: 512K-32K = 480K — 由 YmaC 注入 */
+/* App 占用的 Flash (起始 = 页对齐, 由 flash_map_gen 按 page_size 注入; 此值仅模板默认) */
+__FLASH_ORIGIN = 0x08004000;  /* F334: App 页对齐起始 (16K 页); G474: 0x08008000 (2K 页) */
+__FLASH_LENGTH = 40K;         /* F334: 64K-16K(boot整页)-8K(param); G474: 480K — 由 YmaC 注入 */
 
 /* RAM (App 完整, 用全部 RAM) */
 __RAM_ORIGIN = 0x20000000;

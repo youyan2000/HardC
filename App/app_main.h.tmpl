@@ -43,16 +43,16 @@
 // #include "com_gpio.h"       // 按需 (按键=GPIO 输入, 去抖在 HMI)
 // #include "com_can.h"       // 按需 (CAN 传输, supercap_3ph 拓扑启用; 含硬 HAL include bsp_stm32_hal.h)
 // #include "pers.h"          // 外设全局句柄 (peripheral 域)
-#include "mod_comm.h"          // 帧协议解析
-#include "mod_cmd_dispatch.h"  // 统一命令分发
-#include "mod_serial_proto.h"  // 调试串口协议
-#include "mod_can_proto.h"  // CAN 协议 (超级电容遥测; HMI 输出端口)
+#include "hmi_comm.h"          // 帧协议解析
+#include "hmi_cmd_dispatch.h"  // 统一命令分发
+#include "hmi_serial_proto.h"  // 调试串口协议
+#include "hmi_can_proto.h"  // CAN 协议 (超级电容遥测; HMI 输出端口)
 
 // --- Motor-OOP: 电机控制 Module ---
-#include "mod_motor.h"     // MotApp 电机状态机
-#include "mod_turn.h"      // TurnCtrl 转弯控制
-#include "mod_follower.h"  // Follower 循迹控制
-#include "mod_hmi.h"       // HMI 人机交互
+#include "gen_motor.h"     // MotApp 电机状态机
+#include "gen_turn.h"      // TurnCtrl 转弯控制
+#include "gen_follower.h"  // Follower 循迹控制
+#include "hmi_ui.h"       // HMI 人机交互
 
 // --- PID-OOP: 控制器 (父类 PidBase + 子类, 见 Devices/pid + Components/pid/comp_pid.h) ---
 #include "comp_pid.h"      // 父类 PidBase + PidOps — 上层统一持 PidBase*
@@ -67,10 +67,13 @@
 #include "comp_power_stage.h"   // PowerStage 父类接口 (ops 虚表 + 状态机)
 #include "pwm_buckboost.h"      // PwmBuckBoost — 单路 Buck/Boost PWM
 #include "adc_dc_sampler.h"     // AdcDcSampler — 直流采样器
-#include "mod_buck.h"           // ModBuck — Buck 降压控制模块
-#include "mod_current_share.h"  // ModCurrentShare — 三相均流 (supercap_3ph 拓扑)
-#include "mod_supercap.h"       // ModSuperCap — 超级电容功率控制 (supercap_3ph 拓扑)
-// #include "mod_powerctrl.h"   // 状态机模板 (按需)
+#include "gen_buck.h"           // GenBuck — Buck 降压控制模块
+#include "gen_current_share.h"  // GenCurrentShare — 三相均流 (supercap_3ph 拓扑)
+#include "gen_supercap.h"       // GenSuperCap — 超级电容功率控制 (supercap_3ph 拓扑)
+// #include "gen_powerctrl.h"   // 状态机模板 (按需)
+
+// --- Protect-OOP: 慢保护监控 (CTX_SLOW; App_OnSlowTick 每周期 tick) ---
+#include "prot_monitor.h"       // ProtMonitor — 心跳看门狗/慢保护去抖/软关断/状态聚合
 
 // --- ADHardC: 采样 ---
 // #include "comp_adc.h"
@@ -94,7 +97,7 @@
 // #include "comp_step_motor.h"
 // #include "motor_step.h"
 // #include "bsp_step_motor.h"
-// #include "mod_balance.h"     // 球板平衡
+// #include "gen_balance.h"     // 球板平衡
 
 // ======== 2. 项目配置结构体 (YAML 注入目标) ========
 // 这是 PURE DATA — 不包含运行时状态。YmaC 工具在 /* CONFIG BEGIN/END */ 之间注入。
@@ -116,11 +119,11 @@ typedef struct {
 
 // --- Power-OOP: 电源配置类型 (CFGSTRUCT 锚点 — 由生成器按拓扑重定义) ---
 // PowerCfg = 拓扑主控制模块 (control_module) 的 cfg 类型:
-//   Buck (默认):          typedef ModBuckCfg PowerCfg;
+//   Buck (默认):          typedef GenBuckCfg PowerCfg;
 //   supercap_3ph:         typedef ModSuperCapCfg PowerCfg;  (gen_app 替换锚点内容)
 // ProjectConfig 内 .power 字段类型跟随此 typedef.
 /* YMAC CFGSTRUCT BEGIN */
-typedef ModBuckCfg PowerCfg;
+typedef GenBuckCfg PowerCfg;
 /* YMAC CFGSTRUCT END */
 
 // 项目总配置 — 聚合所有子系统的可调参数
@@ -129,7 +132,7 @@ typedef struct {
   MotorCfg mot_b;
   // FollowerCfg follower;    // 循迹参数 (按需)
   PowerCfg power;     // 电源: 主控制模块配置 (类型 = CFGSTRUCT 锚点定义)
-  ModShareCfg share;  // 均流配置 (supercap_3ph 拓扑使用; Buck 默认未用, 零初始化无副作用)
+  GenShareCfg share;  // 均流配置 (supercap_3ph 拓扑使用; Buck 默认未用, 零初始化无副作用)
   // AdcCfg     adc;           // ADC 采样参数 (按需)
   // StepMotorCfg step;         // 步进电机参数 (按需)
   // BalCfg     bal;            // 球板平衡参数 (按需)
@@ -159,24 +162,24 @@ typedef struct {
   // AdcFollower drv_follower;    // 红外循迹
 
   // --- Module 实例 (值包含) ---
-  // MotApp    mtr_a;             // 电机A 状态机 (mod_motor.h)
+  // MotApp    mtr_a;             // 电机A 状态机 (gen_motor.h)
   // MotApp    mtr_b;             // 电机B 状态机
-  // Follower  flw;               // 循迹状态机 (mod_follower.h)
-  // TurnCtrl  turn;              // 转弯状态机 (mod_turn.h)
-  // Hmi       hmi;               // 人机交互 (mod_hmi.h)
+  // Follower  flw;               // 循迹状态机 (gen_follower.h)
+  // TurnCtrl  turn;              // 转弯状态机 (gen_turn.h)
+  // Hmi       hmi;               // 人机交互 (hmi_ui.h)
   //   // 输出端口路由 (board_init 绑定): hmi_port_bind(&hmi.out.can, &can_proto, cb_can);
   //   //                             hmi_port_bind(&hmi.out.uart, &serial_proto, cb_uart);
   //   //                             hmi_port_bind(&hmi.out.led, &g_led_board, cb_led);
   //   // 端口回调在 hmi_tick (控制 ISR/CTX_FAST) 执行, 必须非阻塞 — 只入队/置标志, 真实 I/O 由 BackgroundTask
-  // ModBalance bal;              // 球板平衡 (mod_balance.h, 按需)
+  // GenBalance bal;              // 球板平衡 (gen_balance.h, 按需)
   // StepMotor step_x;            // X轴步进电机 (motor_step.h, 按需)
   // StepMotor step_y;            // Y轴步进电机 (motor_step.h, 按需)
 
   // --- Module 实例 (通用, 每个项目都需要) ---
-  ModComm mod_comm;            // 帧协议解析
+  HmiComm hmi_comm;            // 帧协议解析
   CmdDispatcher cmd_dispatch;  // 命令分发器
   SerialProto serial_proto;    // 串口协议
-  ModCanProto can_proto;       // CAN 协议 (HMI 输出端口, 按需)
+  HmiCanProto can_proto;       // CAN 协议 (HMI 输出端口, 按需)
 
   /* YMAC ROOT BEGIN */
   // ==== 由 ymac_cfg 生成: 电源域根成员 (默认 = Buck 参考; supercap_3ph 替换为 share/supercap/drv_can) ====
@@ -185,11 +188,15 @@ typedef struct {
   AdcDcSampler drv_dc_adc;    // 直流采样器 (adc_dc_sampler.h, vout/iout/vin)
 
   // --- Power-OOP: 电源控制 Module (PowerStage 集成模式示例) ---
-  ModBuck buck;  // Buck 降压控制 (mod_buck.h)
+  GenBuck buck;  // Buck 降压控制 (gen_buck.h)
   /* YMAC ROOT END */
 
   // --- 诊断 ---
   Heartbeat heartbeat;      // 心跳看门狗 (comp_protection.h): FAST 内 Heartbeat_Tick, SLOW 内 Heartbeat_Check
+
+  // --- 慢保护监控 (CTX_SLOW, App_OnSlowTick 每周期 tick) ---
+  ProtMonitor protect;      // 状态聚合 / 软关断 / 保护去抖 (prot_monitor.h)
+
   uint32_t idle_cnt;        // 主循环空闲计数 (负载率指标)
 
 } ProjectRoot;

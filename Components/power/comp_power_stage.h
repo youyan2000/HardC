@@ -6,11 +6,11 @@
 //   虚表:     init / tick / start / stop / emergency / set_ref / apply_tune / state
 //
 // 具体拓扑 (Buck/Boost/Flyback/...) 在 Module 层以 mod_* 实现:
-//   示例: Module/power/mod_buck.{h,c} — 级联电压环→电流环 + 前馈
+//   示例: Module/power/gen_buck.{h,c} — 级联电压环→电流环 + 前馈
 //
-// 与 mod_powerctrl.h (Module 层状态机模板) 的分工:
+// 与 gen_powerctrl.h (Module 层状态机模板) 的分工:
 //   PowerStage   — "可驱动"的设备绑定接口 (持有 PwmBase*/AdcBase*), 子类实现 ops
-//   mod_powerctrl — "可继承"的状态机骨架 (值包含 Device, 用户子类化), 与设备解耦
+//   gen_powerctrl — "可继承"的状态机骨架 (值包含 Device, 用户子类化), 与设备解耦
 
 #ifndef COMP_POWER_STAGE_H
 #define COMP_POWER_STAGE_H

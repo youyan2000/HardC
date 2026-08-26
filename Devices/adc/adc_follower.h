@@ -43,7 +43,7 @@ void adc_follower_deinit(AdcFollower *me);
 void adc_follower_on_dma_complete(AdcFollower *me);
 
 // FAST 消费侧 — 每控制周期调用: 有 pending 则切快照, 然后 process (二值化 + 位置偏差 pos)
-// mod_follower 每周期读 me->adc->pos (本函数是 pos 的更新源; 未调用则 pos 不刷新)
+// gen_follower 每周期读 me->adc->pos (本函数是 pos 的更新源; 未调用则 pos 不刷新)
 void adc_follower_fetch(AdcFollower *me);
 
 // 校准三步协议 (前缀 EE, 与电机 EF 隔离):

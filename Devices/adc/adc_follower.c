@@ -157,7 +157,7 @@ void adc_follower_on_dma_complete(AdcFollower *me) {
 }
 
 // FAST 消费侧 — 每控制周期调用: 有 pending 则切快照, 然后 process (二值化 + 位置偏差 pos)
-// mod_follower 每周期读 me->adc->pos; 本函数是 pos 的更新源 (fetch/process 分离, 撕裂读消除)
+// gen_follower 每周期读 me->adc->pos; 本函数是 pos 的更新源 (fetch/process 分离, 撕裂读消除)
 void adc_follower_fetch(AdcFollower *me) {
   // 契约: 消费者轮询标志 (IO_ASYNC_FLAG) — init 声明不符即配置错误不可静默
   assert(me->completion == IO_ASYNC_FLAG);

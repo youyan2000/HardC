@@ -112,7 +112,7 @@ void pwm_bb_set_law_constants(PwmBuckBoost *me, float duty_base, float bb_gain, 
 
 // ======== 运行时调参 (沿用 PwmBase 统一接口) ========
 
-// 兼容入口: 写 phase[0] A 腿绝对占空比 (mod_buck 单相路径)
+// 兼容入口: 写 phase[0] A 腿绝对占空比 (gen_buck 单相路径)
 void pwm_bb_set_duty(PwmBuckBoost *me, float duty);
 void pwm_bb_set_freq(PwmBuckBoost *me, uint32_t freq_hz);
 void pwm_bb_set_deadtime(PwmBuckBoost *me, uint32_t deadtime_ns);

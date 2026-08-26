@@ -1,6 +1,6 @@
 // BSP Flash 硬件抽象接口 — 平台无关擦/写/读 + 分区管理 (不透明句柄)
 //
-// 定位: 供 Bootloader (mod_bootloader) 和 Components/database 经 CompFlashOps 适配访问.
+// 定位: 供 Bootloader (boot_loader) 和 Components/database 经 CompFlashOps 适配访问.
 //   BSP 之上零 HAL: 上层只持 BspFlash 不透明句柄 + 调 bsp_flash_* 抽象.
 //   平台内部 (bsp_flash_stm32.c 用 HAL, bsp_flash_c2000.c 用 driverlib) 自决.
 //

@@ -3,7 +3,7 @@
 // 定位: Bootloader 是独立于主应用 (app_main) 的简化固件, 只做:
 //   1. 初始化升级传输 (UART/CAN) + Flash + Database
 //   2. 判断: 有升级请求 → 进入升级循环; 否则 → 校验 App 有效 → 跳转 App
-//   3. 升级循环: BackgroundTask 处理 mod_bootloader_poll (收包/写 Flash/跳转)
+//   3. 升级循环: BackgroundTask 处理 boot_loader_poll (收包/写 Flash/跳转)
 //
 // 与 app_main 的关系:
 //   - Bootloader 和 App 是两个独立固件, 链接脚本起始地址不同
@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "mod_bootloader.h"
+#include "boot_loader.h"
 #include "com_uart.h"
 #include "com_can.h"
 #include "bsp_flash.h"
@@ -32,10 +32,10 @@ typedef struct {
   // Can  drv_up_can;       // 若用 CAN 升级
 
   // --- Bootloader 模块 ---
-  ModBootloader bootloader;
+  BootLoader bootloader;
   // 配置 POD (由 YmaC 注入)
   struct {
-    ModBootloaderCfg bootloader_cfg;
+    BootLoaderCfg bootloader_cfg;
     uint8_t db_buf[64];         // Database 缓冲 (升级标志)
     uint8_t rx_ring_buf[256];   // 收包环缓冲
   } config;
